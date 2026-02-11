@@ -56,6 +56,24 @@ const MOBILE_LOGO_MAP = {
   "icon-fiery": "/assets/HardTale_H_Fiery.png",
   "icon-icey": "/assets/HardTale_H_Icey.png",
 };
+const CRITICAL_IMAGE_SOURCES = [
+  LOGO_SRC,
+  "/Images/SVGs/SETTINGS_SVG.svg",
+  "/assets/HardTale_H_Fiery.png",
+  "/assets/HardTale_H_Golden.png",
+  "/assets/HardTale_H_GreyScale.png",
+  "/assets/HardTale_H_Icey.png",
+  ...Object.values(MOBILE_LOGO_MAP),
+];
+
+function preloadImage(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+    img.src = src;
+  });
+}
 const VOTE_SITES = [
   {
     id: "hytale-online-servers",
@@ -1537,6 +1555,7 @@ function Layout() {
   const [showConnectHelp, setShowConnectHelp] = useState(false);
   const [appHydrated, setAppHydrated] = useState(false);
   const [routeLoading, setRouteLoading] = useState(false);
+  const [criticalImagesReady, setCriticalImagesReady] = useState(false);
   const [loaderVariant, setLoaderVariant] = useState(LOADER_VARIANTS[0]);
   const [cart, setCart] = useState([]);
   const [purchases, setPurchases] = useState([]);
@@ -1560,6 +1579,18 @@ function Layout() {
     });
     return copy;
   }, [news]);
+
+  useEffect(() => {
+    let alive = true;
+    const uniqueSources = [...new Set(CRITICAL_IMAGE_SOURCES)];
+    Promise.all(uniqueSources.map((src) => preloadImage(src))).then(() => {
+      if (!alive) return;
+      setCriticalImagesReady(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -1638,8 +1669,8 @@ function Layout() {
   useEffect(() => {
     if (appHydrated) return undefined;
 
-    // Keep initial loader up until auth and news bootstrap are ready.
-    if (!isAuthLoaded || loading) {
+    // Keep initial loader up until auth, news bootstrap, and critical images are ready.
+    if (!isAuthLoaded || loading || !criticalImagesReady) {
       return undefined;
     }
 
@@ -1649,7 +1680,7 @@ function Layout() {
     const remaining = Math.max(INITIAL_LOADER_MIN_MS - elapsed, 0);
     const timeout = setTimeout(() => setAppHydrated(true), remaining);
     return () => clearTimeout(timeout);
-  }, [appHydrated, isAuthLoaded, loading]);
+  }, [appHydrated, isAuthLoaded, loading, criticalImagesReady]);
 
   useEffect(() => {
     if (!appHydrated) return undefined;
