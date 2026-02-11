@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-11 (v1.3.3)
+- Added `/home` as a route alias for the root home page.
+- Updated home nav active-state handling so both `/` and `/home` map to Home.
+
 ## 2026-02-11 (v1.3.2)
 - Corrected Clerk key configuration after a mismatched key update.
 - Resolved auth handshake verification failures caused by invalid key pairing.

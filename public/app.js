@@ -42,7 +42,7 @@ const TICKET_COOLDOWN_MS = 60 * 60 * 1000;
 const LOGO_SIDE_KEY = "hardtale-logo-side";
 const MOBILE_LOGO_STYLE_KEY = "hardtale-mobile-logo-style";
 const MOBILE_ISLAND_KEY = "hardtale-mobile-island";
-const VERSION = "1.3.2";
+const VERSION = "1.3.3";
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const INITIAL_LOADER_MIN_MS = 3200;
 const AUTH_TRANSITION_LOADER_MS = 850;
@@ -101,6 +101,14 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.3",
+    date: "2026-02-11",
+    items: [
+      "Added /home as a route alias for the root home page.",
+      "Updated home nav active-state handling so both / and /home map to Home.",
+    ],
+  },
   {
     version: "1.3.2",
     date: "2026-02-11",
@@ -1943,7 +1951,7 @@ function Layout() {
   }, [location.pathname]);
 
   useEffect(() => {
-    if (location.pathname === "/") {
+    if (location.pathname === "/" || location.pathname === "/home") {
       setActive("home");
     } else if (location.pathname === "/store") {
       setActive("store");
@@ -2334,6 +2342,18 @@ function Layout() {
         <${Routes}>
           <${Route}
             path="/"
+            element=${html`<${HomePage}
+              news=${sortedNews}
+              loading=${loading}
+              error=${error}
+              playRef=${playRef}
+              onPlayClick=${openHowModal}
+              onNewsClick=${() => navigate("/news")}
+              onHowClick=${() => setShowConnectHelp(true)}
+            />`}
+          />
+          <${Route}
+            path="/home"
             element=${html`<${HomePage}
               news=${sortedNews}
               loading=${loading}
