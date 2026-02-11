@@ -1,0 +1,156 @@
+/* ============================= */
+/* Fullscreen Overlay */
+/* ============================= */
+
+.hardtale-loader-overlay {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 20000;
+  background: rgba(8, 12, 20, 1);
+}
+
+body[data-theme="light"] .hardtale-loader-overlay {
+  background: rgba(255, 255, 255, 1);
+}
+
+.hardtale-loader-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  perspective: 800px;
+  animation: hardtale-float 1.6s ease-in-out infinite;
+}
+
+.hardtale-loader {
+  width: 140px;
+  height: 140px;
+  object-fit: contain;
+  transform-style: preserve-3d;
+  will-change: transform, filter;
+}
+
+/* ============================= */
+/* Base Float Animation */
+/* ============================= */
+
+@keyframes hardtale-float {
+  0%,
+  100% {
+    transform: translateY(0px) scale(1);
+  }
+  50% {
+    transform: translateY(-8px) scale(1.02);
+  }
+}
+
+@keyframes hardtale-flip {
+  0% {
+    transform: rotateY(0deg);
+  }
+  100% {
+    transform: rotateY(360deg);
+  }
+}
+
+/* ============================= */
+/* Fiery Variant */
+/* ============================= */
+
+@keyframes fiery-pulse {
+  0%,
+  100% {
+    filter:
+      brightness(1)
+      drop-shadow(0 0 8px #ff5a00)
+      drop-shadow(0 0 16px #ff2a00);
+  }
+  50% {
+    filter:
+      brightness(1.15)
+      drop-shadow(0 0 14px #ff7b00)
+      drop-shadow(0 0 28px #ff3c00);
+  }
+}
+
+.h-glow-fiery {
+  animation:
+    hardtale-flip 3.2s linear infinite,
+    fiery-pulse 1.2s ease-in-out infinite;
+}
+
+/* ============================= */
+/* Golden Variant */
+/* ============================= */
+
+@keyframes golden-pulse {
+  0%,
+  100% {
+    filter:
+      drop-shadow(0 0 8px #ffcc55)
+      drop-shadow(0 0 18px #ffaa00);
+  }
+  50% {
+    filter:
+      brightness(1.1)
+      drop-shadow(0 0 16px #ffe27a)
+      drop-shadow(0 0 30px #ffbb00);
+  }
+}
+
+.h-glow-golden {
+  animation:
+    hardtale-flip 3.2s linear infinite,
+    golden-pulse 1.8s ease-in-out infinite;
+}
+
+/* ============================= */
+/* Greyscale Variant */
+/* ============================= */
+
+@keyframes greyscale-pulse {
+  0%,
+  100% {
+    filter:
+      grayscale(100%)
+      drop-shadow(0 0 6px rgba(255, 255, 255, 0.1));
+  }
+  50% {
+    filter:
+      grayscale(100%)
+      drop-shadow(0 0 14px rgba(255, 255, 255, 0.2));
+  }
+}
+
+.h-glow-greyscale {
+  animation:
+    hardtale-flip 3.2s linear infinite,
+    greyscale-pulse 2s ease-in-out infinite;
+}
+
+/* ============================= */
+/* Icey Variant */
+/* ============================= */
+
+@keyframes icey-pulse {
+  0%,
+  100% {
+    filter:
+      drop-shadow(0 0 8px #6fdcff)
+      drop-shadow(0 0 16px #00bfff);
+  }
+  50% {
+    filter:
+      brightness(1.1)
+      drop-shadow(0 0 16px #b3f0ff)
+      drop-shadow(0 0 28px #4fd8ff);
+  }
+}
+
+.h-glow-icey {
+  animation:
+    hardtale-flip 3.2s linear infinite,
+    icey-pulse 2s ease-in-out infinite;
+}
