@@ -34,7 +34,7 @@ const THEME_KEY = "hardtale-theme";
 const NAV_KEY = "hardtale-nav";
 const MENU_SIDE_KEY = "hardtale-menu-side";
 const MOBILE_NAV_STYLE_KEY = "hardtale-mobile-nav-style";
-const NEWS_SEEN_KEY = "hardtale-news-seen";
+const NOTIFICATIONS_SEEN_KEY = "hardtale-notifications-seen";
 const CART_KEY_PREFIX = "hardtale-cart";
 const PURCHASE_KEY_PREFIX = "hardtale-purchases";
 const TICKET_COOLDOWN_KEY = "hardtale-ticket-cooldown";
@@ -42,7 +42,7 @@ const TICKET_COOLDOWN_MS = 60 * 60 * 1000;
 const LOGO_SIDE_KEY = "hardtale-logo-side";
 const MOBILE_LOGO_STYLE_KEY = "hardtale-mobile-logo-style";
 const MOBILE_ISLAND_KEY = "hardtale-mobile-island";
-const VERSION = "1.2.9";
+const VERSION = "1.3.0";
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const INITIAL_LOADER_MIN_MS = 3200;
 const ROUTE_LOADER_MS = 650;
@@ -101,6 +101,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.0",
+    date: "2026-02-11",
+    items: [
+      "Added admin notification publishing and management (create, delete, and featured toggles).",
+      "Replaced static notifications with API-backed delivery through the notification bell for signed-in users.",
+      "Added featured notification prioritization and live notification refresh handling.",
+    ],
+  },
   {
     version: "1.2.9",
     date: "2026-02-11",
@@ -254,21 +263,6 @@ const SAMPLE_STORE = [
     price: 24.99,
     blurb: "Premium cosmetics, utility perks, and extra claim options.",
     icon: "shield",
-  },
-];
-
-const SYSTEM_NOTIFICATIONS = [
-  {
-    id: "sys-001",
-    title: "Season update deployed",
-    message: "New quests, balance tweaks, and fresh cosmetics are live.",
-    author: "System",
-  },
-  {
-    id: "sys-002",
-    title: "Raid night reminder",
-    message: "Party up for the Saturday raid event at 7 PM UTC.",
-    author: "System",
   },
 ];
 
@@ -427,6 +421,33 @@ function useNews() {
   return { news, setNews, loading, error };
 }
 
+function useNotifications() {
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/notifications")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!alive) return;
+        setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setError("Unable to load notifications right now.");
+        setLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return { notifications, setNotifications, loading, error };
+}
+
 function getUserEmail(user) {
   return (
     user?.primaryEmailAddress?.emailAddress ||
@@ -477,17 +498,26 @@ function NewsCard({ item, onDelete, onToggleFeatured, canDelete }) {
   `;
 }
 
-function AdminPanel({ onNewsUpdate, isAdmin }) {
+function AdminPanel({
+  onNewsUpdate,
+  onNotificationsUpdate,
+  notifications,
+  isAdmin,
+}) {
   const { getToken } = useAuth();
   const { user } = useUser();
 
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [readMoreUrl, setReadMoreUrl] = useState("");
-  const [imageUrl, setImageUrl] = useState("");
-  const [status, setStatus] = useState("");
+  const [newsTitle, setNewsTitle] = useState("");
+  const [newsDescription, setNewsDescription] = useState("");
+  const [newsReadMoreUrl, setNewsReadMoreUrl] = useState("");
+  const [newsImageUrl, setNewsImageUrl] = useState("");
+  const [newsStatus, setNewsStatus] = useState("");
   const [authorMode, setAuthorMode] = useState("system");
-  const [featured, setFeatured] = useState(false);
+  const [newsFeatured, setNewsFeatured] = useState(false);
+  const [notificationTitle, setNotificationTitle] = useState("");
+  const [notificationMessage, setNotificationMessage] = useState("");
+  const [notificationFeatured, setNotificationFeatured] = useState(false);
+  const [notificationStatus, setNotificationStatus] = useState("");
 
   if (!isAdmin) {
     return html`<div className="card">Admin access only.</div>`;
@@ -495,9 +525,9 @@ function AdminPanel({ onNewsUpdate, isAdmin }) {
 
   const authorValue = authorMode === "system" ? "System" : getUserDisplayName(user);
 
-  async function submit(event) {
+  async function submitNews(event) {
     event.preventDefault();
-    setStatus("Posting...");
+    setNewsStatus("Posting...");
 
     try {
       const token = await getToken();
@@ -508,12 +538,12 @@ function AdminPanel({ onNewsUpdate, isAdmin }) {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          title,
-          description,
+          title: newsTitle,
+          description: newsDescription,
           author: authorValue,
-          readMoreUrl,
-          imageUrl,
-          featured,
+          readMoreUrl: newsReadMoreUrl,
+          imageUrl: newsImageUrl,
+          featured: newsFeatured,
         }),
       });
 
@@ -523,30 +553,116 @@ function AdminPanel({ onNewsUpdate, isAdmin }) {
 
       const data = await response.json();
       onNewsUpdate(Array.isArray(data.news) ? data.news : []);
-      setTitle("");
-      setDescription("");
-      setReadMoreUrl("");
-      setImageUrl("");
-      setFeatured(false);
-      setStatus("Posted!");
+      setNewsTitle("");
+      setNewsDescription("");
+      setNewsReadMoreUrl("");
+      setNewsImageUrl("");
+      setNewsFeatured(false);
+      setNewsStatus("Posted!");
     } catch (err) {
-      setStatus("Failed to post news.");
+      setNewsStatus("Failed to post news.");
+    }
+  }
+
+  async function submitNotification(event) {
+    event.preventDefault();
+    setNotificationStatus("Sending...");
+
+    try {
+      const token = await getToken();
+      const response = await fetch("/api/notifications", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: notificationTitle,
+          message: notificationMessage,
+          author: authorValue,
+          featured: notificationFeatured,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to post");
+      }
+
+      const data = await response.json();
+      onNotificationsUpdate(
+        Array.isArray(data.notifications) ? data.notifications : [],
+      );
+      setNotificationTitle("");
+      setNotificationMessage("");
+      setNotificationFeatured(false);
+      setNotificationStatus("Sent!");
+    } catch (err) {
+      setNotificationStatus("Failed to send notification.");
+    }
+  }
+
+  async function deleteNotification(id) {
+    try {
+      const token = await getToken();
+      const response = await fetch(`/api/notifications/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error("Delete failed");
+      }
+
+      const data = await response.json();
+      onNotificationsUpdate(
+        Array.isArray(data.notifications) ? data.notifications : [],
+      );
+    } catch (err) {
+      alert("Failed to delete notification.");
+    }
+  }
+
+  async function toggleNotificationFeatured(id, featured) {
+    try {
+      const token = await getToken();
+      const response = await fetch(`/api/notifications/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ featured }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Feature update failed");
+      }
+
+      const data = await response.json();
+      onNotificationsUpdate(
+        Array.isArray(data.notifications) ? data.notifications : [],
+      );
+    } catch (err) {
+      alert("Failed to update featured status.");
     }
   }
 
   return html`
-    <form className="card admin-panel" onSubmit=${submit}>
+    <div className="admin-tools">
+    <form className="card admin-panel" onSubmit=${submitNews}>
       <div className="section-title">Admin News Publisher</div>
       <input
         placeholder="Header"
-        value=${title}
-        onInput=${(event) => setTitle(event.target.value)}
+        value=${newsTitle}
+        onInput=${(event) => setNewsTitle(event.target.value)}
         required
       />
       <textarea
         placeholder="Description"
-        value=${description}
-        onInput=${(event) => setDescription(event.target.value)}
+        value=${newsDescription}
+        onInput=${(event) => setNewsDescription(event.target.value)}
         required
       ></textarea>
       <label className="settings-row">
@@ -563,23 +679,81 @@ function AdminPanel({ onNewsUpdate, isAdmin }) {
         <span>Featured</span>
         <input
           type="checkbox"
-          checked=${featured}
-          onChange=${(event) => setFeatured(event.target.checked)}
+          checked=${newsFeatured}
+          onChange=${(event) => setNewsFeatured(event.target.checked)}
         />
       </label>
       <input
         placeholder="Read more URL (optional)"
-        value=${readMoreUrl}
-        onInput=${(event) => setReadMoreUrl(event.target.value)}
+        value=${newsReadMoreUrl}
+        onInput=${(event) => setNewsReadMoreUrl(event.target.value)}
       />
       <input
         placeholder="Photo URL (optional)"
-        value=${imageUrl}
-        onInput=${(event) => setImageUrl(event.target.value)}
+        value=${newsImageUrl}
+        onInput=${(event) => setNewsImageUrl(event.target.value)}
       />
       <button className="button primary" type="submit">Post News</button>
-      <div className="muted">${status}</div>
+      <div className="muted">${newsStatus}</div>
     </form>
+    <form className="card admin-panel" onSubmit=${submitNotification}>
+      <div className="section-title">Admin Notifications</div>
+      <input
+        placeholder="Notification title"
+        value=${notificationTitle}
+        onInput=${(event) => setNotificationTitle(event.target.value)}
+        required
+      />
+      <textarea
+        placeholder="Notification message"
+        value=${notificationMessage}
+        onInput=${(event) => setNotificationMessage(event.target.value)}
+        required
+      ></textarea>
+      <label className="settings-row inline">
+        <span>Featured</span>
+        <input
+          type="checkbox"
+          checked=${notificationFeatured}
+          onChange=${(event) => setNotificationFeatured(event.target.checked)}
+        />
+      </label>
+      <button className="button primary" type="submit">Send Notification</button>
+      <div className="muted">${notificationStatus}</div>
+      <div className="section-title">Manage Notifications</div>
+      ${notifications.length === 0
+        ? html`<p className="muted">No notifications posted yet.</p>`
+        : html`<div className="news-list">
+            ${notifications.map(
+              (item) => html`<article key=${item.id} className="news-card">
+                <div className="news-header">
+                  <div className="news-title-row">
+                    ${item.featured
+                      ? html`<span className="news-star" title="Featured">★</span>`
+                      : html``}
+                    <h3>${item.title}</h3>
+                  </div>
+                  <button className="ghost-btn" type="button" onClick=${() => deleteNotification(item.id)}>
+                    Delete
+                  </button>
+                </div>
+                <p>${item.message}</p>
+                <div className="news-meta">
+                  <span>By ${item.author}</span>
+                  <span>${new Date(item.createdAt || Date.now()).toLocaleString()}</span>
+                </div>
+                <button
+                  className="ghost-btn news-toggle"
+                  type="button"
+                  onClick=${() => toggleNotificationFeatured(item.id, !item.featured)}
+                >
+                  ${item.featured ? "Remove featured" : "Feature this"}
+                </button>
+              </article>`,
+            )}
+          </div>`}
+    </form>
+    </div>
   `;
 }
 
@@ -1139,7 +1313,12 @@ function SubscriptionsPage() {
   `;
 }
 
-function NotFoundPage() {
+function NotFoundPage({
+  isAdmin,
+  notifications,
+  onNewsUpdate,
+  onNotificationsUpdate,
+}) {
   const navigate = useNavigate();
   const { user } = useUser();
   const [timeLabel, setTimeLabel] = useState("");
@@ -1277,6 +1456,16 @@ function NotFoundPage() {
             </div>
           </aside>
         </main>
+        ${isAdmin
+          ? html`<div className="fade-in">
+              <${AdminPanel}
+                onNewsUpdate=${onNewsUpdate}
+                onNotificationsUpdate=${onNotificationsUpdate}
+                notifications=${notifications}
+                isAdmin=${isAdmin}
+              />
+            </div>`
+          : html``}
       </div>
     </section>
   `;
@@ -1301,11 +1490,18 @@ function renderStoreIcon(type) {
 }
 
 function NotificationsPanel({ notifications }) {
+  if (!notifications.length) {
+    return html`<p className="muted">No notifications yet.</p>`;
+  }
+
   return html`
     <div className="notif-list">
       ${notifications.map(
         (item) => html`<div key=${item.id} className="notif-card">
-          <div className="notif-title">${item.title}</div>
+          <div className="notif-title">
+            ${item.featured ? html`<span className="news-star mini" title="Featured">★</span>` : html``}
+            ${item.title}
+          </div>
           <div className="notif-body">${item.message}</div>
           <div className="notif-author">Sent by ${item.author}</div>
         </div>`,
@@ -1436,7 +1632,6 @@ function NewsPage({
   onDelete,
   onToggleFeatured,
   canDelete,
-  onNewsUpdate,
 }) {
   const featuredItem = news.find((item) => item.featured);
   return html`
@@ -1496,10 +1691,6 @@ function NewsPage({
               )}
             </div>`}
       </section>
-
-      <${SignedIn}>
-        <${AdminPanel} onNewsUpdate=${onNewsUpdate} isAdmin=${canDelete} />
-      <//>
     </section>
   `;
 }
@@ -1534,6 +1725,11 @@ function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const { news, setNews, loading, error } = useNews();
+  const {
+    notifications,
+    setNotifications,
+    loading: notificationsLoading,
+  } = useNotifications();
   const { theme, setTheme, toggleLightDark } = useTheme();
   const { placement, setPlacement } = useNavPlacement();
   const { menuSide, setMenuSide } = useMenuSide();
@@ -1579,6 +1775,15 @@ function Layout() {
     });
     return copy;
   }, [news]);
+  const sortedNotifications = useMemo(() => {
+    const copy = [...notifications];
+    copy.sort((a, b) => {
+      const featuredDelta = Number(Boolean(b.featured)) - Number(Boolean(a.featured));
+      if (featuredDelta !== 0) return featuredDelta;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+    return copy;
+  }, [notifications]);
 
   useEffect(() => {
     let alive = true;
@@ -1727,19 +1932,23 @@ function Layout() {
   }, [location.pathname]);
 
   useEffect(() => {
-    const lastSeen = localStorage.getItem(NEWS_SEEN_KEY);
-    const newest = news[0]?.createdAt;
-    if (!newest) return;
+    if (notificationsLoading) return;
+    const lastSeen = localStorage.getItem(NOTIFICATIONS_SEEN_KEY);
+    const newest = sortedNotifications[0]?.createdAt;
+    if (!newest) {
+      setUnread(0);
+      return;
+    }
 
     if (!lastSeen || new Date(newest) > new Date(lastSeen)) {
-      const count = news.filter(
+      const count = sortedNotifications.filter(
         (item) => !lastSeen || new Date(item.createdAt) > new Date(lastSeen),
       ).length;
       setUnread(count);
     } else {
       setUnread(0);
     }
-  }, [news]);
+  }, [sortedNotifications, notificationsLoading]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -1749,9 +1958,17 @@ function Layout() {
           setNews(Array.isArray(data.news) ? data.news : []);
         })
         .catch(() => {});
+      fetch("/api/notifications")
+        .then((res) => res.json())
+        .then((data) => {
+          setNotifications(
+            Array.isArray(data.notifications) ? data.notifications : [],
+          );
+        })
+        .catch(() => {});
     }, 30000);
     return () => clearInterval(interval);
-  }, [setNews]);
+  }, [setNews, setNotifications]);
 
   useEffect(() => {
     if (!isSignedIn || !userId) {
@@ -1802,9 +2019,9 @@ function Layout() {
   }, [pendingItem, isSignedIn]);
 
   function markNotificationsRead() {
-    const newest = news[0]?.createdAt;
+    const newest = sortedNotifications[0]?.createdAt;
     if (newest) {
-      localStorage.setItem(NEWS_SEEN_KEY, newest);
+      localStorage.setItem(NOTIFICATIONS_SEEN_KEY, newest);
       setUnread(0);
     }
   }
@@ -1947,8 +2164,7 @@ function Layout() {
     setShowCart(true);
   }
 
-  const notifications = SYSTEM_NOTIFICATIONS;
-  const notificationCount = notifications.length;
+  const notificationCount = unread > 0 ? unread : sortedNotifications.length;
   const year = new Date().getFullYear();
   const displayName = getUserDisplayName(user);
   const showLoader = !appHydrated || routeLoading;
@@ -2079,9 +2295,7 @@ function Layout() {
                 <//>
               <//>
               <${SignedIn}>
-                ${isAdmin
-                  ? html`<${NotificationsButton} count=${notificationCount} onClick=${openNotifications} />`
-                  : html``}
+                <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} />
                 <span className="user-button">
                   <${UserButton} />
                 </span>
@@ -2112,7 +2326,6 @@ function Layout() {
               onDelete=${deleteNews}
               onToggleFeatured=${toggleFeatured}
               canDelete=${isAdmin}
-              onNewsUpdate=${setNews}
             />`}
           />
           <${Route}
@@ -2129,7 +2342,12 @@ function Layout() {
           />
           <${Route}
             path="*"
-            element=${html`<${NotFoundPage} />`}
+            element=${html`<${NotFoundPage}
+              isAdmin=${isAdmin}
+              notifications=${sortedNotifications}
+              onNewsUpdate=${setNews}
+              onNotificationsUpdate=${setNotifications}
+            />`}
           />
         <//>
 
@@ -2184,18 +2402,14 @@ function Layout() {
                   setShowMobileIsland=${setShowMobileIsland}
                   isMobile=${isMobile}
                 />
-                      ${isAdmin
-                        ? html`<${NotificationsButton} count=${notificationCount} onClick=${openNotifications} />`
-                        : html``}
+                      <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} />
                       ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
                     <//>
                   `
                 : html`
                     <${SignedIn}>
                       ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
-                      ${isAdmin
-                        ? html`<${NotificationsButton} count=${notificationCount} onClick=${openNotifications} />`
-                        : html``}
+                      <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} />
                       <${SettingsMenu}
                         theme=${theme}
                         setTheme=${setTheme}
@@ -2323,7 +2537,7 @@ function Layout() {
         onClose=${() => setShowNotifications(false)}
         title="Notifications"
       >
-        <${NotificationsPanel} notifications=${notifications} />
+        <${NotificationsPanel} notifications=${sortedNotifications} />
       <//>
       <${PopUp}
         show=${showConnectHelp}

@@ -53,6 +53,26 @@ function normalizeNewsItem(item) {
   };
 }
 
+function normalizeNotificationItem(item) {
+  const title = String(item?.title || "").trim().slice(0, 120);
+  const message = String(item?.message || "").trim().slice(0, 600);
+  const author = String(item?.author || "").trim().slice(0, 80);
+  const featured = Boolean(item?.featured);
+
+  if (!title || !message || !author) {
+    return null;
+  }
+
+  return {
+    id: crypto.randomUUID(),
+    title,
+    message,
+    author,
+    featured,
+    createdAt: new Date().toISOString(),
+  };
+}
+
 async function getAdminUser() {
   if (!ADMIN_NEWS_OWNER_EMAIL) return null;
   const { data } = await clerkClient.users.getUserList({
@@ -100,6 +120,24 @@ app.get("/api/news", async (req, res) => {
   }
 });
 
+app.get("/api/notifications", async (req, res) => {
+  try {
+    const adminUser = await getAdminUser();
+    if (!adminUser) {
+      return res.json({ notifications: [] });
+    }
+
+    const notifications = Array.isArray(adminUser.publicMetadata?.notifications)
+      ? adminUser.publicMetadata.notifications
+      : [];
+
+    return res.json({ notifications });
+  } catch (error) {
+    console.error("Failed to load notifications", error);
+    return res.status(500).json({ error: "Failed to load notifications" });
+  }
+});
+
 app.post("/api/news", async (req, res) => {
   try {
     const auth = getAuth(req);
@@ -130,6 +168,7 @@ app.post("/api/news", async (req, res) => {
 
     await clerkClient.users.updateUserMetadata(adminUser.id, {
       publicMetadata: {
+        ...adminUser.publicMetadata,
         news: nextNews,
       },
     });
@@ -166,6 +205,7 @@ app.delete("/api/news/:id", async (req, res) => {
 
     await clerkClient.users.updateUserMetadata(adminUser.id, {
       publicMetadata: {
+        ...adminUser.publicMetadata,
         news: nextNews,
       },
     });
@@ -208,6 +248,7 @@ app.patch("/api/news/:id", async (req, res) => {
 
     await clerkClient.users.updateUserMetadata(adminUser.id, {
       publicMetadata: {
+        ...adminUser.publicMetadata,
         news: nextNews,
       },
     });
@@ -216,6 +257,126 @@ app.patch("/api/news/:id", async (req, res) => {
   } catch (error) {
     console.error("Failed to update news", error);
     return res.status(500).json({ error: "Failed to update news" });
+  }
+});
+
+app.post("/api/notifications", async (req, res) => {
+  try {
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const user = await clerkClient.users.getUser(auth.userId);
+    if (!isAdminUser(user)) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    const item = normalizeNotificationItem(req.body);
+    if (!item) {
+      return res.status(400).json({ error: "Missing or invalid fields" });
+    }
+
+    const adminUser = await getAdminUser();
+    if (!adminUser) {
+      return res.status(404).json({ error: "Admin user not found" });
+    }
+
+    const existing = Array.isArray(adminUser.publicMetadata?.notifications)
+      ? adminUser.publicMetadata.notifications
+      : [];
+    const nextNotifications = [item, ...existing].slice(0, 60);
+
+    await clerkClient.users.updateUserMetadata(adminUser.id, {
+      publicMetadata: {
+        ...adminUser.publicMetadata,
+        notifications: nextNotifications,
+      },
+    });
+
+    return res.json({ notifications: nextNotifications });
+  } catch (error) {
+    console.error("Failed to create notification", error);
+    return res.status(500).json({ error: "Failed to create notification" });
+  }
+});
+
+app.patch("/api/notifications/:id", async (req, res) => {
+  try {
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const user = await clerkClient.users.getUser(auth.userId);
+    if (!isAdminUser(user)) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    const adminUser = await getAdminUser();
+    if (!adminUser) {
+      return res.status(404).json({ error: "Admin user not found" });
+    }
+
+    const existing = Array.isArray(adminUser.publicMetadata?.notifications)
+      ? adminUser.publicMetadata.notifications
+      : [];
+
+    const nextNotifications = existing.map((item) => {
+      if (item.id !== req.params.id) return item;
+      return {
+        ...item,
+        featured: Boolean(req.body?.featured),
+      };
+    });
+
+    await clerkClient.users.updateUserMetadata(adminUser.id, {
+      publicMetadata: {
+        ...adminUser.publicMetadata,
+        notifications: nextNotifications,
+      },
+    });
+
+    return res.json({ notifications: nextNotifications });
+  } catch (error) {
+    console.error("Failed to update notification", error);
+    return res.status(500).json({ error: "Failed to update notification" });
+  }
+});
+
+app.delete("/api/notifications/:id", async (req, res) => {
+  try {
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const user = await clerkClient.users.getUser(auth.userId);
+    if (!isAdminUser(user)) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    const adminUser = await getAdminUser();
+    if (!adminUser) {
+      return res.status(404).json({ error: "Admin user not found" });
+    }
+
+    const existing = Array.isArray(adminUser.publicMetadata?.notifications)
+      ? adminUser.publicMetadata.notifications
+      : [];
+    const nextNotifications = existing.filter((item) => item.id !== req.params.id);
+
+    await clerkClient.users.updateUserMetadata(adminUser.id, {
+      publicMetadata: {
+        ...adminUser.publicMetadata,
+        notifications: nextNotifications,
+      },
+    });
+
+    return res.json({ notifications: nextNotifications });
+  } catch (error) {
+    console.error("Failed to delete notification", error);
+    return res.status(500).json({ error: "Failed to delete notification" });
   }
 });
 

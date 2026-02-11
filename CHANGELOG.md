@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-11 (v1.3.0)
+- Added admin notification publishing and management (create, delete, and featured toggles).
+- Replaced static notifications with API-backed delivery through the notification bell for signed-in users.
+- Added featured notification prioritization and live notification refresh handling.
+
 ## 2026-02-11 (v1.2.9)
 - Hardened production configuration handling and moved environment configuration to Render-managed variables.
 - Improved signed-in loading reliability in live environments.
