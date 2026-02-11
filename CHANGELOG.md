@@ -3,7 +3,8 @@
 All notable changes to this project are documented here.
 
 ## 2026-02-11 (v1.2.9)
-- Fixed live signed-in loader flow to wait for auth and initial data readiness before revealing the app.
+- Hardened production configuration handling and moved environment configuration to Render-managed variables.
+- Improved signed-in loading reliability in live environments.
 - Moved the Play action to the last position in the mobile drawer menu list.
 
 ## 2026-02-11 (v1.2.8)

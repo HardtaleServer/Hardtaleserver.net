@@ -44,6 +44,8 @@ const MOBILE_LOGO_STYLE_KEY = "hardtale-mobile-logo-style";
 const MOBILE_ISLAND_KEY = "hardtale-mobile-island";
 const VERSION = "1.2.9";
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
+const INITIAL_LOADER_MIN_MS = 3200;
+const ROUTE_LOADER_MS = 650;
 const MOBILE_LOGO_MAP = {
   "logo-greyscale": "/Images/Logos/Logo_GreyScale.png",
   "logo-golden": "/Images/Logos/Logo_Golden.png",
@@ -85,7 +87,8 @@ const CHANGELOG_ENTRIES = [
     version: "1.2.9",
     date: "2026-02-11",
     items: [
-      "Fixed live signed-in loader flow to wait for auth and initial data readiness before revealing the app.",
+      "Hardened production configuration handling and moved environment configuration to Render-managed variables.",
+      "Improved signed-in loading reliability in live environments.",
       "Moved the Play action to the last position in the mobile drawer menu list.",
     ],
   },
@@ -1542,6 +1545,8 @@ function Layout() {
   const shellRef = useRef(null);
   const topbarRef = useRef(null);
   const playRef = useRef(null);
+  const initialLoaderStartRef = useRef(Date.now());
+  const hasShownRouteLoaderRef = useRef(false);
   const cartCount = useMemo(
     () => cart.reduce((sum, item) => sum + (item.quantity || 1), 0),
     [cart],
@@ -1640,16 +1645,22 @@ function Layout() {
 
     const nextVariant = LOADER_VARIANTS[Math.floor(Math.random() * LOADER_VARIANTS.length)];
     setLoaderVariant(nextVariant);
-    const timeout = setTimeout(() => setAppHydrated(true), 480);
+    const elapsed = Date.now() - initialLoaderStartRef.current;
+    const remaining = Math.max(INITIAL_LOADER_MIN_MS - elapsed, 0);
+    const timeout = setTimeout(() => setAppHydrated(true), remaining);
     return () => clearTimeout(timeout);
   }, [appHydrated, isAuthLoaded, loading]);
 
   useEffect(() => {
     if (!appHydrated) return undefined;
+    if (!hasShownRouteLoaderRef.current) {
+      hasShownRouteLoaderRef.current = true;
+      return undefined;
+    }
     const nextVariant = LOADER_VARIANTS[Math.floor(Math.random() * LOADER_VARIANTS.length)];
     setLoaderVariant(nextVariant);
     setRouteLoading(true);
-    const timeout = setTimeout(() => setRouteLoading(false), 320);
+    const timeout = setTimeout(() => setRouteLoading(false), ROUTE_LOADER_MS);
     return () => clearTimeout(timeout);
   }, [appHydrated, location.pathname]);
 
