@@ -1277,7 +1277,7 @@ function SubscriptionsPage() {
           </div>
           <div className="billing-row">
             <span className="muted">Billing email</span>
-            <span>chashsmurfis@gmail.com</span>
+            <span>hardtaleserver@gmail.com</span>
           </div>
           <div className="billing-row">
             <span className="muted">Next charge</span>
