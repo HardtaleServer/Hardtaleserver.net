@@ -21,6 +21,10 @@ const ADMIN_EMAILS = (
 const ADMIN_EMAIL_SET = new Set(ADMIN_EMAILS);
 const ADMIN_NEWS_OWNER_EMAIL =
   (process.env.ADMIN_NEWS_OWNER_EMAIL || ADMIN_EMAILS[0] || "").toLowerCase();
+const CLERK_PUBLISHABLE_KEY =
+  process.env.CLERK_PUBLISHABLE_KEY ||
+  process.env.VITE_CLERK_PUBLISHABLE_KEY ||
+  "";
 
 app.use(clerkMiddleware());
 app.use(express.json({ limit: "100kb" }));
@@ -382,6 +386,13 @@ app.delete("/api/notifications/:id", async (req, res) => {
 
 app.get("/logo.png", (req, res) => {
   res.sendFile(logoPath);
+});
+
+app.get("/env.js", (req, res) => {
+  res.type("application/javascript");
+  res.send(
+    `window.__CLERK_PUBLISHABLE_KEY__ = ${JSON.stringify(CLERK_PUBLISHABLE_KEY)};`,
+  );
 });
 
 app.use("/Images", express.static(imagesDir));

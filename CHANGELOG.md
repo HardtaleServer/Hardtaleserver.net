@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-11 (v1.3.1)
+- Kept the loader for initial page boot only, with direct navigation after first load.
+- Added a short loader transition specifically for sign-in and sign-out state changes.
+- Moved admin tools to the 404 route and restricted visibility to admin users.
+
 ## 2026-02-11 (v1.3.0)
 - Added admin notification publishing and management (create, delete, and featured toggles).
 - Replaced static notifications with API-backed delivery through the notification bell for signed-in users.

@@ -42,10 +42,10 @@ const TICKET_COOLDOWN_MS = 60 * 60 * 1000;
 const LOGO_SIDE_KEY = "hardtale-logo-side";
 const MOBILE_LOGO_STYLE_KEY = "hardtale-mobile-logo-style";
 const MOBILE_ISLAND_KEY = "hardtale-mobile-island";
-const VERSION = "1.3.0";
+const VERSION = "1.3.1";
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const INITIAL_LOADER_MIN_MS = 3200;
-const ROUTE_LOADER_MS = 650;
+const AUTH_TRANSITION_LOADER_MS = 850;
 const MOBILE_LOGO_MAP = {
   "logo-greyscale": "/Images/Logos/Logo_GreyScale.png",
   "logo-golden": "/Images/Logos/Logo_Golden.png",
@@ -101,6 +101,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.1",
+    date: "2026-02-11",
+    items: [
+      "Kept the loader for initial page boot only, with direct navigation after first load.",
+      "Added a short loader transition specifically for sign-in and sign-out state changes.",
+      "Moved admin tools to the 404 route and restricted visibility to admin users.",
+    ],
+  },
   {
     version: "1.3.0",
     date: "2026-02-11",
@@ -1750,7 +1759,7 @@ function Layout() {
   const [showChangelog, setShowChangelog] = useState(false);
   const [showConnectHelp, setShowConnectHelp] = useState(false);
   const [appHydrated, setAppHydrated] = useState(false);
-  const [routeLoading, setRouteLoading] = useState(false);
+  const [authTransitionLoading, setAuthTransitionLoading] = useState(false);
   const [criticalImagesReady, setCriticalImagesReady] = useState(false);
   const [loaderVariant, setLoaderVariant] = useState(LOADER_VARIANTS[0]);
   const [cart, setCart] = useState([]);
@@ -1761,7 +1770,7 @@ function Layout() {
   const topbarRef = useRef(null);
   const playRef = useRef(null);
   const initialLoaderStartRef = useRef(Date.now());
-  const hasShownRouteLoaderRef = useRef(false);
+  const previousSignedInRef = useRef(null);
   const cartCount = useMemo(
     () => cart.reduce((sum, item) => sum + (item.quantity || 1), 0),
     [cart],
@@ -1888,18 +1897,27 @@ function Layout() {
   }, [appHydrated, isAuthLoaded, loading, criticalImagesReady]);
 
   useEffect(() => {
-    if (!appHydrated) return undefined;
-    if (!hasShownRouteLoaderRef.current) {
-      hasShownRouteLoaderRef.current = true;
+    if (!appHydrated || !isAuthLoaded) return undefined;
+
+    if (previousSignedInRef.current === null) {
+      previousSignedInRef.current = isSignedIn;
       return undefined;
     }
+
+    if (previousSignedInRef.current === isSignedIn) {
+      return undefined;
+    }
+
+    previousSignedInRef.current = isSignedIn;
     const nextVariant = LOADER_VARIANTS[Math.floor(Math.random() * LOADER_VARIANTS.length)];
     setLoaderVariant(nextVariant);
-    setRouteLoading(true);
-    const timeout = setTimeout(() => setRouteLoading(false), ROUTE_LOADER_MS);
+    setAuthTransitionLoading(true);
+    const timeout = setTimeout(
+      () => setAuthTransitionLoading(false),
+      AUTH_TRANSITION_LOADER_MS,
+    );
     return () => clearTimeout(timeout);
-  }, [appHydrated, location.pathname]);
-
+  }, [appHydrated, isAuthLoaded, isSignedIn]);
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 860px)");
@@ -2167,7 +2185,7 @@ function Layout() {
   const notificationCount = unread > 0 ? unread : sortedNotifications.length;
   const year = new Date().getFullYear();
   const displayName = getUserDisplayName(user);
-  const showLoader = !appHydrated || routeLoading;
+  const showLoader = !appHydrated || authTransitionLoading;
 
   return html`
     <div className=${`page ${showMobileNav ? "drawer-open" : ""} ${mobileNavStyle === "solid" ? "nav-solid" : "nav-transparent"} ${!showMobileIsland ? "hide-mobile-island" : ""}`}>
