@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-11 (v1.2.9)
+- Fixed live signed-in loader flow to wait for auth and initial data readiness before revealing the app.
+- Moved the Play action to the last position in the mobile drawer menu list.
+
 ## 2026-02-11 (v1.2.8)
 - Added mobile logo picker with icon/logo grids and solid-only display.
 - Separated floating island from navbar logos for mobile-only hiding.

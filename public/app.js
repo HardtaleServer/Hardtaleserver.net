@@ -28,7 +28,6 @@ const html = htm.bind(React.createElement);
 
 const SERVER_IP = "play.hardtale.net";
 const PLAYER_COUNT = "60+";
-const ADMIN_EMAIL = "chashsmurfis@gmail.com";
 const PUBLISHABLE_KEY = window.__CLERK_PUBLISHABLE_KEY__;
 const LOGO_SRC = "/Images/IslandLogo/Hero_Island_Logo.png";
 const THEME_KEY = "hardtale-theme";
@@ -43,7 +42,7 @@ const TICKET_COOLDOWN_MS = 60 * 60 * 1000;
 const LOGO_SIDE_KEY = "hardtale-logo-side";
 const MOBILE_LOGO_STYLE_KEY = "hardtale-mobile-logo-style";
 const MOBILE_ISLAND_KEY = "hardtale-mobile-island";
-const VERSION = "1.2.8";
+const VERSION = "1.2.9";
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const MOBILE_LOGO_MAP = {
   "logo-greyscale": "/Images/Logos/Logo_GreyScale.png",
@@ -82,6 +81,14 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.2.9",
+    date: "2026-02-11",
+    items: [
+      "Fixed live signed-in loader flow to wait for auth and initial data readiness before revealing the app.",
+      "Moved the Play action to the last position in the mobile drawer menu list.",
+    ],
+  },
   {
     version: "1.2.8",
     date: "2026-02-11",
@@ -449,11 +456,9 @@ function NewsCard({ item, onDelete, onToggleFeatured, canDelete }) {
   `;
 }
 
-function AdminPanel({ onNewsUpdate }) {
+function AdminPanel({ onNewsUpdate, isAdmin }) {
   const { getToken } = useAuth();
   const { user } = useUser();
-  const email = useMemo(() => getUserEmail(user).toLowerCase(), [user]);
-  const isAdmin = email === ADMIN_EMAIL.toLowerCase();
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -1472,7 +1477,7 @@ function NewsPage({
       </section>
 
       <${SignedIn}>
-        <${AdminPanel} onNewsUpdate=${onNewsUpdate} />
+        <${AdminPanel} onNewsUpdate=${onNewsUpdate} isAdmin=${canDelete} />
       <//>
     </section>
   `;
@@ -1519,16 +1524,16 @@ function Layout() {
   const [hideLogo, setHideLogo] = useState(false);
   const [showMobileNav, setShowMobileNav] = useState(false);
   const { user } = useUser();
-  const { getToken, isSignedIn, userId } = useAuth();
+  const { getToken, isSignedIn, userId, isLoaded: isAuthLoaded } = useAuth();
   const { openSignIn } = useClerk();
-  const email = useMemo(() => getUserEmail(user).toLowerCase(), [user]);
-  const isAdmin = email === ADMIN_EMAIL.toLowerCase();
+  const [isAdmin, setIsAdmin] = useState(false);
   const [unread, setUnread] = useState(0);
   const [showCart, setShowCart] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const [showConnectHelp, setShowConnectHelp] = useState(false);
-  const [showLoader, setShowLoader] = useState(true);
+  const [appHydrated, setAppHydrated] = useState(false);
+  const [routeLoading, setRouteLoading] = useState(false);
   const [loaderVariant, setLoaderVariant] = useState(LOADER_VARIANTS[0]);
   const [cart, setCart] = useState([]);
   const [purchases, setPurchases] = useState([]);
@@ -1550,6 +1555,37 @@ function Layout() {
     });
     return copy;
   }, [news]);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadRole() {
+      if (!isAuthLoaded) return;
+      if (!isSignedIn) {
+        if (alive) setIsAdmin(false);
+        return;
+      }
+      try {
+        const token = await getToken();
+        const response = await fetch("/api/me", {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!alive) return;
+        if (!response.ok) {
+          setIsAdmin(false);
+          return;
+        }
+        const data = await response.json();
+        setIsAdmin(Boolean(data?.isAdmin));
+      } catch {
+        if (!alive) return;
+        setIsAdmin(false);
+      }
+    }
+    loadRole();
+    return () => {
+      alive = false;
+    };
+  }, [isAuthLoaded, isSignedIn, userId, getToken]);
 
   useEffect(() => {
     function sparkle(x, y) {
@@ -1595,26 +1631,27 @@ function Layout() {
   }, []);
 
   useEffect(() => {
-    let timeout = null;
-    function triggerLoader(duration) {
-      const nextVariant = LOADER_VARIANTS[Math.floor(Math.random() * LOADER_VARIANTS.length)];
-      setLoaderVariant(nextVariant);
-      setShowLoader(true);
-      clearTimeout(timeout);
-      timeout = setTimeout(() => setShowLoader(false), duration);
-    }
-    triggerLoader(900);
-    return () => clearTimeout(timeout);
-  }, []);
+    if (appHydrated) return undefined;
 
-  useEffect(() => {
-    let timeout = null;
+    // Keep initial loader up until auth and news bootstrap are ready.
+    if (!isAuthLoaded || loading) {
+      return undefined;
+    }
+
     const nextVariant = LOADER_VARIANTS[Math.floor(Math.random() * LOADER_VARIANTS.length)];
     setLoaderVariant(nextVariant);
-    setShowLoader(true);
-    timeout = setTimeout(() => setShowLoader(false), 650);
+    const timeout = setTimeout(() => setAppHydrated(true), 480);
     return () => clearTimeout(timeout);
-  }, [location.pathname]);
+  }, [appHydrated, isAuthLoaded, loading]);
+
+  useEffect(() => {
+    if (!appHydrated) return undefined;
+    const nextVariant = LOADER_VARIANTS[Math.floor(Math.random() * LOADER_VARIANTS.length)];
+    setLoaderVariant(nextVariant);
+    setRouteLoading(true);
+    const timeout = setTimeout(() => setRouteLoading(false), 320);
+    return () => clearTimeout(timeout);
+  }, [appHydrated, location.pathname]);
 
 
   useEffect(() => {
@@ -1872,6 +1909,7 @@ function Layout() {
   const notificationCount = notifications.length;
   const year = new Date().getFullYear();
   const displayName = getUserDisplayName(user);
+  const showLoader = !appHydrated || routeLoading;
 
   return html`
     <div className=${`page ${showMobileNav ? "drawer-open" : ""} ${mobileNavStyle === "solid" ? "nav-solid" : "nav-transparent"} ${!showMobileIsland ? "hide-mobile-island" : ""}`}>
@@ -2153,12 +2191,6 @@ function Layout() {
               Home
             </button>
             <button className="drawer-link" onClick=${() => {
-              setShowConnectHelp(true);
-              setShowMobileNav(false);
-            }}>
-              Play
-            </button>
-            <button className="drawer-link" onClick=${() => {
               navigate("/news");
               setShowMobileNav(false);
             }}>
@@ -2181,6 +2213,12 @@ function Layout() {
               setShowMobileNav(false);
             }}>
               Subscriptions
+            </button>
+            <button className="drawer-link" onClick=${() => {
+              setShowConnectHelp(true);
+              setShowMobileNav(false);
+            }}>
+              Play
             </button>
           </div>
           <div className="mobile-drawer-footer">

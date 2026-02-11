@@ -10,7 +10,17 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || "").toLowerCase();
+const ADMIN_EMAILS = (
+  process.env.ADMIN_EMAILS ||
+  process.env.ADMIN_EMAIL ||
+  "hardtaleserver@gmail.com"
+)
+  .split(",")
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
+const ADMIN_EMAIL_SET = new Set(ADMIN_EMAILS);
+const ADMIN_NEWS_OWNER_EMAIL =
+  (process.env.ADMIN_NEWS_OWNER_EMAIL || ADMIN_EMAILS[0] || "").toLowerCase();
 
 app.use(clerkMiddleware());
 app.use(express.json({ limit: "100kb" }));
@@ -44,19 +54,33 @@ function normalizeNewsItem(item) {
 }
 
 async function getAdminUser() {
-  if (!ADMIN_EMAIL) return null;
+  if (!ADMIN_NEWS_OWNER_EMAIL) return null;
   const { data } = await clerkClient.users.getUserList({
-    emailAddress: [ADMIN_EMAIL],
+    emailAddress: [ADMIN_NEWS_OWNER_EMAIL],
   });
   return data?.[0] || null;
 }
 
 function isAdminUser(user) {
-  if (!user) return false;
+  if (!user || ADMIN_EMAIL_SET.size === 0) return false;
   return user.emailAddresses?.some(
-    (entry) => entry.emailAddress?.toLowerCase() === ADMIN_EMAIL,
+    (entry) => ADMIN_EMAIL_SET.has(entry.emailAddress?.toLowerCase()),
   );
 }
+
+app.get("/api/me", async (req, res) => {
+  try {
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.json({ isAdmin: false });
+    }
+    const user = await clerkClient.users.getUser(auth.userId);
+    return res.json({ isAdmin: isAdminUser(user) });
+  } catch (error) {
+    console.error("Failed to load user role", error);
+    return res.status(500).json({ error: "Failed to load user role" });
+  }
+});
 
 app.get("/api/news", async (req, res) => {
   try {
