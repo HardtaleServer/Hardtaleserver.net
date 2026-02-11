@@ -2246,6 +2246,15 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   margin-left: auto;
 }
 
+.admin-tools {
+  display: grid;
+  gap: 16px;
+  margin: 20px 0;
+  width: 100%;
+  max-width: 860px;
+  box-sizing: border-box;
+}
+
 .admin-panel {
   display: grid;
   gap: 12px;

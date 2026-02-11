@@ -670,7 +670,7 @@ function AdminPanel({
   return html`
     <div className="admin-tools">
     <form className="card admin-panel" onSubmit=${submitNews}>
-      <div className="section-title">Admin News Publisher</div>
+      <div className="section-title">News Publisher</div>
       <input
         placeholder="Header"
         value=${newsTitle}
@@ -715,7 +715,7 @@ function AdminPanel({
       <div className="muted">${newsStatus}</div>
     </form>
     <form className="card admin-panel" onSubmit=${submitNotification}>
-      <div className="section-title">Admin Notifications</div>
+      <div className="section-title">Send Notification</div>
       <input
         placeholder="Notification title"
         value=${notificationTitle}
