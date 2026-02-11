@@ -42,7 +42,7 @@ const TICKET_COOLDOWN_MS = 60 * 60 * 1000;
 const LOGO_SIDE_KEY = "hardtale-logo-side";
 const MOBILE_LOGO_STYLE_KEY = "hardtale-mobile-logo-style";
 const MOBILE_ISLAND_KEY = "hardtale-mobile-island";
-const VERSION = "1.3.1";
+const VERSION = "1.3.2";
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const INITIAL_LOADER_MIN_MS = 3200;
 const AUTH_TRANSITION_LOADER_MS = 850;
@@ -101,6 +101,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.2",
+    date: "2026-02-11",
+    items: [
+      "Corrected Clerk key configuration after a mismatched key update.",
+      "Resolved auth handshake verification failures caused by invalid key pairing.",
+      "Stabilized production authentication initialization for live sessions.",
+    ],
+  },
   {
     version: "1.3.1",
     date: "2026-02-11",

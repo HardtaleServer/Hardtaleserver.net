@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-11 (v1.3.2)
+- Corrected Clerk key configuration after a mismatched key update.
+- Resolved auth handshake verification failures caused by invalid key pairing.
+- Stabilized production authentication initialization for live sessions.
+
 ## 2026-02-11 (v1.3.1)
 - Kept the loader for initial page boot only, with direct navigation after first load.
 - Added a short loader transition specifically for sign-in and sign-out state changes.
