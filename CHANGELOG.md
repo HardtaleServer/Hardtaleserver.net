@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-11 (v1.3.4)
+- Added visible timestamps to notification entries in the bell panel.
+- Added visible timestamps to news posts and home news updates.
+- Improved timestamp formatting consistency across activity feeds.
+
 ## 2026-02-11 (v1.3.3)
 - Added `/home` as a route alias for the root home page.
 - Updated home nav active-state handling so both `/` and `/home` map to Home.

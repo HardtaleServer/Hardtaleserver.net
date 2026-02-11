@@ -42,7 +42,7 @@ const TICKET_COOLDOWN_MS = 60 * 60 * 1000;
 const LOGO_SIDE_KEY = "hardtale-logo-side";
 const MOBILE_LOGO_STYLE_KEY = "hardtale-mobile-logo-style";
 const MOBILE_ISLAND_KEY = "hardtale-mobile-island";
-const VERSION = "1.3.3";
+const VERSION = "1.3.4";
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const INITIAL_LOADER_MIN_MS = 3200;
 const AUTH_TRANSITION_LOADER_MS = 850;
@@ -101,6 +101,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.4",
+    date: "2026-02-11",
+    items: [
+      "Added visible timestamps to notification entries in the bell panel.",
+      "Added visible timestamps to news posts and home news updates.",
+      "Improved timestamp formatting consistency across activity feeds.",
+    ],
+  },
   {
     version: "1.3.3",
     date: "2026-02-11",
@@ -486,6 +495,19 @@ function getUserDisplayName(user) {
   return user?.fullName || getUserEmail(user) || "User";
 }
 
+function formatTimestamp(value) {
+  if (!value) return "Unknown time";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Unknown time";
+  return date.toLocaleString([], {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function NewsCard({ item, onDelete, onToggleFeatured, canDelete }) {
   return html`
     <article className="news-card">
@@ -505,7 +527,7 @@ function NewsCard({ item, onDelete, onToggleFeatured, canDelete }) {
       </div>
       <p>${item.description}</p>
       <div className="news-meta">
-        <span>By ${item.author}</span>
+        <span>By ${item.author} · ${formatTimestamp(item.createdAt)}</span>
         ${item.readMoreUrl
           ? html`<a href=${item.readMoreUrl} target="_blank" rel="noreferrer">
               Read me
@@ -1531,7 +1553,9 @@ function NotificationsPanel({ notifications }) {
             ${item.title}
           </div>
           <div className="notif-body">${item.message}</div>
-          <div className="notif-author">Sent by ${item.author}</div>
+          <div className="notif-author">
+            Sent by ${item.author} · ${formatTimestamp(item.createdAt)}
+          </div>
         </div>`,
       )}
     </div>
@@ -1640,7 +1664,9 @@ function HomePage({
                       ${item.featured ? html`<span className="news-star mini" title="Featured">★</span>` : html``}
                       ${item.title}
                     </div>
-                    <div className="news-mini-meta">By ${item.author}</div>
+                    <div className="news-mini-meta">
+                      By ${item.author} · ${formatTimestamp(item.createdAt)}
+                    </div>
                   </div>`,
                 )}
               </div>`}
@@ -2210,10 +2236,10 @@ function Layout() {
     <div className=${`page ${showMobileNav ? "drawer-open" : ""} ${mobileNavStyle === "solid" ? "nav-solid" : "nav-transparent"} ${!showMobileIsland ? "hide-mobile-island" : ""}`}>
       <${LoadingScreen} show=${showLoader} variant=${loaderVariant} />
         <div
-          className=${`mobile-nav-bar ${mobileNavStyle === "solid" ? "nav-solid" : "nav-transparent"} ${menuSide === "left" ? "nav-left" : "nav-right"} ${hideLogo && mobileNavStyle === "solid" ? "with-mini-logo" : ""}`}
+          className=${`mobile-nav-bar ${mobileNavStyle === "solid" ? "nav-solid" : "nav-transparent"} ${menuSide === "left" ? "nav-left" : "nav-right"} ${mobileNavStyle === "solid" ? "with-mini-logo" : ""}`}
           aria-hidden="true"
         >
-          ${hideLogo && mobileNavStyle === "solid"
+          ${mobileNavStyle === "solid"
             ? html`<div className=${`mobile-nav-logo-wrap ${menuSide === "left" ? "logo-right" : ""}`}>
                 <img
                   className=${`mobile-nav-logo ${mobileLogoStyle.startsWith("icon") ? "icon" : "logo"}`}
