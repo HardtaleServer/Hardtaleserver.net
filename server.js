@@ -10,14 +10,20 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const ADMIN_EMAILS = (
+const DEFAULT_ADMIN_EMAILS = [
+  "chashsmurfis@gmail.com",
+  "hardtaleserver@gmail.com",
+  "hytaleserver@gmail.com",
+];
+const configuredAdminEmails = (
   process.env.ADMIN_EMAILS ||
   process.env.ADMIN_EMAIL ||
-  "hardtaleserver@gmail.com"
+  ""
 )
   .split(",")
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
+const ADMIN_EMAILS = [...new Set([...DEFAULT_ADMIN_EMAILS, ...configuredAdminEmails])];
 const ADMIN_EMAIL_SET = new Set(ADMIN_EMAILS);
 const ADMIN_NEWS_OWNER_EMAIL =
   (process.env.ADMIN_NEWS_OWNER_EMAIL || ADMIN_EMAILS[0] || "").toLowerCase();
@@ -26,8 +32,8 @@ const CLERK_PUBLISHABLE_KEY =
   process.env.VITE_CLERK_PUBLISHABLE_KEY ||
   "";
 
-app.use(clerkMiddleware());
 app.use(express.json({ limit: "100kb" }));
+app.use("/api", clerkMiddleware());
 
 const publicDir = path.join(__dirname, "public");
 const imagesDir = path.join(__dirname, "Images");
