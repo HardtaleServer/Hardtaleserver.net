@@ -837,17 +837,19 @@ function SettingsMenu({
       </button>
       ${open
         ? html`<div className="settings-menu">
-            <div className="settings-row">
-              <label>Navigation placement</label>
-              <select
-                value=${placement}
-                onChange=${(event) => setPlacement(event.target.value)}
-              >
-                <option value="center">Center</option>
-                <option value="left">Left</option>
-                <option value="right">Right</option>
-              </select>
-            </div>
+            ${!isMobileView
+              ? html`<div className="settings-row">
+                  <label>Navigation placement</label>
+                  <select
+                    value=${placement}
+                    onChange=${(event) => setPlacement(event.target.value)}
+                  >
+                    <option value="center">Center</option>
+                    <option value="left">Left</option>
+                    <option value="right">Right</option>
+                  </select>
+                </div>`
+              : html``}
                 ${isMobileView
                   ? html`
                       <div className="settings-row">
