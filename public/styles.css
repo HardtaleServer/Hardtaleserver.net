@@ -218,6 +218,7 @@ body[data-theme="dark"] {
   z-index: 90;
   transform: translateY(-120%);
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
   transition: transform 0.35s ease, opacity 0.35s ease;
 }
@@ -235,6 +236,7 @@ body[data-theme="dark"] {
 .desktop-sticky.show {
   transform: translateY(0);
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
 }
 
