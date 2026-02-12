@@ -2751,6 +2751,7 @@ function Layout() {
   const [purchases, setPurchases] = useState([]);
   const [pendingItem, setPendingItem] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [topbarHeight, setTopbarHeight] = useState(0);
   const shellRef = useRef(null);
   const topbarRef = useRef(null);
   const playRef = useRef(null);
@@ -2912,6 +2913,16 @@ function Layout() {
     onChange();
     media.addEventListener("change", onChange);
     return () => media.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    function updateHeight() {
+      if (!topbarRef.current) return;
+      setTopbarHeight(topbarRef.current.offsetHeight || 0);
+    }
+    updateHeight();
+    window.addEventListener("resize", updateHeight);
+    return () => window.removeEventListener("resize", updateHeight);
   }, []);
 
   useEffect(() => {
@@ -3289,7 +3300,7 @@ function Layout() {
           <//>
           <${SignedIn}>
             <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
-            ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
+            <${CartButton} onClick=${openCart} count=${cartCount} />
             <span className="user-button">
               <${UserButton} />
             </span>
@@ -3348,10 +3359,10 @@ function Layout() {
                       <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />
                     </svg>
                   </button>
-                  ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
+                  <${CartButton} onClick=${openCart} count=${cartCount} />
                 `
               : html`
-                  ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
+                  <${CartButton} onClick=${openCart} count=${cartCount} />
                   <button
                     className="settings-button mobile-menu"
                     title="Menu"
@@ -3368,22 +3379,24 @@ function Layout() {
       <div className="glow"></div>
       <div className="sparks"></div>
       <div className="shell" ref=${shellRef}>
-        <header className=${`topbar fade-in ${hideLogo ? "logo-hidden" : ""} ${desktopStickyVisible ? "desktop-sticky-active" : ""} ${!isMobile && logoSide === "right" ? "logo-right" : ""}`} ref=${topbarRef}>
-          <${Link}
-            className=${`logo island-logo ${hideLogo ? "logo-hidden" : ""}`}
-            to="/"
-            onClick=${() => setActive("home")}
-          >
-            <img
-              className="logo-image"
-              src=${LOGO_SRC}
-              alt="Hardtale logo"
-              onError=${handleLogoError}
-            />
-          <//>
-          <${DesktopNavShell} />
-          <${DesktopAuthButtons} />
-        </header>
+        ${!desktopStickyVisible
+          ? html`<header className=${`topbar fade-in ${hideLogo ? "logo-hidden" : ""} ${!isMobile && logoSide === "right" ? "logo-right" : ""}`} ref=${topbarRef}>
+              <${Link}
+                className=${`logo island-logo ${hideLogo ? "logo-hidden" : ""}`}
+                to="/"
+                onClick=${() => setActive("home")}
+              >
+                <img
+                  className="logo-image"
+                  src=${LOGO_SRC}
+                  alt="Hardtale logo"
+                  onError=${handleLogoError}
+                />
+              <//>
+              <${DesktopNavShell} />
+              <${DesktopAuthButtons} />
+            </header>`
+          : html`<div className="topbar-spacer" style=${{ height: `${topbarHeight}px` }} aria-hidden="true"></div>`}
 
         <${Routes}>
           <${Route}
@@ -3505,12 +3518,12 @@ function Layout() {
                   isMobile=${isMobile}
                 />
                       <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
-                      ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
+                      <${CartButton} onClick=${openCart} count=${cartCount} />
                     <//>
                   `
                 : html`
                     <${SignedIn}>
-                      ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
+                      <${CartButton} onClick=${openCart} count=${cartCount} />
                       <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
                       <${SettingsMenu}
                         theme=${theme}
