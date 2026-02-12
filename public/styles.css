@@ -258,6 +258,10 @@ body[data-theme="dark"] {
   display: block;
 }
 
+.desktop-sticky-logo.island-float {
+  animation: logoFloat 6s ease-in-out infinite;
+}
+
 .desktop-sticky .nav-shell {
   flex: 1;
 }
@@ -2613,7 +2617,8 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 
 
   .auth-buttons .settings,
-  .auth-buttons .notif {
+  .auth-buttons .notif,
+  .auth-buttons .cart-button {
     display: none;
   }
 

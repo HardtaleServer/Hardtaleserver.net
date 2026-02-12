@@ -2483,7 +2483,11 @@ function Layout() {
       >
         <div className="desktop-sticky-inner">
           ${desktopStickyLogoVisible
-            ? html`<img className="desktop-sticky-logo" src=${desktopStickyLogoSrc} alt="Hardtale" />`
+            ? html`<img
+                className=${`desktop-sticky-logo ${desktopStickyWide ? "" : "island-float"}`}
+                src=${desktopStickyLogoSrc}
+                alt="Hardtale"
+              />`
             : html``}
           <${DesktopNavShell} />
           <${DesktopAuthButtons} />
