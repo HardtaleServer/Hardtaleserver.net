@@ -788,7 +788,9 @@ function AdminPanel({
                 <p>${item.message}</p>
                 <div className="news-meta">
                   <span>By ${item.author}</span>
-                  <span>${new Date(item.createdAt || Date.now()).toLocaleString()}</span>
+                  <span className="notification-timestamp">
+                    ${formatTimestamp(item.createdAt)}
+                  </span>
                 </div>
                 <button
                   className="ghost-btn news-toggle"
@@ -2359,6 +2361,7 @@ function Layout() {
               <//>
               <${SignedIn}>
                 <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} />
+                ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
                 <span className="user-button">
                   <${UserButton} />
                 </span>
