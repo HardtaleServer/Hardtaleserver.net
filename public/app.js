@@ -1044,14 +1044,21 @@ function CommentThread({ newsId }) {
                     ${status ? html`<span className="muted">${status}</span>` : html``}
                   </div>
                 </form>`
-              : html`<div className="comment-signin">
-                  <p className="muted">Sign in to join the discussion.</p>
-                  <${SignInButton} mode="modal">
-                    <button className="button primary">Sign in</button>
-                  <//>
+              : html`<div
+                  className="comment-login-card"
+                  role="button"
+                  tabindex="0"
+                  onClick=${() => {
+                    if (openSignIn) openSignIn({});
+                  }}
+                >
+                  <div className="comment-login-title">Write a response</div>
+                  <div className="comment-login-input">What are your thoughts?</div>
                 </div>`}
             ${comments.length === 0
-              ? html`<div className="no-comments">No comments yet.</div>`
+              ? isSignedIn
+                ? html`<div className="no-comments">No comments yet.</div>`
+                : html``
               : comments.map(
                   (comment) => html`<div key=${comment.id} className="comment-item">
                     <div className="comment-left">
@@ -2469,7 +2476,8 @@ function NotificationsPanel({ notifications }) {
           </div>
           <div className="notif-body">${item.message}</div>
           <div className="notif-author">
-            Sent by ${item.author} · ${formatTimestamp(item.createdAt)}
+            Sent by <span className=${`author-name ${isStaffLabel(item.author) ? "staff" : ""}`}>${item.author}</span>
+            · ${formatTimestamp(item.createdAt)}
           </div>
         </div>`,
       )}
