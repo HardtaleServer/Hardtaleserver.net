@@ -624,9 +624,9 @@ function ReactionBar({ itemType, itemId }) {
     let alive = true;
     async function loadPicker() {
       try {
-        const mod = await import("https://esm.sh/emoji-picker-react@4.11.0");
+        const mod = await import("https://esm.sh/frimousse@2.1.1");
         if (!alive) return;
-        setEmojiPickerComponent(() => mod.default || mod.EmojiPicker || null);
+        setEmojiPickerComponent(() => mod.EmojiPicker || mod.default || null);
       } catch {}
     }
     loadPicker();
@@ -741,12 +741,40 @@ function ReactionBar({ itemType, itemId }) {
       ${showPicker
         ? html`<div className="reaction-picker">
             ${EmojiPickerComponent
-              ? html`<${EmojiPickerComponent}
-                  onEmojiClick=${(emojiData) => {
-                    toggleReaction(emojiData.emoji);
-                    setShowPicker(false);
-                  }}
-                />`
+              ? html`<${EmojiPickerComponent.Root} className="reaction-picker-panel">
+                  <${EmojiPickerComponent.Search} className="reaction-picker-search" />
+                  <${EmojiPickerComponent.Viewport} className="reaction-picker-viewport">
+                    <${EmojiPickerComponent.Loading} className="reaction-picker-state">
+                      Loading
+                    <//>
+                    <${EmojiPickerComponent.Empty} className="reaction-picker-state">
+                      No emoji found.
+                    <//>
+                    <${EmojiPickerComponent.List}
+                      className="reaction-picker-list"
+                      components=${{
+                        CategoryHeader: ({ category, ...props }) =>
+                          html`<div className="reaction-picker-category" ...${props}>
+                            ${category.label}
+                          </div>`,
+                        Row: ({ children, ...props }) =>
+                          html`<div className="reaction-picker-row" ...${props}>${children}</div>`,
+                        Emoji: ({ emoji, ...props }) =>
+                          html`<button
+                            className="reaction-picker-emoji"
+                            type="button"
+                            ...${props}
+                            onClick=${() => {
+                              toggleReaction(emoji.emoji);
+                              setShowPicker(false);
+                            }}
+                          >
+                            ${emoji.emoji}
+                          </button>`,
+                      }}
+                    />
+                  <//>
+                <//>`
               : html`<div className="muted">Loading emojis...</div>`}
           </div>`
         : html``}
