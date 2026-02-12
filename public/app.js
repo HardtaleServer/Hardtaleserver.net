@@ -3314,21 +3314,3 @@ root.render(
     <${App} />
   <//>`
 );
-
-
-
-
-  useEffect(() => {
-    let alive = true;
-    async function loadPicker() {
-      try {
-        const mod = await import("https://esm.sh/frimousse@0.3.0?bundle");
-        if (!alive) return;
-        setEmojiPickerComponent(() => mod.EmojiPicker || mod.default || null);
-      } catch {}
-    }
-    loadPicker();
-    return () => {
-      alive = false;
-    };
-  }, []);
