@@ -253,9 +253,22 @@ body[data-theme="dark"] {
 }
 
 .desktop-sticky-logo {
+  display: block;
+}
+
+.desktop-sticky-logo.icon {
+  width: 45px;
+  height: 45px;
+}
+
+.desktop-sticky-logo.logo {
+  width: 140px;
+  height: 50px;
+}
+
+.desktop-sticky-logo.island {
   width: 100px;
   height: auto;
-  display: block;
 }
 
 .desktop-sticky-logo.island-float {

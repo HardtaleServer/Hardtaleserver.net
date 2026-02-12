@@ -2398,6 +2398,11 @@ function Layout() {
   const desktopStickyLogoSrc = desktopStickyWide
     ? DESKTOP_LOGO_MAP[desktopStickyLogoStyle] || LOGO_SRC
     : LOGO_SRC;
+  const desktopStickyLogoClass = desktopStickyWide
+    ? desktopStickyLogoStyle.startsWith("icon")
+      ? "icon"
+      : "logo"
+    : "island";
 
   function DesktopNavShell() {
     return html`
@@ -2498,7 +2503,7 @@ function Layout() {
         <div className="desktop-sticky-inner">
           ${desktopStickyLogoVisible
             ? html`<img
-                className=${`desktop-sticky-logo ${desktopStickyWide ? "" : "island-float"}`}
+                className=${`desktop-sticky-logo ${desktopStickyLogoClass} ${desktopStickyWide ? "" : "island-float"}`}
                 src=${desktopStickyLogoSrc}
                 alt="Hardtale"
               />`
