@@ -292,6 +292,11 @@ body[data-theme="dark"] {
   z-index: 1;
 }
 
+.desktop-sticky.transparent .cl-userButtonAvatarImage {
+  position: relative;
+  z-index: 2;
+}
+
 .desktop-sticky.transparent .nav-link:hover,
 .desktop-sticky.transparent .nav-link:focus,
 .desktop-sticky.transparent .settings-button:hover,
