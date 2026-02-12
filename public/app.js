@@ -47,7 +47,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.11";
+const VERSION = "1.3.12";
 const STAFF_EMAILS = new Set(["chashsmurfis@gmail.com", "hytaleserver@gmail.com"]);
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const INITIAL_LOADER_MIN_MS = 3200;
@@ -1052,29 +1052,33 @@ function CommentThread({ newsId }) {
                     />
                     <div className="comment-body">
                       <div className="comment-meta">
-                        <span className="comment-author">${comment.authorName}</span>
-                        ${(() => {
-                          const rank = resolveRank(comment);
-                          return html`<span className=${`comment-rank ${rank.staff ? "staff" : ""}`}>
-                            ${rank.label}
-                          </span>`;
-                        })()}
-                        <span className="comment-time">${formatTimestamp(comment.createdAt)}</span>
-                        ${comment.editCount > 0
-                          ? html`<button
-                              className="comment-history-btn"
-                              type="button"
-                              onClick=${() => openHistory(comment.id)}
-                              title="View edits"
-                            >
-                              ✎ ${comment.editCount}
-                            </button>`
-                          : html``}
-                        ${comment.editCount > 0
-                          ? html`<span className="comment-edited">
-                              Edited ${formatTimestamp(comment.updatedAt)}
-                            </span>`
-                          : html``}
+                        <div className="comment-identity">
+                          <div className="comment-author">${comment.authorName}</div>
+                          ${(() => {
+                            const rank = resolveRank(comment);
+                            return html`<div className=${`comment-rank ${rank.staff ? "staff" : ""}`}>
+                              ${rank.label}
+                            </div>`;
+                          })()}
+                        </div>
+                        <div className="comment-meta-right">
+                          <span className="comment-time">${formatTimestamp(comment.createdAt)}</span>
+                          ${comment.editCount > 0
+                            ? html`<button
+                                className="comment-history-btn"
+                                type="button"
+                                onClick=${() => openHistory(comment.id)}
+                                title="View edits"
+                              >
+                                ✎ ${comment.editCount}
+                              </button>`
+                            : html``}
+                          ${comment.editCount > 0
+                            ? html`<span className="comment-edited">
+                                Edited ${formatTimestamp(comment.updatedAt)}
+                              </span>`
+                            : html``}
+                        </div>
                       </div>
                       ${editingId === comment.id
                         ? html`<div className="comment-editor">
@@ -1105,7 +1109,7 @@ function CommentThread({ newsId }) {
                           </div>`
                         : html`<p className="comment-text">${comment.body}</p>`}
                       ${comment.userId === userId && editingId !== comment.id
-                        ? html`<div className="comment-controls">
+                        ? html`<div className="comment-controls right">
                             <button className="ghost-btn" type="button" onClick=${() => startEdit(comment)}>
                               Edit
                             </button>

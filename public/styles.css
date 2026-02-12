@@ -1197,11 +1197,12 @@ body[data-theme="light"] .button.primary {
 
 .news-meta {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   align-items: center;
   margin-top: 12px;
   color: var(--accent);
   font-weight: 600;
+  gap: 12px;
 }
 
 .news-meta a {
@@ -1370,13 +1371,26 @@ emoji-picker.reaction-picker-panel {
 
 .comment-meta {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
   font-size: 12px;
 }
 
 .comment-author {
   font-weight: 600;
+}
+
+.comment-identity {
+  display: grid;
+  gap: 2px;
+}
+
+.comment-meta-right {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  text-align: right;
 }
 
 .comment-rank {
@@ -1412,6 +1426,10 @@ emoji-picker.reaction-picker-panel {
   display: flex;
   gap: 10px;
   margin-top: 8px;
+}
+
+.comment-controls.right {
+  justify-content: flex-end;
 }
 
 .comment-history-btn {

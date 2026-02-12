@@ -25,6 +25,10 @@ All notable changes to this project are documented here.
 - Fixed desktop sticky mode to always hide the original nav on scroll.
 - Increased changelog popup height.
 
+## 2026-02-12 (v1.3.12)
+- Refined comment layout (stacked identity + right-aligned actions).
+- Right-aligned news metadata row.
+
 ## 2026-02-12 (v1.3.6)
 - Added reactions (emoji picker) to news and changelog entries.
 - Added signed-in comments with edit history and author metadata on news posts.
