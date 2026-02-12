@@ -2563,7 +2563,7 @@ function Layout() {
       <div className="glow"></div>
       <div className="sparks"></div>
       <div className="shell" ref=${shellRef}>
-        <header className=${`topbar fade-in ${hideLogo ? "logo-hidden" : ""} ${!isMobile && logoSide === "right" ? "logo-right" : ""}`} ref=${topbarRef}>
+        <header className=${`topbar fade-in ${hideLogo ? "logo-hidden" : ""} ${desktopStickyVisible && desktopStickyStyle === "transparent" ? "desktop-sticky-active" : ""} ${!isMobile && logoSide === "right" ? "logo-right" : ""}`} ref=${topbarRef}>
           <${Link}
             className=${`logo island-logo ${hideLogo ? "logo-hidden" : ""}`}
             to="/"

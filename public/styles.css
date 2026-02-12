@@ -228,8 +228,10 @@ body[data-theme="dark"] {
 }
 
 .desktop-sticky.transparent {
-  background: transparent;
+  background: rgba(20, 22, 30, 0.55);
+  background: color-mix(in srgb, var(--card) 70%, transparent);
   border-bottom: none;
+  backdrop-filter: blur(12px);
 }
 
 .desktop-sticky.show {
@@ -252,6 +254,42 @@ body[data-theme="dark"] {
   padding: 10px 36px;
 }
 
+.desktop-sticky.transparent .desktop-sticky-inner {
+  gap: 10px;
+}
+
+.desktop-sticky.transparent .nav-shell {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.desktop-sticky.transparent .nav {
+  width: 100%;
+  justify-content: center;
+}
+
+.desktop-sticky.transparent .nav-link,
+.desktop-sticky.transparent .settings-button,
+.desktop-sticky.transparent .button,
+.desktop-sticky.transparent .user-button,
+.desktop-sticky.transparent .notif,
+.desktop-sticky.transparent .cart-button {
+  opacity: 0.5;
+}
+
+.desktop-sticky.transparent .nav-link:hover,
+.desktop-sticky.transparent .nav-link:focus,
+.desktop-sticky.transparent .settings-button:hover,
+.desktop-sticky.transparent .button:hover,
+.desktop-sticky.transparent .notif:hover,
+.desktop-sticky.transparent .cart-button:hover {
+  opacity: 1;
+}
+
+.topbar.desktop-sticky-active {
+  opacity: 0;
+  pointer-events: none;
+}
 .desktop-sticky-logo {
   display: block;
 }
