@@ -2,7 +2,6 @@
 import ReactDOM from "react-dom/client";
 import htm from "htm";
 import HardtaleLoader from "./components/HardtaleLoader.js";
-import { EmojiPicker } from "frimousse";
 import {
   BrowserRouter,
   Routes,
@@ -619,7 +618,7 @@ function ReactionBar({ itemType, itemId }) {
   const [reactions, setReactions] = useState([]);
   const [showPicker, setShowPicker] = useState(false);
   const [error, setError] = useState("");
-  const EmojiPickerComponent = EmojiPicker;
+  const [EmojiPickerComponent, setEmojiPickerComponent] = useState(null);
 
 
   useEffect(() => {
@@ -3319,3 +3318,17 @@ root.render(
 
 
 
+  useEffect(() => {
+    let alive = true;
+    async function loadPicker() {
+      try {
+        const mod = await import("https://esm.sh/frimousse@0.3.0?bundle");
+        if (!alive) return;
+        setEmojiPickerComponent(() => mod.EmojiPicker || mod.default || null);
+      } catch {}
+    }
+    loadPicker();
+    return () => {
+      alive = false;
+    };
+  }, []);
