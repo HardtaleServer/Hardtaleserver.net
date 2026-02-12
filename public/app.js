@@ -46,6 +46,7 @@ const DESKTOP_STICKY_STYLE_KEY = "hardtale-desktop-sticky-style";
 const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
+const UI_FLASH_KEY = "hardtale-ui-flash";
 const VERSION = "1.3.8";
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const INITIAL_LOADER_MIN_MS = 3200;
@@ -479,6 +480,18 @@ function useDesktopStickyLogoStyle() {
   }, [desktopStickyLogoStyle]);
 
   return { desktopStickyLogoStyle, setDesktopStickyLogoStyle };
+}
+
+function useUiFlash() {
+  const [uiFlashEnabled, setUiFlashEnabled] = useState(
+    localStorage.getItem(UI_FLASH_KEY) !== "false",
+  );
+
+  useEffect(() => {
+    localStorage.setItem(UI_FLASH_KEY, String(uiFlashEnabled));
+  }, [uiFlashEnabled]);
+
+  return { uiFlashEnabled, setUiFlashEnabled };
 }
 
 function useNews() {
@@ -1284,6 +1297,8 @@ function SettingsMenu({
   setDesktopStickyWide,
   desktopStickyLogoStyle,
   setDesktopStickyLogoStyle,
+  uiFlashEnabled,
+  setUiFlashEnabled,
   isMobile,
 }) {
   const [open, setOpen] = useState(false);
@@ -1308,12 +1323,22 @@ function SettingsMenu({
     return () => document.removeEventListener("mousedown", onDocClick);
   }, [open]);
 
+  function handleClick(event) {
+    if (uiFlashEnabled && event?.currentTarget) {
+      event.currentTarget.classList.remove("flash");
+      void event.currentTarget.offsetWidth;
+      event.currentTarget.classList.add("flash");
+      setTimeout(() => event.currentTarget.classList.remove("flash"), 400);
+    }
+  }
+
   return html`
     <div className="settings" ref=${menuRef}>
       <button
         className=${`settings-button ${spinning ? "spin" : ""}`}
         title="Settings"
-        onClick=${() => {
+        onClick=${(event) => {
+          handleClick(event);
           setOpen(!open);
           setSpinning(true);
           setTimeout(() => setSpinning(false), 420);
@@ -1422,6 +1447,17 @@ function SettingsMenu({
                         </div>
                       `
                     : html``}
+                  <div className="settings-row">
+                    <label>Click flash</label>
+                    <div className="toggle">
+                      <span>${uiFlashEnabled ? "On" : "Off"}</span>
+                      <button
+                        className=${`switch ${uiFlashEnabled ? "on" : ""}`}
+                        onClick=${() => setUiFlashEnabled(!uiFlashEnabled)}
+                        title="Toggle click flash"
+                      ></button>
+                    </div>
+                  </div>
                 `
               : html``}
                 ${isMobileView
@@ -1584,9 +1620,18 @@ function CartButton({ onClick, count }) {
   `;
 }
 
-function NotificationsButton({ count, onClick }) {
+function NotificationsButton({ count, onClick, flashEnabled }) {
+  function handleClick(event) {
+    if (flashEnabled && event?.currentTarget) {
+      event.currentTarget.classList.remove("flash");
+      void event.currentTarget.offsetWidth;
+      event.currentTarget.classList.add("flash");
+      setTimeout(() => event.currentTarget.classList.remove("flash"), 400);
+    }
+    onClick();
+  }
   return html`
-    <button className="settings-button notif" title="Notifications" onClick=${onClick}>
+    <button className="settings-button notif" title="Notifications" onClick=${handleClick}>
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path d="M12 22a2.5 2.5 0 0 0 2.4-2H9.6A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 1 0-14 0v5L3 18v1h18v-1l-2-2z" />
       </svg>
@@ -2358,6 +2403,7 @@ function Layout() {
   const { desktopStickyStyle, setDesktopStickyStyle } = useDesktopStickyStyle();
   const { desktopStickyWide, setDesktopStickyWide } = useDesktopStickyWide();
   const { desktopStickyLogoStyle, setDesktopStickyLogoStyle } = useDesktopStickyLogoStyle();
+  const { uiFlashEnabled, setUiFlashEnabled } = useUiFlash();
   const [active, setActive] = useState("home");
   const [hideLogo, setHideLogo] = useState(false);
   const [showMobileNav, setShowMobileNav] = useState(false);
@@ -2873,6 +2919,8 @@ function Layout() {
           setDesktopStickyWide=${setDesktopStickyWide}
           desktopStickyLogoStyle=${desktopStickyLogoStyle}
           setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
+          uiFlashEnabled=${uiFlashEnabled}
+          setUiFlashEnabled=${setUiFlashEnabled}
           isMobile=${isMobile}
         />
         <${ClerkLoading}>
@@ -2888,7 +2936,7 @@ function Layout() {
             <//>
           <//>
           <${SignedIn}>
-            <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} />
+            <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
             ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
             <span className="user-button">
               <${UserButton} />
@@ -3099,16 +3147,18 @@ function Layout() {
                   setDesktopStickyWide=${setDesktopStickyWide}
                   desktopStickyLogoStyle=${desktopStickyLogoStyle}
                   setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
+                  uiFlashEnabled=${uiFlashEnabled}
+                  setUiFlashEnabled=${setUiFlashEnabled}
                   isMobile=${isMobile}
                 />
-                      <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} />
+                      <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
                       ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
                     <//>
                   `
                 : html`
                     <${SignedIn}>
                       ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
-                      <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} />
+                      <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
                       <${SettingsMenu}
                         theme=${theme}
                         setTheme=${setTheme}
@@ -3131,6 +3181,8 @@ function Layout() {
                         setDesktopStickyWide=${setDesktopStickyWide}
                         desktopStickyLogoStyle=${desktopStickyLogoStyle}
                         setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
+                        uiFlashEnabled=${uiFlashEnabled}
+                        setUiFlashEnabled=${setUiFlashEnabled}
                         isMobile=${isMobile}
                       />
                     <//>
