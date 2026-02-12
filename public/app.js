@@ -414,9 +414,13 @@ function useMobileLogoStyle() {
   );
 
   useEffect(() => {
+    const fallback =
+      typeof mobileLogoStyle === "string" && mobileLogoStyle.startsWith("icon")
+        ? "icon-greyscale"
+        : "logo-greyscale";
     const normalized = MOBILE_LOGO_MAP[mobileLogoStyle]
       ? mobileLogoStyle
-      : "logo-greyscale";
+      : fallback;
     if (normalized !== mobileLogoStyle) {
       setMobileLogoStyle(normalized);
       return;
@@ -470,9 +474,14 @@ function useDesktopStickyLogoStyle() {
   );
 
   useEffect(() => {
+    const fallback =
+      typeof desktopStickyLogoStyle === "string" &&
+      desktopStickyLogoStyle.startsWith("icon")
+        ? "icon-greyscale"
+        : "logo-greyscale";
     const normalized = DESKTOP_LOGO_MAP[desktopStickyLogoStyle]
       ? desktopStickyLogoStyle
-      : "logo-greyscale";
+      : fallback;
     if (normalized !== desktopStickyLogoStyle) {
       setDesktopStickyLogoStyle(normalized);
       return;
@@ -1033,7 +1042,7 @@ function CommentThread({ newsId }) {
                   <//>
                 </div>`}
             ${comments.length === 0
-              ? html`<p className="muted">No comments yet.</p>`
+              ? html`<div className="no-comments">No comments yet.</div>`
               : comments.map(
                   (comment) => html`<div key=${comment.id} className="comment-item">
                     <img
