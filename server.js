@@ -602,7 +602,7 @@ app.post("/api/comments", async (req, res) => {
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const newsId = normalizeText(req.body?.newsId, 200);
-    const body = normalizeText(req.body?.text, 1200);
+    const body = normalizeText(req.body?.text, 276);
     if (!newsId || !body) {
       return res.status(400).json({ error: "Invalid comment" });
     }
@@ -622,6 +622,7 @@ app.post("/api/comments", async (req, res) => {
       authorImage: user?.imageUrl || "",
       authorEmail: email,
       authorRank: rank,
+      replies: [],
       isDeleted: false,
     };
 
@@ -647,7 +648,7 @@ app.patch("/api/comments/:id", async (req, res) => {
   try {
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
-    const nextBody = normalizeText(req.body?.text, 1200);
+    const nextBody = normalizeText(req.body?.text, 276);
     if (!nextBody) {
       return res.status(400).json({ error: "Invalid comment" });
     }
@@ -723,6 +724,79 @@ app.patch("/api/comments/:id", async (req, res) => {
     }
     console.error("Failed to update comment", error);
     return res.status(500).json({ error: "Failed to update comment" });
+  }
+});
+
+app.post("/api/comments/:id/replies", async (req, res) => {
+  try {
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const body = normalizeText(req.body?.text, 276);
+    if (!body) {
+      return res.status(400).json({ error: "Invalid reply" });
+    }
+
+    const user = await clerkClient.users.getUser(auth.userId);
+    const email = getUserEmail(user);
+    const rank = String(user?.publicMetadata?.rank || "Registered");
+    const reply = {
+      id: crypto.randomUUID(),
+      commentId: req.params.id,
+      userId: auth.userId,
+      body,
+      createdAt: new Date().toISOString(),
+      authorName: user?.fullName || user?.username || "User",
+      authorImage: user?.imageUrl || "",
+      authorEmail: email,
+      authorRank: rank,
+    };
+
+    const data = await updateCommunityData((draft) => {
+      let targetNewsId = null;
+      let targetIndex = -1;
+      let targetComment = null;
+      Object.entries(draft.comments || {}).some(([newsId, list]) => {
+        const idx = Array.isArray(list)
+          ? list.findIndex((entry) => entry.id === req.params.id)
+          : -1;
+        if (idx >= 0) {
+          targetNewsId = newsId;
+          targetIndex = idx;
+          targetComment = list[idx];
+          return true;
+        }
+        return false;
+      });
+
+      if (!targetComment) {
+        throw new Error("NOT_FOUND");
+      }
+
+      const nextReplies = Array.isArray(targetComment.replies)
+        ? [...targetComment.replies, reply].slice(-50)
+        : [reply];
+      const updated = {
+        ...targetComment,
+        replies: nextReplies,
+      };
+      const nextList = [...draft.comments[targetNewsId]];
+      nextList[targetIndex] = updated;
+      draft.comments[targetNewsId] = nextList;
+      return draft;
+    });
+
+    const updatedList = Object.values(data.comments || {})
+      .flat()
+      .filter((entry) => entry?.newsId)
+      .filter((entry) => !entry.isDeleted);
+    const updatedComment = updatedList.find((entry) => entry.id === req.params.id);
+    return res.json({ comment: updatedComment });
+  } catch (error) {
+    if (error?.message === "NOT_FOUND") {
+      return res.status(404).json({ error: "Comment not found" });
+    }
+    console.error("Failed to add reply", error);
+    return res.status(500).json({ error: "Failed to add reply" });
   }
 });
 

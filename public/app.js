@@ -1037,9 +1037,11 @@ function CommentThread({ newsId }) {
                     rows="3"
                     placeholder="Write a comment..."
                     value=${draft}
+                    maxLength="276"
                     onInput=${(event) => setDraft(event.target.value)}
                   ></textarea>
                   <div className="comment-actions right">
+                    <div className="comment-char-count">${draft.length}/276</div>
                     <button className="button primary" type="submit">Post</button>
                     ${status ? html`<span className="muted">${status}</span>` : html``}
                   </div>
@@ -2476,8 +2478,10 @@ function NotificationsPanel({ notifications }) {
           </div>
           <div className="notif-body">${item.message}</div>
           <div className="notif-author">
-            Sent by <span className=${`author-name ${isStaffLabel(item.author) ? "staff" : ""}`}>${item.author}</span>
-            · ${formatTimestamp(item.createdAt)}
+            <span>
+              Sent by <span className=${`author-name ${isStaffLabel(item.author) ? "staff" : ""}`}>${item.author}</span>
+            </span>
+            <span className="notification-timestamp">${formatTimestamp(item.createdAt)}</span>
           </div>
         </div>`,
       )}

@@ -1332,6 +1332,8 @@ emoji-picker.reaction-picker-panel {
 
 .comment-thread {
   margin-top: 12px;
+  display: grid;
+  justify-items: end;
 }
 
 .comment-toggle {
@@ -1341,12 +1343,14 @@ emoji-picker.reaction-picker-panel {
   font-weight: 600;
   cursor: pointer;
   padding: 0;
+  margin-left: auto;
 }
 
 .comment-panel {
   margin-top: 12px;
   display: grid;
   gap: 12px;
+  width: 100%;
 }
 
 .comment-signin .button {
@@ -1386,9 +1390,8 @@ emoji-picker.reaction-picker-panel {
 }
 
 .comment-form {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
+  display: grid;
+  gap: 8px;
 }
 
 .comment-form textarea,
@@ -1410,7 +1413,12 @@ emoji-picker.reaction-picker-panel {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 8px;
+  justify-content: flex-end;
+}
+
+.comment-char-count {
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .comment-item {
