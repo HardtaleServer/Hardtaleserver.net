@@ -1031,7 +1031,7 @@ function CommentThread({ newsId }) {
                     value=${draft}
                     onInput=${(event) => setDraft(event.target.value)}
                   ></textarea>
-                  <div className="comment-actions">
+                  <div className="comment-actions right">
                     <button className="button primary" type="submit">Post</button>
                     ${status ? html`<span className="muted">${status}</span>` : html``}
                   </div>
@@ -1046,22 +1046,29 @@ function CommentThread({ newsId }) {
               ? html`<div className="no-comments">No comments yet.</div>`
               : comments.map(
                   (comment) => html`<div key=${comment.id} className="comment-item">
-                    <img
-                      className="comment-avatar"
-                      src=${comment.authorImage || "/assets/HardTale_H_GreyScale.png"}
-                      alt=${comment.authorName}
-                    />
-                    <div className="comment-body">
+                    <div className="comment-left">
+                      <img
+                        className="comment-avatar"
+                        src=${comment.authorImage || "/assets/HardTale_H_GreyScale.png"}
+                        alt=${comment.authorName}
+                      />
+                      <div className="comment-identity">
+                        ${(() => {
+                          const rank = resolveRank(comment);
+                          return html`<div className=${`comment-author ${rank.staff ? "staff" : ""}`}>
+                            ${comment.authorName}
+                          </div>`;
+                        })()}
+                        ${(() => {
+                          const rank = resolveRank(comment);
+                          return html`<div className=${`comment-rank ${rank.staff ? "staff" : ""}`}>
+                            ${rank.label}
+                          </div>`;
+                        })()}
+                      </div>
+                    </div>
+                    <div className="comment-right">
                       <div className="comment-meta">
-                        <div className="comment-identity">
-                          <div className="comment-author">${comment.authorName}</div>
-                          ${(() => {
-                            const rank = resolveRank(comment);
-                            return html`<div className=${`comment-rank ${rank.staff ? "staff" : ""}`}>
-                              ${rank.label}
-                            </div>`;
-                          })()}
-                        </div>
                         <div className="comment-meta-right">
                           <span className="comment-time">${formatTimestamp(comment.createdAt)}</span>
                           ${comment.editCount > 0
@@ -1088,7 +1095,7 @@ function CommentThread({ newsId }) {
                               value=${editingText}
                               onInput=${(event) => setEditingText(event.target.value)}
                             ></textarea>
-                            <div className="comment-actions">
+                            <div className="comment-actions right">
                               <button
                                 className="button primary"
                                 type="button"
@@ -1117,6 +1124,79 @@ function CommentThread({ newsId }) {
                             <button className="ghost-btn" type="button" onClick=${() => deleteComment(comment.id)}>
                               Delete
                             </button>
+                          </div>`
+                        : html``}
+                      ${isSignedIn
+                        ? html`<div className="comment-replies">
+                            ${(Array.isArray(comment.replies) ? comment.replies : []).map(
+                              (reply) => html`<div key=${reply.id} className="comment-reply">
+                                <div className="comment-left">
+                                  <img
+                                    className="comment-avatar small"
+                                    src=${reply.authorImage || "/assets/HardTale_H_GreyScale.png"}
+                                    alt=${reply.authorName}
+                                  />
+                                  <div className="comment-identity">
+                                    <div className="comment-author">${reply.authorName}</div>
+                                    ${(() => {
+                                      const rank = resolveRank(reply);
+                                      return html`<div className=${`comment-rank ${rank.staff ? "staff" : ""}`}>
+                                        ${rank.label}
+                                      </div>`;
+                                    })()}
+                                  </div>
+                                </div>
+                                <div className="comment-right">
+                                  <div className="comment-meta">
+                                    <div className="comment-meta-right">
+                                      <span className="comment-time">${formatTimestamp(reply.createdAt)}</span>
+                                    </div>
+                                  </div>
+                                  <p className="comment-text">${reply.body}</p>
+                                </div>
+                              </div>`,
+                            )}
+                            <div className="comment-reply-form">
+                              <textarea
+                                rows="2"
+                                placeholder="Reply..."
+                                onInput=${(event) => {
+                                  const value = event.target.value;
+                                  event.target.dataset.value = value;
+                                }}
+                              ></textarea>
+                              <div className="comment-actions right">
+                                <button
+                                  className="button ghost-btn"
+                                  type="button"
+                                  onClick=${(event) => {
+                                    const textarea = event.currentTarget
+                                      .closest(".comment-reply-form")
+                                      .querySelector("textarea");
+                                    const text = textarea?.value || "";
+                                    if (!text.trim()) return;
+                                    apiFetchWithToken(getToken, true, `/api/comments/${comment.id}/replies`, {
+                                      method: "POST",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ text }),
+                                    }).then(async (response) => {
+                                      if (!response.ok) return;
+                                      const data = await response.json();
+                                      if (data?.comment) {
+                                        setComments((prev) =>
+                                          prev.map((entry) =>
+                                            entry.id === data.comment.id ? data.comment : entry,
+                                          ),
+                                        );
+                                        if (textarea) textarea.value = "";
+                                      }
+                                    });
+                                  }}
+                                >
+                                  Reply
+                                </button>
+                              </div>
+                            </div>
                           </div>`
                         : html``}
                     </div>
