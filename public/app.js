@@ -42,6 +42,9 @@ const TICKET_COOLDOWN_MS = 60 * 60 * 1000;
 const LOGO_SIDE_KEY = "hardtale-logo-side";
 const MOBILE_LOGO_STYLE_KEY = "hardtale-mobile-logo-style";
 const MOBILE_ISLAND_KEY = "hardtale-mobile-island";
+const DESKTOP_STICKY_STYLE_KEY = "hardtale-desktop-sticky-style";
+const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
+const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const VERSION = "1.3.4";
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const INITIAL_LOADER_MIN_MS = 3200;
@@ -56,6 +59,7 @@ const MOBILE_LOGO_MAP = {
   "icon-fiery": "/assets/HardTale_H_Fiery.png",
   "icon-icey": "/assets/HardTale_H_Icey.png",
 };
+const DESKTOP_LOGO_MAP = MOBILE_LOGO_MAP;
 const CRITICAL_IMAGE_SOURCES = [
   LOGO_SRC,
   "/Images/SVGs/SETTINGS_SVG.svg",
@@ -427,6 +431,50 @@ function useMobileIsland() {
   }, [showMobileIsland]);
 
   return { showMobileIsland, setShowMobileIsland };
+}
+
+function useDesktopStickyStyle() {
+  const [desktopStickyStyle, setDesktopStickyStyle] = useState(
+    localStorage.getItem(DESKTOP_STICKY_STYLE_KEY) || "solid",
+  );
+
+  useEffect(() => {
+    localStorage.setItem(DESKTOP_STICKY_STYLE_KEY, desktopStickyStyle);
+  }, [desktopStickyStyle]);
+
+  return { desktopStickyStyle, setDesktopStickyStyle };
+}
+
+function useDesktopStickyWide() {
+  const stored = localStorage.getItem(DESKTOP_STICKY_WIDE_KEY);
+  const [desktopStickyWide, setDesktopStickyWide] = useState(
+    stored ? stored === "true" : true,
+  );
+
+  useEffect(() => {
+    localStorage.setItem(DESKTOP_STICKY_WIDE_KEY, String(desktopStickyWide));
+  }, [desktopStickyWide]);
+
+  return { desktopStickyWide, setDesktopStickyWide };
+}
+
+function useDesktopStickyLogoStyle() {
+  const [desktopStickyLogoStyle, setDesktopStickyLogoStyle] = useState(
+    localStorage.getItem(DESKTOP_STICKY_LOGO_STYLE_KEY) || "logo-greyscale",
+  );
+
+  useEffect(() => {
+    const normalized = DESKTOP_LOGO_MAP[desktopStickyLogoStyle]
+      ? desktopStickyLogoStyle
+      : "logo-greyscale";
+    if (normalized !== desktopStickyLogoStyle) {
+      setDesktopStickyLogoStyle(normalized);
+      return;
+    }
+    localStorage.setItem(DESKTOP_STICKY_LOGO_STYLE_KEY, normalized);
+  }, [desktopStickyLogoStyle]);
+
+  return { desktopStickyLogoStyle, setDesktopStickyLogoStyle };
 }
 
 function useNews() {
@@ -823,11 +871,18 @@ function SettingsMenu({
   setMobileLogoStyle,
   showMobileIsland,
   setShowMobileIsland,
+  desktopStickyStyle,
+  setDesktopStickyStyle,
+  desktopStickyWide,
+  setDesktopStickyWide,
+  desktopStickyLogoStyle,
+  setDesktopStickyLogoStyle,
   isMobile,
 }) {
   const [open, setOpen] = useState(false);
   const [spinning, setSpinning] = useState(false);
   const [showLogoPicker, setShowLogoPicker] = useState(false);
+  const [showDesktopLogoPicker, setShowDesktopLogoPicker] = useState(false);
   const isSystem = theme === "system";
   const menuRef = useRef(null);
   const isMobileView =
@@ -862,17 +917,105 @@ function SettingsMenu({
       ${open
         ? html`<div className="settings-menu">
             ${!isMobileView
-              ? html`<div className="settings-row">
-                  <label>Navigation placement</label>
-                  <select
-                    value=${placement}
-                    onChange=${(event) => setPlacement(event.target.value)}
-                  >
-                    <option value="center">Center</option>
-                    <option value="left">Left</option>
-                    <option value="right">Right</option>
-                  </select>
-                </div>`
+              ? html`
+                  <div className="settings-row">
+                    <label>Navigation placement</label>
+                    <select
+                      value=${placement}
+                      onChange=${(event) => setPlacement(event.target.value)}
+                    >
+                      <option value="center">Center</option>
+                      <option value="left">Left</option>
+                      <option value="right">Right</option>
+                    </select>
+                  </div>
+                  <div className="settings-row">
+                    <label>Desktop sticky style</label>
+                    <select
+                      value=${desktopStickyStyle}
+                      onChange=${(event) => setDesktopStickyStyle(event.target.value)}
+                    >
+                      <option value="solid">Solid</option>
+                      <option value="transparent">Transparent</option>
+                    </select>
+                  </div>
+                  <div className="settings-row">
+                    <label>Desktop sticky width</label>
+                    <select
+                      value=${desktopStickyWide ? "wide" : "normal"}
+                      onChange=${(event) =>
+                        setDesktopStickyWide(event.target.value === "wide")}
+                    >
+                      <option value="normal">Normal</option>
+                      <option value="wide">Wide</option>
+                    </select>
+                    <div className="muted">Normal uses the island logo.</div>
+                  </div>
+                  ${desktopStickyStyle === "solid" && desktopStickyWide
+                    ? html`
+                        <div className="settings-row">
+                          <label>Desktop sticky logo</label>
+                          <button
+                            className="logo-picker-trigger"
+                            type="button"
+                            onClick=${() => setShowDesktopLogoPicker(!showDesktopLogoPicker)}
+                          >
+                            Choose icon or logo
+                          </button>
+                          ${showDesktopLogoPicker
+                            ? html`<div className="logo-picker">
+                                <div className="logo-picker-section">
+                                  <div className="logo-picker-title">Icons</div>
+                                  <div className="logo-picker-grid">
+                                    ${[
+                                      { id: "icon-greyscale", src: "/assets/HardTale_H_GreyScale.png" },
+                                      { id: "icon-golden", src: "/assets/HardTale_H_Golden.png" },
+                                      { id: "icon-fiery", src: "/assets/HardTale_H_Fiery.png" },
+                                      { id: "icon-icey", src: "/assets/HardTale_H_Icey.png" },
+                                    ].map(
+                                      (item) => html`<button
+                                        key=${item.id}
+                                        className=${`logo-option ${desktopStickyLogoStyle === item.id ? "selected" : ""}`}
+                                        type="button"
+                                        onClick=${() => {
+                                          setDesktopStickyLogoStyle(item.id);
+                                          setShowDesktopLogoPicker(false);
+                                        }}
+                                      >
+                                        <img src=${item.src} alt="" />
+                                      </button>`,
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="logo-picker-section">
+                                  <div className="logo-picker-title">Logos</div>
+                                  <div className="logo-picker-grid">
+                                    ${[
+                                      { id: "logo-greyscale", src: "/Images/Logos/Logo_GreyScale.png" },
+                                      { id: "logo-golden", src: "/Images/Logos/Logo_Golden.png" },
+                                      { id: "logo-fiery", src: "/Images/Logos/Logo_Fiery.png" },
+                                      { id: "logo-icey", src: "/Images/Logos/Logo_Icey.png" },
+                                    ].map(
+                                      (item) => html`<button
+                                        key=${item.id}
+                                        className=${`logo-option ${desktopStickyLogoStyle === item.id ? "selected" : ""}`}
+                                        type="button"
+                                        onClick=${() => {
+                                          setDesktopStickyLogoStyle(item.id);
+                                          setShowDesktopLogoPicker(false);
+                                        }}
+                                      >
+                                        <img src=${item.src} alt="" />
+                                      </button>`,
+                                    )}
+                                  </div>
+                                </div>
+                              </div>`
+                            : html``}
+                        </div>
+                      `
+                    : html``}
+                `
               : html``}
                 ${isMobileView
                   ? html`
@@ -1793,6 +1936,9 @@ function Layout() {
   const { logoSide, setLogoSide } = useLogoSide();
   const { mobileLogoStyle, setMobileLogoStyle } = useMobileLogoStyle();
   const { showMobileIsland, setShowMobileIsland } = useMobileIsland();
+  const { desktopStickyStyle, setDesktopStickyStyle } = useDesktopStickyStyle();
+  const { desktopStickyWide, setDesktopStickyWide } = useDesktopStickyWide();
+  const { desktopStickyLogoStyle, setDesktopStickyLogoStyle } = useDesktopStickyLogoStyle();
   const [active, setActive] = useState("home");
   const [hideLogo, setHideLogo] = useState(false);
   const [showMobileNav, setShowMobileNav] = useState(false);
@@ -2233,6 +2379,118 @@ function Layout() {
   const year = new Date().getFullYear();
   const displayName = getUserDisplayName(user);
   const showLoader = !appHydrated || authTransitionLoading;
+  const desktopStickyVisible = !isMobile && hideLogo;
+  const desktopStickyLogoVisible = desktopStickyStyle === "solid";
+  const desktopStickyLogoSrc = desktopStickyWide
+    ? DESKTOP_LOGO_MAP[desktopStickyLogoStyle] || LOGO_SRC
+    : LOGO_SRC;
+
+  function DesktopNavShell() {
+    return html`
+      <div className=${`nav-shell ${placement === "left" ? "left" : placement === "right" ? "right" : ""}`}>
+        <nav className="nav">
+          <button
+            className=${`nav-link ${active === "home" ? "active" : ""}`}
+            onClick=${() => navigate("/")}
+          >
+            Home
+          </button>
+          <button
+            className=${`nav-link ${active === "news" ? "active" : ""}`}
+            onClick=${() => navigate("/news")}
+          >
+            News & Updates
+          </button>
+          <button
+            className=${`nav-link ${active === "store" ? "active" : ""}`}
+            onClick=${() => navigate("/store")}
+          >
+            Store
+          </button>
+          <button
+            className=${`nav-link ${active === "vote" ? "active" : ""}`}
+            onClick=${() => navigate("/vote")}
+          >
+            Vote
+          </button>
+          <button
+            className=${`nav-link ${active === "play" ? "active" : ""}`}
+            onClick=${openHowModal}
+          >
+            Play
+          </button>
+        </nav>
+      </div>
+    `;
+  }
+
+  function DesktopAuthButtons() {
+    return html`
+      <div className="auth-buttons">
+        <${SettingsMenu}
+          theme=${theme}
+          setTheme=${setTheme}
+          toggleLightDark=${toggleLightDark}
+          placement=${placement}
+          setPlacement=${setPlacement}
+          menuSide=${menuSide}
+          setMenuSide=${setMenuSide}
+          mobileNavStyle=${mobileNavStyle}
+          setMobileNavStyle=${setMobileNavStyle}
+          logoSide=${logoSide}
+          setLogoSide=${setLogoSide}
+          mobileLogoStyle=${mobileLogoStyle}
+          setMobileLogoStyle=${setMobileLogoStyle}
+          showMobileIsland=${showMobileIsland}
+          setShowMobileIsland=${setShowMobileIsland}
+          desktopStickyStyle=${desktopStickyStyle}
+          setDesktopStickyStyle=${setDesktopStickyStyle}
+          desktopStickyWide=${desktopStickyWide}
+          setDesktopStickyWide=${setDesktopStickyWide}
+          desktopStickyLogoStyle=${desktopStickyLogoStyle}
+          setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
+          isMobile=${isMobile}
+        />
+        <${ClerkLoading}>
+          <button className="button" disabled>Loading auth...</button>
+        <//>
+        <${ClerkLoaded}>
+          <${SignedOut}>
+            <${SignUpButton} mode="modal">
+              <button className="button primary">Sign up</button>
+            <//>
+            <${SignInButton} mode="modal">
+              <button className="button">Sign in</button>
+            <//>
+          <//>
+          <${SignedIn}>
+            <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} />
+            ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
+            <span className="user-button">
+              <${UserButton} />
+            </span>
+          <//>
+        <//>
+      </div>
+    `;
+  }
+
+  function DesktopStickyBar() {
+    return html`
+      <div
+        className=${`desktop-sticky ${desktopStickyStyle} ${desktopStickyWide ? "wide" : ""} ${desktopStickyVisible ? "show" : ""} ${logoSide === "right" ? "logo-right" : ""}`}
+        aria-hidden=${!desktopStickyVisible}
+      >
+        <div className="desktop-sticky-inner">
+          ${desktopStickyLogoVisible
+            ? html`<img className="desktop-sticky-logo" src=${desktopStickyLogoSrc} alt="Hardtale" />`
+            : html``}
+          <${DesktopNavShell} />
+          <${DesktopAuthButtons} />
+        </div>
+      </div>
+    `;
+  }
 
   return html`
     <div className=${`page ${showMobileNav ? "drawer-open" : ""} ${mobileNavStyle === "solid" ? "nav-solid" : "nav-transparent"} ${!showMobileIsland ? "hide-mobile-island" : ""}`}>
@@ -2278,6 +2536,7 @@ function Layout() {
                 `}
           </div>
         </div>
+        <${DesktopStickyBar} />
       <div className="glow"></div>
       <div className="sparks"></div>
       <div className="shell" ref=${shellRef}>
@@ -2294,80 +2553,8 @@ function Layout() {
               onError=${handleLogoError}
             />
           <//>
-          <div className=${`nav-shell ${placement === "left" ? "left" : placement === "right" ? "right" : ""}`}>
-            <nav className="nav">
-              <button
-                className=${`nav-link ${active === "home" ? "active" : ""}`}
-                onClick=${() => navigate("/")}
-              >
-                Home
-              </button>
-              <button
-                className=${`nav-link ${active === "news" ? "active" : ""}`}
-                onClick=${() => navigate("/news")}
-              >
-                News & Updates
-              </button>
-              <button
-                className=${`nav-link ${active === "store" ? "active" : ""}`}
-                onClick=${() => navigate("/store")}
-              >
-                Store
-              </button>
-              <button
-                className=${`nav-link ${active === "vote" ? "active" : ""}`}
-                onClick=${() => navigate("/vote")}
-              >
-                Vote
-              </button>
-              <button
-                className=${`nav-link ${active === "play" ? "active" : ""}`}
-                onClick=${openHowModal}
-              >
-                Play
-              </button>
-            </nav>
-          </div>
-          <div className="auth-buttons">
-            <${SettingsMenu}
-              theme=${theme}
-              setTheme=${setTheme}
-              toggleLightDark=${toggleLightDark}
-              placement=${placement}
-              setPlacement=${setPlacement}
-              menuSide=${menuSide}
-              setMenuSide=${setMenuSide}
-              mobileNavStyle=${mobileNavStyle}
-              setMobileNavStyle=${setMobileNavStyle}
-              logoSide=${logoSide}
-              setLogoSide=${setLogoSide}
-              mobileLogoStyle=${mobileLogoStyle}
-              setMobileLogoStyle=${setMobileLogoStyle}
-              showMobileIsland=${showMobileIsland}
-              setShowMobileIsland=${setShowMobileIsland}
-              isMobile=${isMobile}
-            />
-            <${ClerkLoading}>
-              <button className="button" disabled>Loading auth...</button>
-            <//>
-            <${ClerkLoaded}>
-              <${SignedOut}>
-                <${SignUpButton} mode="modal">
-                  <button className="button primary">Sign up</button>
-                <//>
-                <${SignInButton} mode="modal">
-                  <button className="button">Sign in</button>
-                <//>
-              <//>
-              <${SignedIn}>
-                <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} />
-                ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
-                <span className="user-button">
-                  <${UserButton} />
-                </span>
-              <//>
-            <//>
-          </div>
+          <${DesktopNavShell} />
+          <${DesktopAuthButtons} />
         </header>
 
         <${Routes}>
@@ -2478,6 +2665,12 @@ function Layout() {
                   setMobileLogoStyle=${setMobileLogoStyle}
                   showMobileIsland=${showMobileIsland}
                   setShowMobileIsland=${setShowMobileIsland}
+                  desktopStickyStyle=${desktopStickyStyle}
+                  setDesktopStickyStyle=${setDesktopStickyStyle}
+                  desktopStickyWide=${desktopStickyWide}
+                  setDesktopStickyWide=${setDesktopStickyWide}
+                  desktopStickyLogoStyle=${desktopStickyLogoStyle}
+                  setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
                   isMobile=${isMobile}
                 />
                       <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} />
@@ -2504,6 +2697,12 @@ function Layout() {
                         setMobileLogoStyle=${setMobileLogoStyle}
                         showMobileIsland=${showMobileIsland}
                         setShowMobileIsland=${setShowMobileIsland}
+                        desktopStickyStyle=${desktopStickyStyle}
+                        setDesktopStickyStyle=${setDesktopStickyStyle}
+                        desktopStickyWide=${desktopStickyWide}
+                        setDesktopStickyWide=${setDesktopStickyWide}
+                        desktopStickyLogoStyle=${desktopStickyLogoStyle}
+                        setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
                         isMobile=${isMobile}
                       />
                     <//>

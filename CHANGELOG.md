@@ -4,6 +4,7 @@ All notable changes to this project are documented here.
 
 ## 2026-02-12 (v1.3.4)
 - Fixed desktop header to show the cart button next to notifications, matching the logo-side ordering.
+- Added desktop sticky navbar settings (style, width, and logo picker) with scroll-in animation.
 
 ## 2026-02-11 (v1.3.4)
 - Added visible timestamps to notification entries in the bell panel.

@@ -210,6 +210,83 @@ body[data-theme="dark"] {
   margin-left: auto;
 }
 
+.desktop-sticky {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 90;
+  transform: translateY(-120%);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.35s ease, opacity 0.35s ease;
+}
+
+.desktop-sticky.solid {
+  background: var(--card);
+  border-bottom: 1px solid var(--stroke);
+}
+
+.desktop-sticky.transparent {
+  background: transparent;
+  border-bottom: none;
+}
+
+.desktop-sticky.show {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.desktop-sticky-inner {
+  max-width: 1140px;
+  margin: 0 auto;
+  padding: 10px 24px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.desktop-sticky.wide .desktop-sticky-inner {
+  max-width: 1280px;
+  padding: 10px 36px;
+}
+
+.desktop-sticky-logo {
+  width: 140px;
+  height: auto;
+  display: block;
+}
+
+.desktop-sticky .nav-shell {
+  flex: 1;
+}
+
+.desktop-sticky .auth-buttons {
+  margin-left: auto;
+}
+
+.desktop-sticky.logo-right .desktop-sticky-logo {
+  order: 3;
+  margin-left: auto;
+}
+
+.desktop-sticky.logo-right .nav-shell {
+  order: 2;
+}
+
+.desktop-sticky.logo-right .auth-buttons {
+  order: 1;
+  margin-left: 0;
+  margin-right: 16px;
+}
+
+.topbar.logo-hidden .logo {
+  opacity: 0;
+  transform: translateY(-16px);
+  pointer-events: none;
+}
+
 .mobile-top-actions {
   display: flex;
   align-items: center;
@@ -232,6 +309,12 @@ body[data-theme="dark"] {
 
   .home-split {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 860px) {
+  .desktop-sticky {
+    display: none;
   }
 }
 
