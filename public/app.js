@@ -1499,6 +1499,7 @@ function SettingsMenu({
   setDesktopStickyLogoStyle,
   uiFlashEnabled,
   setUiFlashEnabled,
+  onOpenChange,
   isMobile,
 }) {
   const [open, setOpen] = useState(false);
@@ -1517,6 +1518,7 @@ function SettingsMenu({
       if (!open) return;
       if (menuRef.current && !menuRef.current.contains(event.target)) {
         setOpen(false);
+        if (onOpenChange) onOpenChange(false);
       }
     }
     document.addEventListener("mousedown", onDocClick);
@@ -1539,7 +1541,9 @@ function SettingsMenu({
         title="Settings"
         onClick=${(event) => {
           handleClick(event);
-          setOpen(!open);
+          const next = !open;
+          setOpen(next);
+          if (onOpenChange) onOpenChange(next);
           setSpinning(true);
           setTimeout(() => setSpinning(false), 420);
         }}
@@ -1939,7 +1943,13 @@ function StorePage({ onAdd }) {
               ${renderStoreIcon(item.icon)}
             </div>
             <div className="store-name">${item.name}</div>
-            <div className="store-desc">${item.blurb}</div>
+            <div className="store-desc">
+              <ul className="store-perks">
+                ${perkBullets(item.blurb).map(
+                  (perk) => html`<li>${perk}</li>`,
+                )}
+              </ul>
+            </div>
             <div className="store-price">$${item.price.toFixed(2)}</div>
             <button className="button" onClick=${() => onAdd(item)}>
               Add to cart
@@ -2616,6 +2626,8 @@ function Layout() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const [showConnectHelp, setShowConnectHelp] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [hoveredNav, setHoveredNav] = useState("");
   const [appHydrated, setAppHydrated] = useState(false);
   const [authTransitionLoading, setAuthTransitionLoading] = useState(false);
   const [criticalImagesReady, setCriticalImagesReady] = useState(false);
@@ -3060,32 +3072,52 @@ function Layout() {
       <div className=${`nav-shell ${placement === "left" ? "left" : placement === "right" ? "right" : ""}`}>
         <nav className="nav">
           <button
-            className=${`nav-link ${active === "home" ? "active" : ""}`}
+            className=${`nav-link ${navActive === "home" ? "active" : ""} ${lockedNavHover && hoveredNav === "home" ? "hover-locked" : ""}`}
             onClick=${() => navigate("/")}
+            onMouseEnter=${() => setHoveredNav("home")}
+            onMouseLeave=${() => {
+              if (!lockedNavHover) setHoveredNav("");
+            }}
           >
             Home
           </button>
           <button
-            className=${`nav-link ${active === "news" ? "active" : ""}`}
+            className=${`nav-link ${navActive === "news" ? "active" : ""} ${lockedNavHover && hoveredNav === "news" ? "hover-locked" : ""}`}
             onClick=${() => navigate("/news")}
+            onMouseEnter=${() => setHoveredNav("news")}
+            onMouseLeave=${() => {
+              if (!lockedNavHover) setHoveredNav("");
+            }}
           >
             News & Updates
           </button>
           <button
-            className=${`nav-link ${active === "store" ? "active" : ""}`}
+            className=${`nav-link ${navActive === "store" ? "active" : ""} ${lockedNavHover && hoveredNav === "store" ? "hover-locked" : ""}`}
             onClick=${() => navigate("/store")}
+            onMouseEnter=${() => setHoveredNav("store")}
+            onMouseLeave=${() => {
+              if (!lockedNavHover) setHoveredNav("");
+            }}
           >
             Store
           </button>
           <button
-            className=${`nav-link ${active === "vote" ? "active" : ""}`}
+            className=${`nav-link ${navActive === "vote" ? "active" : ""} ${lockedNavHover && hoveredNav === "vote" ? "hover-locked" : ""}`}
             onClick=${() => navigate("/vote")}
+            onMouseEnter=${() => setHoveredNav("vote")}
+            onMouseLeave=${() => {
+              if (!lockedNavHover) setHoveredNav("");
+            }}
           >
             Vote
           </button>
           <button
-            className=${`nav-link ${active === "play" ? "active" : ""}`}
+            className=${`nav-link ${navActive === "play" ? "active" : ""} ${lockedNavHover && hoveredNav === "play" ? "hover-locked" : ""}`}
             onClick=${openHowModal}
+            onMouseEnter=${() => setHoveredNav("play")}
+            onMouseLeave=${() => {
+              if (!lockedNavHover) setHoveredNav("");
+            }}
           >
             Play
           </button>
@@ -3121,6 +3153,7 @@ function Layout() {
           setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
           uiFlashEnabled=${uiFlashEnabled}
           setUiFlashEnabled=${setUiFlashEnabled}
+          onOpenChange=${setSettingsOpen}
           isMobile=${isMobile}
         />
         <${ClerkLoading}>
@@ -3349,6 +3382,7 @@ function Layout() {
                   setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
                   uiFlashEnabled=${uiFlashEnabled}
                   setUiFlashEnabled=${setUiFlashEnabled}
+                  onOpenChange=${setSettingsOpen}
                   isMobile=${isMobile}
                 />
                       <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
@@ -3383,6 +3417,7 @@ function Layout() {
                         setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
                         uiFlashEnabled=${uiFlashEnabled}
                         setUiFlashEnabled=${setUiFlashEnabled}
+                        onOpenChange=${setSettingsOpen}
                         isMobile=${isMobile}
                       />
                     <//>
@@ -3566,3 +3601,7 @@ root.render(
     <${App} />
   <//>`
 );
+  const stickyTransparentActive =
+    desktopStickyVisible && desktopStickyStyle === "transparent" && !isMobile;
+  const lockedNavHover = stickyTransparentActive && (settingsOpen || showNotifications);
+  const navActive = stickyTransparentActive && showConnectHelp ? "play" : active;

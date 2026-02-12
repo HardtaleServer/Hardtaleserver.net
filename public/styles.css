@@ -468,6 +468,11 @@ body[data-theme="dark"] {
   color: var(--accent);
 }
 
+.nav-link.hover-locked {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--accent);
+}
+
 .settings {
   position: relative;
   z-index: 20;
@@ -1311,8 +1316,8 @@ emoji-picker.reaction-picker-panel {
 }
 
 .no-comments {
-  background: #ffffff;
-  color: #1a1a1a;
+  background: var(--bg-soft);
+  color: var(--text);
   padding: 10px 12px;
   border-radius: 12px;
   border: 1px solid var(--stroke);
@@ -1734,6 +1739,17 @@ emoji-picker.reaction-picker-panel {
 .store-desc {
   color: var(--muted);
   font-size: 14px;
+}
+
+.store-perks {
+  margin: 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 4px;
+}
+
+.store-perks li {
+  line-height: 1.4;
 }
 
 .store-price {
