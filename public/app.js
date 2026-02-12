@@ -2,7 +2,6 @@
 import ReactDOM from "react-dom/client";
 import htm from "htm";
 import HardtaleLoader from "./components/HardtaleLoader.js";
-import EmojiPicker from "emoji-picker-react";
 import {
   BrowserRouter,
   Routes,
@@ -619,6 +618,22 @@ function ReactionBar({ itemType, itemId }) {
   const [reactions, setReactions] = useState([]);
   const [showPicker, setShowPicker] = useState(false);
   const [error, setError] = useState("");
+  const [EmojiPickerComponent, setEmojiPickerComponent] = useState(null);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadPicker() {
+      try {
+        const mod = await import("https://esm.sh/emoji-picker-react@4.11.0");
+        if (!alive) return;
+        setEmojiPickerComponent(() => mod.default || mod.EmojiPicker || null);
+      } catch {}
+    }
+    loadPicker();
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -725,12 +740,14 @@ function ReactionBar({ itemType, itemId }) {
       </button>
       ${showPicker
         ? html`<div className="reaction-picker">
-            <${EmojiPicker}
-              onEmojiClick=${(emojiData) => {
-                toggleReaction(emojiData.emoji);
-                setShowPicker(false);
-              }}
-            />
+            ${EmojiPickerComponent
+              ? html`<${EmojiPickerComponent}
+                  onEmojiClick=${(emojiData) => {
+                    toggleReaction(emojiData.emoji);
+                    setShowPicker(false);
+                  }}
+                />`
+              : html`<div className="muted">Loading emojis...</div>`}
           </div>`
         : html``}
       ${error ? html`<div className="reaction-error">${error}</div>` : html``}
