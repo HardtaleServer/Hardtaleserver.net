@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-12 (v1.3.8)
+- Installed Frimousse locally and updated emoji picker imports.
+- Updated picker styling to match light/dark theme.
+
 ## 2026-02-12 (v1.3.7)
 - Switched emoji picker to Frimousse with CDN loading and updated picker styling.
 - Added reactions (emoji picker) to news and changelog entries.

@@ -2,6 +2,7 @@
 import ReactDOM from "react-dom/client";
 import htm from "htm";
 import HardtaleLoader from "./components/HardtaleLoader.js";
+import { EmojiPicker } from "frimousse";
 import {
   BrowserRouter,
   Routes,
@@ -46,7 +47,7 @@ const DESKTOP_STICKY_STYLE_KEY = "hardtale-desktop-sticky-style";
 const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
-const VERSION = "1.3.7";
+const VERSION = "1.3.8";
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const INITIAL_LOADER_MIN_MS = 3200;
 const AUTH_TRANSITION_LOADER_MS = 850;
@@ -618,22 +619,8 @@ function ReactionBar({ itemType, itemId }) {
   const [reactions, setReactions] = useState([]);
   const [showPicker, setShowPicker] = useState(false);
   const [error, setError] = useState("");
-  const [EmojiPickerComponent, setEmojiPickerComponent] = useState(null);
+  const EmojiPickerComponent = EmojiPicker;
 
-  useEffect(() => {
-    let alive = true;
-    async function loadPicker() {
-      try {
-        const mod = await import("https://esm.sh/frimousse@0.3.0?bundle");
-        if (!alive) return;
-        setEmojiPickerComponent(() => mod.EmojiPicker || mod.default || null);
-      } catch {}
-    }
-    loadPicker();
-    return () => {
-      alive = false;
-    };
-  }, []);
 
   useEffect(() => {
     let alive = true;
