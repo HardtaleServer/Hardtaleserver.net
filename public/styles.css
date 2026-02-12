@@ -1410,8 +1410,8 @@ emoji-picker.reaction-picker-panel {
 
 .comment-thread {
   margin-top: 12px;
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  justify-items: end;
   width: 100%;
 }
 
