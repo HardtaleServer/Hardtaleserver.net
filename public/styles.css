@@ -1247,6 +1247,7 @@ body[data-theme="light"] .button.primary {
   height: 28px;
   justify-content: center;
   font-weight: 700;
+  margin-left: auto;
 }
 
 .reaction-picker {
@@ -1303,6 +1304,19 @@ emoji-picker.reaction-picker-panel {
   margin-top: 12px;
   display: grid;
   gap: 12px;
+}
+
+.comment-signin .button {
+  margin-top: 10px;
+}
+
+.no-comments {
+  background: #ffffff;
+  color: #1a1a1a;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+  width: 100%;
 }
 
 .comment-form textarea,
@@ -2780,7 +2794,7 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 .changelog-list {
   display: grid;
   gap: 16px;
-  max-height: 360px;
+  max-height: 520px;
   overflow-y: auto;
   padding-right: 6px;
 }

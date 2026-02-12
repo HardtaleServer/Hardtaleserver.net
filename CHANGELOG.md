@@ -21,6 +21,10 @@ All notable changes to this project are documented here.
 - Added permissions-based rank syncing (polls JSON plus permissions JSON source).
 - Comment badges now read rank from Clerk public metadata with STAFF override.
 
+## 2026-02-12 (v1.3.11)
+- Fixed desktop sticky mode to always hide the original nav on scroll.
+- Increased changelog popup height.
+
 ## 2026-02-12 (v1.3.6)
 - Added reactions (emoji picker) to news and changelog entries.
 - Added signed-in comments with edit history and author metadata on news posts.
