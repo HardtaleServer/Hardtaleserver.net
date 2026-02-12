@@ -228,10 +228,8 @@ body[data-theme="dark"] {
 }
 
 .desktop-sticky.transparent {
-  background: rgba(20, 22, 30, 0.55);
-  background: color-mix(in srgb, var(--card) 70%, transparent);
+  background: transparent;
   border-bottom: none;
-  backdrop-filter: blur(12px);
 }
 
 .desktop-sticky.show {
@@ -247,6 +245,7 @@ body[data-theme="dark"] {
   display: flex;
   align-items: center;
   gap: 16px;
+  position: relative;
 }
 
 .desktop-sticky.wide .desktop-sticky-inner {
@@ -258,14 +257,28 @@ body[data-theme="dark"] {
   gap: 10px;
 }
 
+.desktop-sticky.transparent .desktop-sticky-inner::before {
+  content: "";
+  position: absolute;
+  inset: 4px 8px;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--card) 45%, transparent);
+  backdrop-filter: blur(10px);
+  z-index: 0;
+  pointer-events: none;
+}
+
 .desktop-sticky.transparent .nav-shell {
   padding-left: 0;
   padding-right: 0;
 }
 
 .desktop-sticky.transparent .nav {
-  width: 100%;
-  justify-content: center;
+  background: transparent;
+  border: none;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
 }
 
 .desktop-sticky.transparent .nav-link,
@@ -275,6 +288,8 @@ body[data-theme="dark"] {
 .desktop-sticky.transparent .notif,
 .desktop-sticky.transparent .cart-button {
   opacity: 0.5;
+  position: relative;
+  z-index: 1;
 }
 
 .desktop-sticky.transparent .nav-link:hover,
@@ -283,6 +298,12 @@ body[data-theme="dark"] {
 .desktop-sticky.transparent .button:hover,
 .desktop-sticky.transparent .notif:hover,
 .desktop-sticky.transparent .cart-button:hover {
+  opacity: 1;
+}
+
+.desktop-sticky.transparent .nav-link.active {
+  background: var(--bg-soft);
+  border: 1px solid var(--stroke);
   opacity: 1;
 }
 
