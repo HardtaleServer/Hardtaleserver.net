@@ -646,6 +646,11 @@ body[data-theme="light"] .settings-icon {
   left: auto;
 }
 
+.settings-menu.menu-short {
+  right: -150px;
+  left: auto;
+}
+
 @media (min-width: 861px) {
   .topbar .settings-menu {
     right: auto;
@@ -653,6 +658,11 @@ body[data-theme="light"] .settings-icon {
   }
 
   .topbar .settings-menu.menu-right {
+    left: auto;
+    right: -150px;
+  }
+
+  .topbar .settings-menu.menu-short {
     left: auto;
     right: -150px;
   }

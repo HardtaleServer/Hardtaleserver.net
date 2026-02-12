@@ -5,6 +5,7 @@ import { fileURLToPath } from "url";
 import crypto from "crypto";
 import fs from "fs/promises";
 import { clerkMiddleware, getAuth, clerkClient } from "@clerk/express";
+import mongoose from "mongoose";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +39,7 @@ const COMMUNITY_FILE = "community.json";
 const POLLS_FILE = "polls.json";
 const PERMISSIONS_FILE = "permissions.json";
 const RANK_PRIORITY = ["Mythic", "Legend", "Hero", "Registered", "Unregistered"];
+const MONGO_URI = process.env.MONGO_URI || "";
 
 app.use(express.json({ limit: "100kb" }));
 app.use("/api", clerkMiddleware());
@@ -59,6 +61,88 @@ const EMPTY_POLLS_DATA = {
   polls: {},
   votes: {},
 };
+
+mongoose.set("strictQuery", true);
+if (!MONGO_URI) {
+  console.warn("MONGO_URI is not set. Comments will not persist.");
+} else {
+  mongoose
+    .connect(MONGO_URI)
+    .then(() => {
+      console.log("Connected to MongoDB");
+    })
+    .catch((error) => {
+      console.error("Failed to connect to MongoDB", error);
+    });
+}
+
+const replySchema = new mongoose.Schema(
+  {
+    id: { type: String, required: true },
+    userId: { type: String, required: true },
+    body: { type: String, required: true },
+    createdAt: { type: Date, required: true },
+    authorName: { type: String, required: true },
+    authorImage: { type: String, default: "" },
+    authorEmail: { type: String, default: "" },
+    authorRank: { type: String, default: "Registered" },
+  },
+  { _id: false },
+);
+
+const commentSchema = new mongoose.Schema(
+  {
+    newsId: { type: String, required: true, index: true },
+    userId: { type: String, required: true, index: true },
+    body: { type: String, required: true },
+    editCount: { type: Number, default: 0 },
+    authorName: { type: String, required: true },
+    authorImage: { type: String, default: "" },
+    authorEmail: { type: String, default: "" },
+    authorRank: { type: String, default: "Registered" },
+    replies: { type: [replySchema], default: [] },
+    isDeleted: { type: Boolean, default: false },
+  },
+  { timestamps: { createdAt: "createdAt", updatedAt: "updatedAt" } },
+);
+
+const commentRevisionSchema = new mongoose.Schema(
+  {
+    commentId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
+    editedBy: { type: String, required: true },
+    oldBody: { type: String, required: true },
+    newBody: { type: String, required: true },
+    editorName: { type: String, required: true },
+    editorImage: { type: String, default: "" },
+    createdAt: { type: Date, required: true },
+  },
+  { versionKey: false },
+);
+
+const Comment = mongoose.models.Comment || mongoose.model("Comment", commentSchema);
+const CommentRevision =
+  mongoose.models.CommentRevision || mongoose.model("CommentRevision", commentRevisionSchema);
+
+function normalizeComment(doc) {
+  if (!doc) return null;
+  const plain = doc.toObject ? doc.toObject() : doc;
+  return {
+    ...plain,
+    id: plain._id ? String(plain._id) : plain.id,
+  };
+}
+
+function normalizeCommentList(list = []) {
+  return list.map(normalizeComment).filter(Boolean);
+}
+
+function requireMongo(res) {
+  if (!MONGO_URI) {
+    res.status(500).json({ error: "Database not configured" });
+    return false;
+  }
+  return true;
+}
 
 let communityWriteQueue = Promise.resolve();
 
@@ -579,17 +663,17 @@ app.post("/api/reactions", async (req, res) => {
 
 app.get("/api/comments", async (req, res) => {
   try {
+    if (!requireMongo(res)) return;
     const newsId = normalizeText(req.query.newsId, 200);
     if (!newsId) {
       return res.status(400).json({ error: "Invalid news id" });
     }
-    const data = await loadCommunityData();
-    const comments = Array.isArray(data.comments?.[newsId])
-      ? data.comments[newsId]
-      : [];
+    const comments = await Comment.find({ newsId, isDeleted: false })
+      .sort({ createdAt: 1 })
+      .lean();
     return res.json({
       newsId,
-      comments: comments.filter((comment) => !comment.isDeleted),
+      comments: normalizeCommentList(comments),
     });
   } catch (error) {
     console.error("Failed to load comments", error);
@@ -599,6 +683,7 @@ app.get("/api/comments", async (req, res) => {
 
 app.post("/api/comments", async (req, res) => {
   try {
+    if (!requireMongo(res)) return;
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const newsId = normalizeText(req.body?.newsId, 200);
@@ -610,13 +695,10 @@ app.post("/api/comments", async (req, res) => {
     const user = await clerkClient.users.getUser(auth.userId);
     const email = getUserEmail(user);
     const rank = String(user?.publicMetadata?.rank || "Registered");
-    const comment = {
-      id: crypto.randomUUID(),
+    await Comment.create({
       newsId,
       userId: auth.userId,
       body,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
       editCount: 0,
       authorName: user?.fullName || user?.username || "User",
       authorImage: user?.imageUrl || "",
@@ -624,19 +706,15 @@ app.post("/api/comments", async (req, res) => {
       authorRank: rank,
       replies: [],
       isDeleted: false,
-    };
-
-    const data = await updateCommunityData((draft) => {
-      const existing = Array.isArray(draft.comments[newsId])
-        ? draft.comments[newsId]
-        : [];
-      draft.comments[newsId] = [...existing, comment].slice(-200);
-      return draft;
     });
+
+    const comments = await Comment.find({ newsId, isDeleted: false })
+      .sort({ createdAt: 1 })
+      .lean();
 
     return res.json({
       newsId,
-      comments: (data.comments?.[newsId] || []).filter((entry) => !entry.isDeleted),
+      comments: normalizeCommentList(comments),
     });
   } catch (error) {
     console.error("Failed to add comment", error);
@@ -646,82 +724,45 @@ app.post("/api/comments", async (req, res) => {
 
 app.patch("/api/comments/:id", async (req, res) => {
   try {
+    if (!requireMongo(res)) return;
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const nextBody = normalizeText(req.body?.text, 276);
     if (!nextBody) {
       return res.status(400).json({ error: "Invalid comment" });
     }
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: "Invalid comment id" });
+    }
 
     const user = await clerkClient.users.getUser(auth.userId);
     const editorName = user?.fullName || user?.username || "User";
     const editorImage = user?.imageUrl || "";
 
-    const data = await updateCommunityData((draft) => {
-      let targetNewsId = null;
-      let targetIndex = -1;
-      let targetComment = null;
-      Object.entries(draft.comments || {}).some(([newsId, list]) => {
-        const idx = Array.isArray(list)
-          ? list.findIndex((entry) => entry.id === req.params.id)
-          : -1;
-        if (idx >= 0) {
-          targetNewsId = newsId;
-          targetIndex = idx;
-          targetComment = list[idx];
-          return true;
-        }
-        return false;
-      });
-
-      if (!targetComment) {
-        throw new Error("NOT_FOUND");
-      }
-      if (targetComment.userId !== auth.userId) {
-        throw new Error("FORBIDDEN");
-      }
-
-      const revisions = Array.isArray(draft.commentRevisions?.[targetComment.id])
-        ? draft.commentRevisions[targetComment.id]
-        : [];
-      revisions.push({
-        id: crypto.randomUUID(),
-        commentId: targetComment.id,
-        editedBy: auth.userId,
-        editorName,
-        editorImage,
-        oldBody: targetComment.body,
-        newBody: nextBody,
-        createdAt: new Date().toISOString(),
-      });
-
-      const updated = {
-        ...targetComment,
-        body: nextBody,
-        updatedAt: new Date().toISOString(),
-        editCount: (targetComment.editCount || 0) + 1,
-      };
-
-      const nextList = [...draft.comments[targetNewsId]];
-      nextList[targetIndex] = updated;
-      draft.comments[targetNewsId] = nextList;
-      draft.commentRevisions[targetComment.id] = revisions;
-      return draft;
-    });
-
-    const updatedList = Object.values(data.comments || {})
-      .flat()
-      .filter((entry) => entry?.newsId)
-      .filter((entry) => !entry.isDeleted);
-    const updatedComment = updatedList.find((entry) => entry.id === req.params.id);
-    return res.json({ comment: updatedComment });
-  } catch (error) {
-    if (error?.message === "NOT_FOUND") {
+    const comment = await Comment.findOne({ _id: req.params.id, isDeleted: false });
+    if (!comment) {
       return res.status(404).json({ error: "Comment not found" });
     }
-    if (error?.message === "FORBIDDEN") {
+    if (comment.userId !== auth.userId) {
       return res.status(403).json({ error: "Not authorized" });
     }
+
+    await CommentRevision.create({
+      commentId: comment._id,
+      editedBy: auth.userId,
+      oldBody: comment.body,
+      newBody: nextBody,
+      createdAt: new Date(),
+      editorName,
+      editorImage,
+    });
+
+    comment.body = nextBody;
+    comment.editCount = (comment.editCount || 0) + 1;
+    await comment.save();
+
+    return res.json({ comment: normalizeComment(comment) });
+  } catch (error) {
     console.error("Failed to update comment", error);
     return res.status(500).json({ error: "Failed to update comment" });
   }
@@ -729,11 +770,15 @@ app.patch("/api/comments/:id", async (req, res) => {
 
 app.post("/api/comments/:id/replies", async (req, res) => {
   try {
+    if (!requireMongo(res)) return;
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const body = normalizeText(req.body?.text, 276);
     if (!body) {
       return res.status(400).json({ error: "Invalid reply" });
+    }
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: "Invalid comment id" });
     }
 
     const user = await clerkClient.users.getUser(auth.userId);
@@ -741,60 +786,24 @@ app.post("/api/comments/:id/replies", async (req, res) => {
     const rank = String(user?.publicMetadata?.rank || "Registered");
     const reply = {
       id: crypto.randomUUID(),
-      commentId: req.params.id,
       userId: auth.userId,
       body,
-      createdAt: new Date().toISOString(),
+      createdAt: new Date(),
       authorName: user?.fullName || user?.username || "User",
       authorImage: user?.imageUrl || "",
       authorEmail: email,
       authorRank: rank,
     };
 
-    const data = await updateCommunityData((draft) => {
-      let targetNewsId = null;
-      let targetIndex = -1;
-      let targetComment = null;
-      Object.entries(draft.comments || {}).some(([newsId, list]) => {
-        const idx = Array.isArray(list)
-          ? list.findIndex((entry) => entry.id === req.params.id)
-          : -1;
-        if (idx >= 0) {
-          targetNewsId = newsId;
-          targetIndex = idx;
-          targetComment = list[idx];
-          return true;
-        }
-        return false;
-      });
-
-      if (!targetComment) {
-        throw new Error("NOT_FOUND");
-      }
-
-      const nextReplies = Array.isArray(targetComment.replies)
-        ? [...targetComment.replies, reply].slice(-50)
-        : [reply];
-      const updated = {
-        ...targetComment,
-        replies: nextReplies,
-      };
-      const nextList = [...draft.comments[targetNewsId]];
-      nextList[targetIndex] = updated;
-      draft.comments[targetNewsId] = nextList;
-      return draft;
-    });
-
-    const updatedList = Object.values(data.comments || {})
-      .flat()
-      .filter((entry) => entry?.newsId)
-      .filter((entry) => !entry.isDeleted);
-    const updatedComment = updatedList.find((entry) => entry.id === req.params.id);
-    return res.json({ comment: updatedComment });
-  } catch (error) {
-    if (error?.message === "NOT_FOUND") {
+    const comment = await Comment.findOne({ _id: req.params.id, isDeleted: false });
+    if (!comment) {
       return res.status(404).json({ error: "Comment not found" });
     }
+    comment.replies = [...(comment.replies || []), reply].slice(-50);
+    await comment.save();
+
+    return res.json({ comment: normalizeComment(comment) });
+  } catch (error) {
     console.error("Failed to add reply", error);
     return res.status(500).json({ error: "Failed to add reply" });
   }
@@ -802,49 +811,28 @@ app.post("/api/comments/:id/replies", async (req, res) => {
 
 app.delete("/api/comments/:id", async (req, res) => {
   try {
+    if (!requireMongo(res)) return;
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: "Invalid comment id" });
+    }
     const user = await clerkClient.users.getUser(auth.userId);
     const isAdmin = isAdminUser(user);
 
-    const data = await updateCommunityData((draft) => {
-      let targetNewsId = null;
-      let targetIndex = -1;
-      let targetComment = null;
-      Object.entries(draft.comments || {}).some(([newsId, list]) => {
-        const idx = Array.isArray(list)
-          ? list.findIndex((entry) => entry.id === req.params.id)
-          : -1;
-        if (idx >= 0) {
-          targetNewsId = newsId;
-          targetIndex = idx;
-          targetComment = list[idx];
-          return true;
-        }
-        return false;
-      });
+    const comment = await Comment.findOne({ _id: req.params.id, isDeleted: false });
+    if (!comment) {
+      return res.json({ success: true });
+    }
+    if (comment.userId !== auth.userId && !isAdmin) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
 
-      if (!targetComment) {
-        throw new Error("NOT_FOUND");
-      }
-      if (targetComment.userId !== auth.userId && !isAdmin) {
-        throw new Error("FORBIDDEN");
-      }
-
-      const nextList = [...draft.comments[targetNewsId]];
-      nextList.splice(targetIndex, 1);
-      draft.comments[targetNewsId] = nextList;
-      return draft;
-    });
+    comment.isDeleted = true;
+    await comment.save();
 
     return res.json({ success: true });
   } catch (error) {
-    if (error?.message === "NOT_FOUND") {
-      return res.status(404).json({ error: "Comment not found" });
-    }
-    if (error?.message === "FORBIDDEN") {
-      return res.status(403).json({ error: "Not authorized" });
-    }
     console.error("Failed to delete comment", error);
     return res.status(500).json({ error: "Failed to delete comment" });
   }
@@ -852,10 +840,13 @@ app.delete("/api/comments/:id", async (req, res) => {
 
 app.get("/api/comments/:id/history", async (req, res) => {
   try {
-    const data = await loadCommunityData();
-    const history = Array.isArray(data.commentRevisions?.[req.params.id])
-      ? data.commentRevisions[req.params.id]
-      : [];
+    if (!requireMongo(res)) return;
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: "Invalid comment id" });
+    }
+    const history = await CommentRevision.find({ commentId: req.params.id })
+      .sort({ createdAt: 1 })
+      .lean();
     return res.json({ commentId: req.params.id, history });
   } catch (error) {
     console.error("Failed to load comment history", error);

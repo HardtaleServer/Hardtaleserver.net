@@ -920,6 +920,7 @@ function CommentThread({ newsId }) {
   const { getToken, isSignedIn, userId } = useAuth();
   const [open, setOpen] = useState(false);
   const [comments, setComments] = useState([]);
+  const [commentCount, setCommentCount] = useState(0);
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState("");
   const [editingId, setEditingId] = useState(null);
@@ -932,15 +933,15 @@ function CommentThread({ newsId }) {
       const response = await fetch(`/api/comments?newsId=${encodeURIComponent(newsId)}`);
       if (!response.ok) return;
       const data = await response.json();
-      setComments(Array.isArray(data.comments) ? data.comments : []);
+      const next = Array.isArray(data.comments) ? data.comments : [];
+      setComments(next);
+      setCommentCount(next.length);
     } catch {}
   }
 
   useEffect(() => {
-    if (open) {
-      loadComments();
-    }
-  }, [open, newsId]);
+    loadComments();
+  }, [newsId]);
 
   function resolveRank(comment) {
     const email = String(comment.authorEmail || "").toLowerCase();
@@ -1027,7 +1028,7 @@ function CommentThread({ newsId }) {
   return html`
     <div className="comment-thread">
       <button className="comment-toggle" type="button" onClick=${() => setOpen(!open)}>
-        Comments (${comments.length})
+        Comments (${commentCount})
         <span className="comment-toggle-arrow">${open ? "▲" : "▼"}</span>
       </button>
       ${open
@@ -1658,7 +1659,7 @@ function SettingsMenu({
         <img className="settings-icon" src="/Images/SVGs/SETTINGS_SVG.svg" alt="" />
       </button>
       ${open
-        ? html`<div className=${`settings-menu ${!isMobileView && placement === "right" ? "menu-right" : ""}`}>
+        ? html`<div className=${`settings-menu ${!isMobileView && placement === "right" ? "menu-right" : ""} ${!isMobileView && desktopStickyWide ? "menu-short" : ""}`}>
             ${!isMobileView
               ? html`
                   <div className="settings-row">
