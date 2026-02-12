@@ -47,7 +47,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.15";
+const VERSION = "1.3.16";
 const STAFF_EMAILS = new Set(["chashsmurfis@gmail.com", "hytaleserver@gmail.com"]);
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const INITIAL_LOADER_MIN_MS = 3200;
@@ -3368,8 +3368,7 @@ function Layout() {
       <div className="glow"></div>
       <div className="sparks"></div>
       <div className="shell" ref=${shellRef}>
-        ${!desktopStickyVisible
-          ? html`<header className=${`topbar fade-in ${hideLogo ? "logo-hidden" : ""} ${!isMobile && logoSide === "right" ? "logo-right" : ""}`} ref=${topbarRef}>
+        <header className=${`topbar fade-in ${hideLogo ? "logo-hidden" : ""} ${desktopStickyVisible ? "desktop-sticky-active" : ""} ${!isMobile && logoSide === "right" ? "logo-right" : ""}`} ref=${topbarRef}>
           <${Link}
             className=${`logo island-logo ${hideLogo ? "logo-hidden" : ""}`}
             to="/"
@@ -3384,8 +3383,7 @@ function Layout() {
           <//>
           <${DesktopNavShell} />
           <${DesktopAuthButtons} />
-        </header>`
-          : html``}
+        </header>
 
         <${Routes}>
           <${Route}

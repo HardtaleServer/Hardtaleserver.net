@@ -319,10 +319,7 @@ body[data-theme="dark"] {
 .topbar.desktop-sticky-active {
   opacity: 0;
   pointer-events: none;
-  display: none;
   visibility: hidden;
-  height: 0;
-  margin: 0;
 }
 .desktop-sticky-logo {
   display: block;
@@ -1344,6 +1341,8 @@ emoji-picker.reaction-picker-panel {
 
 .reaction-empty {
   font-size: 12px;
+  width: 100%;
+  display: block;
 }
 
 .poll-panel {
