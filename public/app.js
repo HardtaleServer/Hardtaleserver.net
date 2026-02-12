@@ -45,7 +45,7 @@ const MOBILE_ISLAND_KEY = "hardtale-mobile-island";
 const DESKTOP_STICKY_STYLE_KEY = "hardtale-desktop-sticky-style";
 const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
-const VERSION = "1.3.4";
+const VERSION = "1.3.5";
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const INITIAL_LOADER_MIN_MS = 3200;
 const AUTH_TRANSITION_LOADER_MS = 850;
@@ -285,22 +285,25 @@ const SAMPLE_STORE = [
   {
     id: "rank-hero",
     name: "Hero Rank",
-    price: 9.99,
-    blurb: "Starter perks, daily kit, and a bold badge.",
+    price: 6.99,
+    blurb:
+      "10% passive XP boost, daily 15-min XP boost, weekly kit (small XP potion + minor utility potions), 1 extra /home, cosmetic chat prefix, slight auction/listing boost, no raw damage bonuses, bold badge",
     icon: "star",
   },
   {
     id: "rank-legend",
     name: "Legend Rank",
-    price: 14.99,
-    blurb: "Extra storage perks, cosmetics, and weekly prep kit.",
+    price: 14.0,
+    blurb:
+      "20% passive XP boost, daily 30-min XP boost, weekly kit (medium XP potions + resource bundle), 2 extra /home, 1 monthly global boost (30 min), reduced teleport cooldown, priority queue, bold badge",
     icon: "crown",
   },
   {
     id: "rank-mythic",
     name: "Mythic Rank",
-    price: 24.99,
-    blurb: "Premium cosmetics, utility perks, and extra claim options.",
+    price: 24.0,
+    blurb:
+      "30% passive XP boost, daily 1hr XP boost, weekly kit (large XP potions + rare crafting materials), 3 extra /home, 2 monthly global boosts, special cosmetic title glow, particle aura cosmetic, guild banner cosmetic, bold badge",
     icon: "shield",
   },
 ];
@@ -1295,6 +1298,9 @@ function StorePage({ onAdd }) {
           </div>`,
         )}
       </div>
+      <p className="muted store-support-note">
+        Support the server and become a local Hero, Legend, or Mythic by giving global boosts to the entire server.
+      </p>
     </section>
     <section className="card fade-in rank-philosophy">
       <div className="section-title">Why These Ranks Work</div>
@@ -1393,6 +1399,14 @@ function StorePage({ onAdd }) {
       <//>
     <//>
   `;
+}
+
+function perkBullets(text) {
+  if (!text) return [];
+  return text
+    .split(",")
+    .map((part) => part.trim())
+    .filter(Boolean);
 }
 
 function ChangelogPanel() {
@@ -2787,7 +2801,20 @@ function Layout() {
           : html`<div className="cart-list">
               ${cart.map(
                 (item) => html`<div key=${item.id} className="cart-row">
-                  <div className="cart-name">${item.name}</div>
+                  <div className="cart-info">
+                    <div className="cart-name">${item.name}</div>
+                    ${item.blurb
+                      ? html`<ul className="cart-perks">
+                          ${perkBullets(item.blurb).map(
+                            (perk) => html`<li>
+                              ${perk.toLowerCase().includes("bold badge")
+                                ? html`<strong>${perk}</strong>`
+                                : perk}
+                            </li>`,
+                          )}
+                        </ul>`
+                      : html``}
+                  </div>
                   <div className="cart-qty">
                     <button className="ghost-btn" onClick=${() => decrementItem(item.id)}>-</button>
                     <span>${item.quantity || 1}</span>

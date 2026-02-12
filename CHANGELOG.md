@@ -2,7 +2,9 @@
 
 All notable changes to this project are documented here.
 
-## 2026-02-12 (v1.3.4)
+## 2026-02-12 (v1.3.5)
+- Updated store rank perks/pricing and added a global-boost support note.
+- Added checkout perk bullets from store descriptions with bold badge emphasis.
 - Fixed desktop header to show the cart button next to notifications, matching the logo-side ordering.
 - Added desktop sticky navbar settings (style, width, and logo picker) with scroll-in animation.
 
