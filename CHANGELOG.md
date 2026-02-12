@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-12 (v1.3.6)
+- Added reactions (emoji picker) to news and changelog entries.
+- Added signed-in comments with edit history and author metadata on news posts.
+- Added server-side JSON storage for reactions and comments with audience-checked Clerk auth.
+
 ## 2026-02-12 (v1.3.5)
 - Updated store rank perks/pricing and added a global-boost support note.
 - Added checkout perk bullets from store descriptions with bold badge emphasis.

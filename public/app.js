@@ -2,6 +2,7 @@
 import ReactDOM from "react-dom/client";
 import htm from "htm";
 import HardtaleLoader from "./components/HardtaleLoader.js";
+import EmojiPicker from "emoji-picker-react";
 import {
   BrowserRouter,
   Routes,
@@ -45,7 +46,8 @@ const MOBILE_ISLAND_KEY = "hardtale-mobile-island";
 const DESKTOP_STICKY_STYLE_KEY = "hardtale-desktop-sticky-style";
 const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
-const VERSION = "1.3.5";
+const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
+const VERSION = "1.3.6";
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const INITIAL_LOADER_MIN_MS = 3200;
 const AUTH_TRANSITION_LOADER_MS = 850;
@@ -559,6 +561,18 @@ function formatTimestamp(value) {
   });
 }
 
+async function apiFetchWithToken(getToken, isSignedIn, url, options = {}) {
+  const headers = { ...(options.headers || {}) };
+  if (isSignedIn && getToken) {
+    const token = await getToken({ template: COMMENTS_TOKEN_TEMPLATE });
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+  }
+  const response = await fetch(url, { ...options, headers });
+  return response;
+}
+
 function NewsCard({ item, onDelete, onToggleFeatured, canDelete }) {
   return html`
     <article className="news-card">
@@ -593,7 +607,366 @@ function NewsCard({ item, onDelete, onToggleFeatured, canDelete }) {
             ${item.featured ? "Remove featured" : "Feature this"}
           </button>`
         : html``}
+      <${ReactionBar} itemType="news" itemId=${item.id} />
+      <${CommentThread} newsId=${item.id} />
     </article>
+  `;
+}
+
+function ReactionBar({ itemType, itemId }) {
+  const { getToken, isSignedIn } = useAuth();
+  const { openSignIn } = useClerk();
+  const [reactions, setReactions] = useState([]);
+  const [showPicker, setShowPicker] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    async function loadReactions() {
+      try {
+        const response = await apiFetchWithToken(
+          getToken,
+          isSignedIn,
+          `/api/reactions?type=${itemType}&id=${encodeURIComponent(itemId)}`,
+        );
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!alive) return;
+        setReactions(Array.isArray(data.reactions) ? data.reactions : []);
+      } catch {}
+    }
+    loadReactions();
+    return () => {
+      alive = false;
+    };
+  }, [itemType, itemId, getToken, isSignedIn]);
+
+  function updateOptimistic(emoji) {
+    const existing = reactions.find((entry) => entry.emoji === emoji);
+    const myCount = reactions.filter((entry) => entry.reactedByMe).length;
+    if (!existing?.reactedByMe && myCount >= 2) {
+      setError("You can only react with two emojis.");
+      return null;
+    }
+    const next = reactions.map((entry) => ({ ...entry }));
+    const target = next.find((entry) => entry.emoji === emoji);
+    if (target) {
+      if (target.reactedByMe) {
+        target.count -= 1;
+        target.reactedByMe = false;
+      } else {
+        target.count += 1;
+        target.reactedByMe = true;
+      }
+    } else {
+      next.push({ emoji, count: 1, reactedByMe: true });
+    }
+    return next.filter((entry) => entry.count > 0).sort((a, b) => b.count - a.count);
+  }
+
+  async function toggleReaction(emoji) {
+    if (!isSignedIn) {
+      if (openSignIn) openSignIn({});
+      return;
+    }
+    setError("");
+    const optimistic = updateOptimistic(emoji);
+    if (!optimistic) return;
+    setReactions(optimistic);
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/reactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: itemType, id: itemId, emoji }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        setError(data?.error || "Reaction failed.");
+        const refresh = await apiFetchWithToken(
+          getToken,
+          true,
+          `/api/reactions?type=${itemType}&id=${encodeURIComponent(itemId)}`,
+        );
+        if (refresh.ok) {
+          const refreshed = await refresh.json();
+          setReactions(Array.isArray(refreshed.reactions) ? refreshed.reactions : []);
+        }
+        return;
+      }
+      const data = await response.json();
+      setReactions(Array.isArray(data.reactions) ? data.reactions : []);
+    } catch {
+      setError("Reaction failed.");
+    }
+  }
+
+  return html`
+    <div className="reaction-bar">
+      ${reactions.length === 0
+        ? html`<span className="muted reaction-empty">Be the first to react.</span>`
+        : reactions.map(
+            (entry) => html`<button
+              className=${`reaction-pill ${entry.reactedByMe ? "active" : ""}`}
+              onClick=${() => toggleReaction(entry.emoji)}
+              title="React"
+              type="button"
+            >
+              <span>${entry.emoji}</span>
+              <span>${entry.count}</span>
+            </button>`,
+          )}
+      <button
+        className="reaction-pill reaction-add"
+        type="button"
+        onClick=${() => setShowPicker(!showPicker)}
+        title="Add reaction"
+      >
+        +
+      </button>
+      ${showPicker
+        ? html`<div className="reaction-picker">
+            <${EmojiPicker}
+              onEmojiClick=${(emojiData) => {
+                toggleReaction(emojiData.emoji);
+                setShowPicker(false);
+              }}
+            />
+          </div>`
+        : html``}
+      ${error ? html`<div className="reaction-error">${error}</div>` : html``}
+    </div>
+  `;
+}
+
+function CommentThread({ newsId }) {
+  const { getToken, isSignedIn, userId } = useAuth();
+  const [open, setOpen] = useState(false);
+  const [comments, setComments] = useState([]);
+  const [draft, setDraft] = useState("");
+  const [status, setStatus] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [editingText, setEditingText] = useState("");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyItems, setHistoryItems] = useState([]);
+
+  async function loadComments() {
+    try {
+      const response = await fetch(`/api/comments?newsId=${encodeURIComponent(newsId)}`);
+      if (!response.ok) return;
+      const data = await response.json();
+      setComments(Array.isArray(data.comments) ? data.comments : []);
+    } catch {}
+  }
+
+  useEffect(() => {
+    if (open) {
+      loadComments();
+    }
+  }, [open, newsId]);
+
+  async function submitComment(event) {
+    event.preventDefault();
+    if (!isSignedIn) return;
+    if (!draft.trim()) return;
+    setStatus("Posting...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/comments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newsId, text: draft }),
+      });
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      setComments(Array.isArray(data.comments) ? data.comments : []);
+      setDraft("");
+      setStatus("");
+    } catch {
+      setStatus("Failed to post.");
+    }
+  }
+
+  function startEdit(comment) {
+    setEditingId(comment.id);
+    setEditingText(comment.body);
+  }
+
+  async function saveEdit(commentId) {
+    if (!editingText.trim()) return;
+    setStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, `/api/comments/${commentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: editingText }),
+      });
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      const updated = data?.comment;
+      if (updated) {
+        setComments((prev) => prev.map((entry) => (entry.id === updated.id ? updated : entry)));
+      }
+      setEditingId(null);
+      setEditingText("");
+      setStatus("");
+    } catch {
+      setStatus("Edit failed.");
+    }
+  }
+
+  async function deleteComment(commentId) {
+    setStatus("Deleting...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, `/api/comments/${commentId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Failed");
+      setComments((prev) => prev.filter((entry) => entry.id !== commentId));
+      setStatus("");
+    } catch {
+      setStatus("Delete failed.");
+    }
+  }
+
+  async function openHistory(commentId) {
+    try {
+      const response = await fetch(`/api/comments/${commentId}/history`);
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      setHistoryItems(Array.isArray(data.history) ? data.history : []);
+      setHistoryOpen(true);
+    } catch {}
+  }
+
+  return html`
+    <div className="comment-thread">
+      <button className="comment-toggle" type="button" onClick=${() => setOpen(!open)}>
+        Comments (${comments.length})
+      </button>
+      ${open
+        ? html`<div className="comment-panel">
+            ${isSignedIn
+              ? html`<form className="comment-form" onSubmit=${submitComment}>
+                  <textarea
+                    rows="3"
+                    placeholder="Write a comment..."
+                    value=${draft}
+                    onInput=${(event) => setDraft(event.target.value)}
+                  ></textarea>
+                  <div className="comment-actions">
+                    <button className="button primary" type="submit">Post</button>
+                    ${status ? html`<span className="muted">${status}</span>` : html``}
+                  </div>
+                </form>`
+              : html`<div className="comment-signin">
+                  <p className="muted">Sign in to join the discussion.</p>
+                  <${SignInButton} mode="modal">
+                    <button className="button primary">Sign in</button>
+                  <//>
+                </div>`}
+            ${comments.length === 0
+              ? html`<p className="muted">No comments yet.</p>`
+              : comments.map(
+                  (comment) => html`<div key=${comment.id} className="comment-item">
+                    <img
+                      className="comment-avatar"
+                      src=${comment.authorImage || "/assets/HardTale_H_GreyScale.png"}
+                      alt=${comment.authorName}
+                    />
+                    <div className="comment-body">
+                      <div className="comment-meta">
+                        <span className="comment-author">${comment.authorName}</span>
+                        <span className="comment-time">${formatTimestamp(comment.createdAt)}</span>
+                        ${comment.editCount > 0
+                          ? html`<button
+                              className="comment-history-btn"
+                              type="button"
+                              onClick=${() => openHistory(comment.id)}
+                              title="View edits"
+                            >
+                              ✎ ${comment.editCount}
+                            </button>`
+                          : html``}
+                        ${comment.editCount > 0
+                          ? html`<span className="comment-edited">
+                              Edited ${formatTimestamp(comment.updatedAt)}
+                            </span>`
+                          : html``}
+                      </div>
+                      ${editingId === comment.id
+                        ? html`<div className="comment-editor">
+                            <textarea
+                              rows="3"
+                              value=${editingText}
+                              onInput=${(event) => setEditingText(event.target.value)}
+                            ></textarea>
+                            <div className="comment-actions">
+                              <button
+                                className="button primary"
+                                type="button"
+                                onClick=${() => saveEdit(comment.id)}
+                              >
+                                Save
+                              </button>
+                              <button
+                                className="button ghost-btn"
+                                type="button"
+                                onClick=${() => {
+                                  setEditingId(null);
+                                  setEditingText("");
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>`
+                        : html`<p className="comment-text">${comment.body}</p>`}
+                      ${comment.userId === userId && editingId !== comment.id
+                        ? html`<div className="comment-controls">
+                            <button className="ghost-btn" type="button" onClick=${() => startEdit(comment)}>
+                              Edit
+                            </button>
+                            <button className="ghost-btn" type="button" onClick=${() => deleteComment(comment.id)}>
+                              Delete
+                            </button>
+                          </div>`
+                        : html``}
+                    </div>
+                  </div>`,
+                )}
+          </div>`
+        : html``}
+      <${PopUp}
+        show=${historyOpen}
+        onClose=${() => setHistoryOpen(false)}
+        title="Edit History"
+      >
+        ${historyItems.length === 0
+          ? html`<p className="muted">No revisions yet.</p>`
+          : html`<div className="comment-history">
+              ${historyItems.map(
+                (entry) => html`<div key=${entry.id} className="comment-history-item">
+                  <div className="comment-history-meta">
+                    <img
+                      className="comment-avatar small"
+                      src=${entry.editorImage || "/assets/HardTale_H_GreyScale.png"}
+                      alt=${entry.editorName}
+                    />
+                    <div>
+                      <div className="comment-author">${entry.editorName}</div>
+                      <div className="muted">${formatTimestamp(entry.createdAt)}</div>
+                    </div>
+                  </div>
+                  <div className="comment-history-body">
+                    <div className="muted">Before</div>
+                    <p>${entry.oldBody}</p>
+                    <div className="muted">After</div>
+                    <p>${entry.newBody}</p>
+                  </div>
+                </div>`,
+              )}
+            </div>`}
+      <//>
+    </div>
   `;
 }
 
@@ -1423,6 +1796,7 @@ function ChangelogPanel() {
               (item, index) => html`<li key=${`${entry.version}-${index}`}>${item}</li>`,
             )}
           </ul>
+          <${ReactionBar} itemType="changelog" itemId=${entry.version} />
         </div>`,
       )}
     </div>
