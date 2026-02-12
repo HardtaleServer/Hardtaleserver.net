@@ -6,6 +6,12 @@ All notable changes to this project are documented here.
 - Installed Frimousse locally and updated emoji picker imports.
 - Updated picker styling to match light/dark theme.
 
+## 2026-02-12 (v1.3.15)
+- Stabilized desktop sticky nav by swapping nav components at scroll threshold.
+- Fixed right-side settings menu offset and limited mobile island toggle to mobile.
+- Restyled poll buttons to match site gradients and theme.
+- Adjusted comment dropdown flow and disabled textarea resizing.
+
 ## 2026-02-12 (v1.3.7)
 - Switched emoji picker to Frimousse with CDN loading and updated picker styling.
 - Added reactions (emoji picker) to news and changelog entries.

@@ -644,10 +644,20 @@ body[data-theme="light"] .settings-icon {
   z-index: 50;
 }
 
+.settings-menu.menu-right {
+  right: -150px;
+  left: auto;
+}
+
 @media (min-width: 861px) {
   .topbar .settings-menu {
     right: auto;
     left: -100px;
+  }
+
+  .topbar .settings-menu.menu-right {
+    left: auto;
+    right: -150px;
   }
 }
 
@@ -1489,7 +1499,7 @@ emoji-picker.reaction-picker-panel {
   background: var(--bg);
   color: var(--text);
   padding: 10px 12px;
-  resize: vertical;
+  resize: none;
 }
 
 .comment-form textarea {
@@ -1637,7 +1647,7 @@ emoji-picker.reaction-picker-panel {
   background: var(--bg);
   color: var(--text);
   padding: 8px 10px;
-  resize: vertical;
+  resize: none;
 }
 
 .comment-history-btn {

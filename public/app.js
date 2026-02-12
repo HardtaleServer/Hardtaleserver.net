@@ -47,7 +47,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.14";
+const VERSION = "1.3.15";
 const STAFF_EMAILS = new Set(["chashsmurfis@gmail.com", "hytaleserver@gmail.com"]);
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const INITIAL_LOADER_MIN_MS = 3200;
@@ -1032,6 +1032,9 @@ function CommentThread({ newsId }) {
       </button>
       ${open
         ? html`<div className="comment-panel">
+            ${comments.length === 0 && isSignedIn
+              ? html`<div className="no-comments">No comments yet.</div>`
+              : html``}
             ${isSignedIn
               ? html`<form className="comment-form" onSubmit=${submitComment}>
                   <textarea
@@ -1059,9 +1062,7 @@ function CommentThread({ newsId }) {
                   <div className="comment-login-input">What are your thoughts?</div>
                 </div>`}
             ${comments.length === 0
-              ? isSignedIn
-                ? html`<div className="no-comments">No comments yet.</div>`
-                : html``
+              ? html``
               : comments.map(
                   (comment) => html`<div key=${comment.id} className="comment-item">
                     <div className="comment-left">
@@ -1657,11 +1658,11 @@ function SettingsMenu({
         <img className="settings-icon" src="/Images/SVGs/SETTINGS_SVG.svg" alt="" />
       </button>
       ${open
-        ? html`<div className="settings-menu">
+        ? html`<div className=${`settings-menu ${!isMobileView && placement === "right" ? "menu-right" : ""}`}>
             ${!isMobileView
               ? html`
                   <div className="settings-row">
-                    <label>Navigation placement</label>
+                    <label>Desktop nav placement</label>
                     <select
                       value=${placement}
                       onChange=${(event) => setPlacement(event.target.value)}
@@ -1672,7 +1673,7 @@ function SettingsMenu({
                     </select>
                   </div>
                   <div className="settings-row">
-                    <label>Desktop sticky style</label>
+                    <label>Desktop sticky background</label>
                     <select
                       value=${desktopStickyStyle}
                       onChange=${(event) => setDesktopStickyStyle(event.target.value)}
@@ -1783,7 +1784,7 @@ function SettingsMenu({
                         </select>
                       </div>
                   <div className="settings-row">
-                    <label>Mobile navbar style</label>
+                    <label>Mobile navbar background</label>
                     <select
                       value=${mobileNavStyle}
                       onChange=${(event) => setMobileNavStyle(event.target.value)}
@@ -1795,7 +1796,7 @@ function SettingsMenu({
                   ${mobileNavStyle === "solid"
                     ? html`
                         <div className="settings-row">
-                          <label>Mobile logo</label>
+                          <label>Mobile navbar logo</label>
                           <button
                             className="logo-picker-trigger"
                             type="button"
@@ -1861,7 +1862,7 @@ function SettingsMenu({
             ${!isMobileView
               ? html`
                   <div className="settings-row">
-                    <label>Logo side</label>
+                    <label>Desktop logo side</label>
                     <select
                       value=${logoSide}
                       onChange=${(event) => setLogoSide(event.target.value)}
@@ -1873,7 +1874,7 @@ function SettingsMenu({
                 `
               : html``}
             <div className="settings-row">
-              <label>Theme</label>
+              <label>Theme mode</label>
               <select
                 value=${theme}
                 onChange=${(event) => setTheme(event.target.value)}
@@ -1898,7 +1899,7 @@ function SettingsMenu({
             </div>
             ${isMobileView
               ? html`<div className="settings-row">
-                  <label>Floating island</label>
+                  <label>Floating island (mobile)</label>
                   <div className="toggle">
                     <span>${showMobileIsland ? "Show" : "Hide"}</span>
                     <button
@@ -3320,7 +3321,7 @@ function Layout() {
   }
 
   return html`
-    <div className=${`page ${showMobileNav ? "drawer-open" : ""} ${mobileNavStyle === "solid" ? "nav-solid" : "nav-transparent"} ${!showMobileIsland ? "hide-mobile-island" : ""}`}>
+    <div className=${`page ${showMobileNav ? "drawer-open" : ""} ${mobileNavStyle === "solid" ? "nav-solid" : "nav-transparent"} ${isMobile && !showMobileIsland ? "hide-mobile-island" : ""}`}>
       <${LoadingScreen} show=${showLoader} variant=${loaderVariant} />
         <div
           className=${`mobile-nav-bar ${mobileNavStyle === "solid" ? "nav-solid" : "nav-transparent"} ${menuSide === "left" ? "nav-left" : "nav-right"} ${mobileNavStyle === "solid" ? "with-mini-logo" : ""}`}
@@ -3363,11 +3364,12 @@ function Layout() {
                 `}
           </div>
         </div>
-        <${DesktopStickyBar} />
+        ${desktopStickyVisible ? html`<${DesktopStickyBar} />` : html``}
       <div className="glow"></div>
       <div className="sparks"></div>
       <div className="shell" ref=${shellRef}>
-        <header className=${`topbar fade-in ${hideLogo ? "logo-hidden" : ""} ${desktopStickyVisible ? "desktop-sticky-active" : ""} ${!isMobile && logoSide === "right" ? "logo-right" : ""}`} ref=${topbarRef}>
+        ${!desktopStickyVisible
+          ? html`<header className=${`topbar fade-in ${hideLogo ? "logo-hidden" : ""} ${!isMobile && logoSide === "right" ? "logo-right" : ""}`} ref=${topbarRef}>
           <${Link}
             className=${`logo island-logo ${hideLogo ? "logo-hidden" : ""}`}
             to="/"
@@ -3382,7 +3384,8 @@ function Layout() {
           <//>
           <${DesktopNavShell} />
           <${DesktopAuthButtons} />
-        </header>
+        </header>`
+          : html``}
 
         <${Routes}>
           <${Route}
