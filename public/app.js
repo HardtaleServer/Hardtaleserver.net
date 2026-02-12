@@ -631,7 +631,42 @@ function ReactionBar({ itemType, itemId }) {
   const [reactions, setReactions] = useState([]);
   const [showPicker, setShowPicker] = useState(false);
   const [error, setError] = useState("");
-  const [EmojiPickerComponent, setEmojiPickerComponent] = useState(null);
+  const [pickerLoaded, setPickerLoaded] = useState(false);
+  const [pickerFailed, setPickerFailed] = useState(false);
+  const pickerRef = useRef(null);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadPicker() {
+      try {
+        await import(
+          "https://cdn.jsdelivr.net/npm/emoji-picker-element@1.21.3/index.js"
+        );
+        if (!alive) return;
+        setPickerLoaded(true);
+      } catch {
+        if (!alive) return;
+        setPickerFailed(true);
+      }
+    }
+    loadPicker();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showPicker || !pickerLoaded || !pickerRef.current) return;
+    const pickerEl = pickerRef.current;
+    function onEmojiClick(event) {
+      const emoji = event?.detail?.unicode || event?.detail?.emoji;
+      if (!emoji) return;
+      toggleReaction(emoji);
+      setShowPicker(false);
+    }
+    pickerEl.addEventListener("emoji-click", onEmojiClick);
+    return () => pickerEl.removeEventListener("emoji-click", onEmojiClick);
+  }, [showPicker, pickerLoaded]);
 
 
   useEffect(() => {
@@ -739,42 +774,15 @@ function ReactionBar({ itemType, itemId }) {
       </button>
       ${showPicker
         ? html`<div className="reaction-picker">
-            ${EmojiPickerComponent
-              ? html`<${EmojiPickerComponent.Root} className="reaction-picker-panel">
-                  <${EmojiPickerComponent.Search} className="reaction-picker-search" />
-                  <${EmojiPickerComponent.Viewport} className="reaction-picker-viewport">
-                    <${EmojiPickerComponent.Loading} className="reaction-picker-state">
-                      Loading
-                    <//>
-                    <${EmojiPickerComponent.Empty} className="reaction-picker-state">
-                      No emoji found.
-                    <//>
-                    <${EmojiPickerComponent.List}
-                      className="reaction-picker-list"
-                      components=${{
-                        CategoryHeader: ({ category, ...props }) =>
-                          html`<div className="reaction-picker-category" ...${props}>
-                            ${category.label}
-                          </div>`,
-                        Row: ({ children, ...props }) =>
-                          html`<div className="reaction-picker-row" ...${props}>${children}</div>`,
-                        Emoji: ({ emoji, ...props }) =>
-                          html`<button
-                            className="reaction-picker-emoji"
-                            type="button"
-                            ...${props}
-                            onClick=${() => {
-                              toggleReaction(emoji.emoji);
-                              setShowPicker(false);
-                            }}
-                          >
-                            ${emoji.emoji}
-                          </button>`,
-                      }}
-                    />
-                  <//>
-                <//>`
+            ${pickerLoaded
+              ? html`<emoji-picker
+                  class="reaction-picker-panel"
+                  ref=${pickerRef}
+                ></emoji-picker>`
               : html`<div className="muted">Loading emojis...</div>`}
+            ${pickerFailed
+              ? html`<div className="reaction-error">Failed to load emoji picker.</div>`
+              : html``}
           </div>`
         : html``}
       ${error ? html`<div className="reaction-error">${error}</div>` : html``}
