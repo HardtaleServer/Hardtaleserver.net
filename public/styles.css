@@ -168,16 +168,16 @@ body[data-theme="dark"] {
   order: 1;
 }
 
-.topbar.logo-right .auth-buttons .notif {
+.topbar.logo-right .auth-buttons .settings {
   order: 2;
+}
+
+.topbar.logo-right .auth-buttons .notif {
+  order: 3;
 }
 
 .topbar.logo-right .auth-buttons .cart-button {
-  order: 2;
-}
-
-.topbar.logo-right .auth-buttons .settings {
-  order: 3;
+  order: 4;
 }
 
 .topbar.logo-right .auth-buttons .button {
@@ -361,6 +361,22 @@ body[data-theme="dark"] {
   order: 1;
   margin-left: 0;
   margin-right: 16px;
+}
+
+.desktop-sticky.logo-right .auth-buttons .user-button {
+  order: 1;
+}
+
+.desktop-sticky.logo-right .auth-buttons .settings {
+  order: 2;
+}
+
+.desktop-sticky.logo-right .auth-buttons .notif {
+  order: 3;
+}
+
+.desktop-sticky.logo-right .auth-buttons .cart-button {
+  order: 4;
 }
 
 .topbar.logo-hidden .logo {
@@ -1230,6 +1246,11 @@ body[data-theme="light"] .button.primary {
   gap: 8px;
   align-items: center;
   position: relative;
+}
+
+.pad-top {
+  width: 100%;
+  height: 0;
 }
 
 .reaction-pill {
@@ -2743,6 +2764,11 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 .admin-panel {
   display: grid;
   gap: 12px;
+}
+
+.admin-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .admin-panel input,
