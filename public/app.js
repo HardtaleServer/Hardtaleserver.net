@@ -889,6 +889,7 @@ function ReactionBar({ itemType, itemId }) {
       >
         +
       </button>
+      <div className="pad-top"></div>
       ${showPicker
         ? html`<div className="reaction-picker">
             ${pickerLoaded
@@ -1413,7 +1414,9 @@ function AdminPanel({
             </label>
           </div>`
         : html``}
-      <button className="button primary" type="submit">Post News</button>
+      <div className="admin-actions">
+        <button className="button primary" type="submit">Post News</button>
+      </div>
       <div className="muted">${newsStatus}</div>
     </form>
     <form className="card admin-panel" onSubmit=${submitNotification}>
@@ -3061,6 +3064,10 @@ function Layout() {
   const displayName = getUserDisplayName(user);
   const showLoader = !appHydrated || authTransitionLoading;
   const desktopStickyVisible = !isMobile && hideLogo;
+  const stickyTransparentActive =
+    desktopStickyVisible && desktopStickyStyle === "transparent" && !isMobile;
+  const lockedNavHover = stickyTransparentActive && (settingsOpen || showNotifications);
+  const navActive = stickyTransparentActive && showConnectHelp ? "play" : active;
   const desktopStickyLogoVisible = desktopStickyStyle === "solid";
   const desktopStickyLogoSrc = desktopStickyWide
     ? DESKTOP_LOGO_MAP[desktopStickyLogoStyle] || LOGO_SRC
@@ -3605,7 +3612,3 @@ root.render(
     <${App} />
   <//>`
 );
-  const stickyTransparentActive =
-    desktopStickyVisible && desktopStickyStyle === "transparent" && !isMobile;
-  const lockedNavHover = stickyTransparentActive && (settingsOpen || showNotifications);
-  const navActive = stickyTransparentActive && showConnectHelp ? "play" : active;
