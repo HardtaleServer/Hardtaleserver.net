@@ -47,7 +47,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.12";
+const VERSION = "1.3.14";
 const STAFF_EMAILS = new Set(["chashsmurfis@gmail.com", "hytaleserver@gmail.com"]);
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const INITIAL_LOADER_MIN_MS = 3200;
@@ -1028,6 +1028,7 @@ function CommentThread({ newsId }) {
     <div className="comment-thread">
       <button className="comment-toggle" type="button" onClick=${() => setOpen(!open)}>
         Comments (${comments.length})
+        <span className="comment-toggle-arrow">${open ? "▲" : "▼"}</span>
       </button>
       ${open
         ? html`<div className="comment-panel">
@@ -1681,16 +1682,16 @@ function SettingsMenu({
                     </select>
                   </div>
                   <div className="settings-row">
-                    <label>Desktop sticky width</label>
+                    <label>Desktop sticky height</label>
                     <select
-                      value=${desktopStickyWide ? "wide" : "normal"}
+                      value=${desktopStickyWide ? "short" : "tall"}
                       onChange=${(event) =>
-                        setDesktopStickyWide(event.target.value === "wide")}
+                        setDesktopStickyWide(event.target.value === "short")}
                     >
-                      <option value="normal">Normal</option>
-                      <option value="wide">Wide</option>
+                      <option value="short">Short</option>
+                      <option value="tall">Tall</option>
                     </select>
-                    <div className="muted">Normal uses the island logo.</div>
+                    <div className="muted">Tall uses the island logo.</div>
                   </div>
                   ${desktopStickyStyle === "solid" && desktopStickyWide
                     ? html`
@@ -2049,14 +2050,14 @@ function StorePage({ onAdd }) {
             </div>
             <div className="store-name">${item.name}</div>
             <div className="store-desc">
-              <ul className="store-perks">
+              <div className="store-perks">
                 ${perkBullets(item.blurb).map(
-                  (perk) => html`<li>${perk}</li>`,
+                  (perk) => html`<div>${capitalizePerk(perk)}</div>`,
                 )}
-              </ul>
+              </div>
             </div>
             <div className="store-price">$${item.price.toFixed(2)}</div>
-            <button className="button" onClick=${() => onAdd(item)}>
+            <button className="button store-cta" onClick=${() => onAdd(item)}>
               Add to cart
             </button>
           </div>`,
@@ -2171,6 +2172,11 @@ function perkBullets(text) {
     .split(",")
     .map((part) => part.trim())
     .filter(Boolean);
+}
+
+function capitalizePerk(text) {
+  if (!text) return "";
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function ChangelogPanel() {
@@ -2478,10 +2484,10 @@ function NotificationsPanel({ notifications }) {
           </div>
           <div className="notif-body">${item.message}</div>
           <div className="notif-author">
+            <span className="notification-timestamp">${formatTimestamp(item.createdAt)}</span>
             <span>
               Sent by <span className=${`author-name ${isStaffLabel(item.author) ? "staff" : ""}`}>${item.author}</span>
             </span>
-            <span className="notification-timestamp">${formatTimestamp(item.createdAt)}</span>
           </div>
         </div>`,
       )}

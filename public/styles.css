@@ -208,6 +208,7 @@ body[data-theme="dark"] {
   align-items: center;
   gap: 10px;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .desktop-sticky {
@@ -245,7 +246,7 @@ body[data-theme="dark"] {
 .desktop-sticky-inner {
   max-width: 1140px;
   margin: 0 auto;
-  padding: 10px 24px;
+  padding: 14px 24px;
   display: flex;
   align-items: center;
   gap: 16px;
@@ -254,7 +255,7 @@ body[data-theme="dark"] {
 
 .desktop-sticky.wide .desktop-sticky-inner {
   max-width: 1280px;
-  padding: 10px 36px;
+  padding: 6px 28px;
 }
 
 .desktop-sticky.transparent .desktop-sticky-inner {
@@ -318,6 +319,10 @@ body[data-theme="dark"] {
 .topbar.desktop-sticky-active {
   opacity: 0;
   pointer-events: none;
+  display: none;
+  visibility: hidden;
+  height: 0;
+  margin: 0;
 }
 .desktop-sticky-logo {
   display: block;
@@ -462,6 +467,7 @@ body[data-theme="dark"] {
   border-radius: 999px;
   background: var(--bg-soft);
   border: none;
+  flex-wrap: nowrap;
 }
 
 .nav-link {
@@ -471,7 +477,7 @@ body[data-theme="dark"] {
   border-radius: 999px;
   font-weight: 600;
   transition: background 0.2s ease, color 0.2s ease;
-  border: none;
+  border: 1px solid transparent;
   background: transparent;
   cursor: pointer;
 }
@@ -1332,8 +1338,9 @@ emoji-picker.reaction-picker-panel {
 
 .comment-thread {
   margin-top: 12px;
-  display: grid;
-  justify-items: end;
+  display: flex;
+  justify-content: flex-end;
+  width: 100%;
 }
 
 .comment-toggle {
@@ -1344,6 +1351,14 @@ emoji-picker.reaction-picker-panel {
   cursor: pointer;
   padding: 0;
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.comment-toggle-arrow {
+  font-size: 11px;
+  color: var(--muted);
 }
 
 .comment-panel {
@@ -1882,17 +1897,31 @@ emoji-picker.reaction-picker-panel {
 
 .store-perks {
   margin: 0;
-  padding-left: 16px;
   display: grid;
   gap: 4px;
 }
 
-.store-perks li {
+.store-perks div {
   line-height: 1.4;
 }
 
 .store-price {
   color: var(--muted);
+}
+
+.store-cta {
+  background-image: linear-gradient(90deg, var(--accent), var(--accent-2));
+  color: #fff;
+  border: none;
+}
+
+.store-cta:hover {
+  filter: brightness(1.05);
+}
+
+body[data-theme="dark"] .button.primary,
+body[data-theme="dark"] .store-cta {
+  color: #fff;
 }
 
 .store-support-note {
@@ -2096,6 +2125,9 @@ emoji-picker.reaction-picker-panel {
 }
 
 @media (max-width: 860px) {
+  .desktop-sticky {
+    display: none !important;
+  }
   .page.hide-mobile-island .island-logo {
     display: none;
   }

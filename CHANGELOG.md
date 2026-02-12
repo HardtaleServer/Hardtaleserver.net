@@ -29,6 +29,10 @@ All notable changes to this project are documented here.
 - Refined comment layout (stacked identity + right-aligned actions).
 - Right-aligned news metadata row.
 
+## 2026-02-12 (v1.3.14)
+- Improved desktop nav stability and hover behavior.
+- Tweaked notification modal layout and kept gradient buttons readable in dark mode.
+
 ## 2026-02-12 (v1.3.6)
 - Added reactions (emoji picker) to news and changelog entries.
 - Added signed-in comments with edit history and author metadata on news posts.
