@@ -1053,12 +1053,7 @@ function CommentThread({ newsId }) {
                         alt=${comment.authorName}
                       />
                       <div className="comment-identity">
-                        ${(() => {
-                          const rank = resolveRank(comment);
-                          return html`<div className=${`comment-author ${rank.staff ? "staff" : ""}`}>
-                            ${comment.authorName}
-                          </div>`;
-                        })()}
+                        <div className="comment-author">${comment.authorName}</div>
                         ${(() => {
                           const rank = resolveRank(comment);
                           return html`<div className=${`comment-rank ${rank.staff ? "staff" : ""}`}>
@@ -1115,7 +1110,9 @@ function CommentThread({ newsId }) {
                               </button>
                             </div>
                           </div>`
-                        : html`<p className="comment-text">${comment.body}</p>`}
+                        : html`<p className=${`comment-text ${resolveRank(comment).staff ? "staff" : ""}`}>
+                            ${comment.body}
+                          </p>`}
                       ${comment.userId === userId && editingId !== comment.id
                         ? html`<div className="comment-controls right">
                             <button className="ghost-btn" type="button" onClick=${() => startEdit(comment)}>
@@ -1152,7 +1149,9 @@ function CommentThread({ newsId }) {
                                       <span className="comment-time">${formatTimestamp(reply.createdAt)}</span>
                                     </div>
                                   </div>
-                                  <p className="comment-text">${reply.body}</p>
+                                  <p className=${`comment-text ${resolveRank(reply).staff ? "staff" : ""}`}>
+                                    ${reply.body}
+                                  </p>
                                 </div>
                               </div>`,
                             )}
