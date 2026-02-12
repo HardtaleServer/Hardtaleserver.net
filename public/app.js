@@ -624,7 +624,7 @@ function ReactionBar({ itemType, itemId }) {
     let alive = true;
     async function loadPicker() {
       try {
-        const mod = await import("https://esm.sh/frimousse@2.1.1");
+        const mod = await import("https://esm.sh/frimousse@0.3.0?bundle");
         if (!alive) return;
         setEmojiPickerComponent(() => mod.EmojiPicker || mod.default || null);
       } catch {}
