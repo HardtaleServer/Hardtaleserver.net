@@ -11,6 +11,15 @@ All notable changes to this project are documented here.
 - Added reactions (emoji picker) to news and changelog entries.
 - Added signed-in comments with edit history and author metadata on news posts.
 - Added server-side JSON storage for reactions and comments with audience-checked Clerk auth.
+ 
+## 2026-02-12 (v1.3.9)
+- Added polls (admin-created) to news posts with single/multi-choice voting and results after vote.
+- Added ranks display under comment author names with STAFF gradient styling.
+- Added polls JSON storage file.
+
+## 2026-02-12 (v1.3.10)
+- Added permissions-based rank syncing (polls JSON plus permissions JSON source).
+- Comment badges now read rank from Clerk public metadata with STAFF override.
 
 ## 2026-02-12 (v1.3.6)
 - Added reactions (emoji picker) to news and changelog entries.

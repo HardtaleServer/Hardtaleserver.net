@@ -35,6 +35,9 @@ const CLERK_PUBLISHABLE_KEY =
 const COMMENTS_AUD = "hardtale-api-comments";
 const COMMUNITY_DIR = "data";
 const COMMUNITY_FILE = "community.json";
+const POLLS_FILE = "polls.json";
+const PERMISSIONS_FILE = "permissions.json";
+const RANK_PRIORITY = ["Mythic", "Legend", "Hero", "Registered", "Unregistered"];
 
 app.use(express.json({ limit: "100kb" }));
 app.use("/api", clerkMiddleware());
@@ -44,11 +47,17 @@ const imagesDir = path.join(__dirname, "Images");
 const logoPath = path.join(imagesDir, "IslandLogo", "Hero_Island_Logo.png");
 const communityDir = path.join(__dirname, COMMUNITY_DIR);
 const communityPath = path.join(communityDir, COMMUNITY_FILE);
+const pollsPath = path.join(communityDir, POLLS_FILE);
+const permissionsPath = path.join(communityDir, PERMISSIONS_FILE);
 
 const EMPTY_COMMUNITY_DATA = {
   reactions: { news: {}, changelog: {} },
   comments: {},
   commentRevisions: {},
+};
+const EMPTY_POLLS_DATA = {
+  polls: {},
+  votes: {},
 };
 
 let communityWriteQueue = Promise.resolve();
@@ -61,6 +70,25 @@ async function ensureCommunityStorage() {
     await fs.writeFile(communityPath, JSON.stringify(EMPTY_COMMUNITY_DATA, null, 2));
   }
 }
+
+async function ensurePollsStorage() {
+  await fs.mkdir(communityDir, { recursive: true });
+  try {
+    await fs.access(pollsPath);
+  } catch {
+    await fs.writeFile(pollsPath, JSON.stringify(EMPTY_POLLS_DATA, null, 2));
+  }
+}
+
+async function loadPermissionsData() {
+  try {
+    const raw = await fs.readFile(permissionsPath, "utf8");
+    return JSON.parse(raw) || { users: {}, groups: {} };
+  } catch {
+    return { users: {}, groups: {} };
+  }
+}
+
 
 async function loadCommunityData() {
   await ensureCommunityStorage();
@@ -86,6 +114,44 @@ async function saveCommunityData(data) {
   await ensureCommunityStorage();
   await fs.writeFile(communityPath, JSON.stringify(data, null, 2));
 }
+
+async function loadPollsData() {
+  await ensurePollsStorage();
+  try {
+    const raw = await fs.readFile(pollsPath, "utf8");
+    const parsed = JSON.parse(raw);
+    return {
+      ...EMPTY_POLLS_DATA,
+      ...parsed,
+      polls: parsed.polls || {},
+      votes: parsed.votes || {},
+    };
+  } catch {
+    return { ...EMPTY_POLLS_DATA };
+  }
+}
+
+async function savePollsData(data) {
+  await ensurePollsStorage();
+  await fs.writeFile(pollsPath, JSON.stringify(data, null, 2));
+}
+
+let pollsWriteQueue = Promise.resolve();
+function updatePollsData(updater) {
+  pollsWriteQueue = pollsWriteQueue
+    .then(async () => {
+      const data = await loadPollsData();
+      const next = (await updater(data)) || data;
+      await savePollsData(next);
+      return next;
+    })
+    .catch((error) => {
+      pollsWriteQueue = Promise.resolve();
+      throw error;
+    });
+  return pollsWriteQueue;
+}
+
 
 function updateCommunityData(updater) {
   communityWriteQueue = communityWriteQueue
@@ -131,6 +197,35 @@ function isValidEmoji(value) {
 
 function normalizeText(value, limit) {
   return String(value || "").trim().slice(0, limit);
+}
+
+function getUserEmail(user) {
+  return (
+    user?.primaryEmailAddress?.emailAddress ||
+    user?.emailAddresses?.[0]?.emailAddress ||
+    ""
+  );
+}
+
+function normalizePoll(payload) {
+  const question = normalizeText(payload?.question, 140);
+  const multiple = Boolean(payload?.multiple);
+  const options = Array.isArray(payload?.options) ? payload.options : [];
+  const cleanOptions = options
+    .map((option) => normalizeText(option, 80))
+    .filter(Boolean)
+    .slice(0, 4);
+  if (!question || cleanOptions.length < 2) return null;
+  return {
+    question,
+    multiple,
+    options: cleanOptions.map((text) => ({ id: crypto.randomUUID(), text })),
+  };
+}
+
+function extractRank(groups = []) {
+  const set = new Set(groups);
+  return RANK_PRIORITY.find((rank) => set.has(rank)) || "Unregistered";
 }
 
 function normalizeNewsItem(item) {
@@ -239,6 +334,155 @@ app.get("/api/notifications", async (req, res) => {
   } catch (error) {
     console.error("Failed to load notifications", error);
     return res.status(500).json({ error: "Failed to load notifications" });
+  }
+});
+
+app.get("/api/ranks", async (req, res) => {
+  try {
+    const data = await loadPermissionsData();
+    const users = data.users || {};
+    const ranks = {};
+    Object.entries(users).forEach(([userId, entry]) => {
+      const groups = Array.isArray(entry?.groups) ? entry.groups : [];
+      ranks[userId] = extractRank(groups);
+    });
+    return res.json({ ranks });
+  } catch (error) {
+    console.error("Failed to load ranks", error);
+    return res.status(500).json({ error: "Failed to load ranks" });
+  }
+});
+
+app.post("/api/ranks/sync", async (req, res) => {
+  try {
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const user = await clerkClient.users.getUser(auth.userId);
+    if (!isAdminUser(user)) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    const data = await loadPermissionsData();
+    const users = data.users || {};
+    const updates = await Promise.allSettled(
+      Object.entries(users).map(async ([userId, entry]) => {
+        const groups = Array.isArray(entry?.groups) ? entry.groups : [];
+        const rank = extractRank(groups);
+        await clerkClient.users.updateUserMetadata(userId, {
+          publicMetadata: {
+            rank,
+          },
+        });
+        return { userId, rank };
+      }),
+    );
+
+    const synced = updates.filter((u) => u.status === "fulfilled").length;
+    const failed = updates.length - synced;
+    return res.json({ synced, failed });
+  } catch (error) {
+    console.error("Failed to sync ranks", error);
+    return res.status(500).json({ error: "Failed to sync ranks" });
+  }
+});
+
+app.get("/api/polls", async (req, res) => {
+  try {
+    const newsId = normalizeText(req.query.newsId, 200);
+    if (!newsId) {
+      return res.status(400).json({ error: "Invalid poll target" });
+    }
+    const data = await loadPollsData();
+    const poll = data.polls?.[newsId] || null;
+    if (!poll) {
+      return res.json({ poll: null });
+    }
+    const auth = getAuth(req);
+    const userId = auth?.userId || null;
+    const votesByUser = data.votes?.[newsId] || {};
+    const userVotes = userId ? votesByUser[userId] || [] : [];
+    const counts = poll.options.map((option) => ({
+      id: option.id,
+      text: option.text,
+      count: Object.values(votesByUser).filter((list) =>
+        Array.isArray(list) && list.includes(option.id),
+      ).length,
+    }));
+    const totalVotes = Object.keys(votesByUser).length;
+    return res.json({
+      poll: {
+        ...poll,
+        options: counts,
+        totalVotes,
+      },
+      voted: userVotes,
+    });
+  } catch (error) {
+    console.error("Failed to load poll", error);
+    return res.status(500).json({ error: "Failed to load poll" });
+  }
+});
+
+app.post("/api/polls/vote", async (req, res) => {
+  try {
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const newsId = normalizeText(req.body?.newsId, 200);
+    const optionIds = Array.isArray(req.body?.optionIds) ? req.body.optionIds : [];
+    if (!newsId || optionIds.length === 0) {
+      return res.status(400).json({ error: "Invalid vote" });
+    }
+
+    const data = await updatePollsData((draft) => {
+      const poll = draft.polls?.[newsId];
+      if (!poll) {
+        throw new Error("NOT_FOUND");
+      }
+      const validOptionIds = new Set(poll.options.map((option) => option.id));
+      const filtered = optionIds.filter((id) => validOptionIds.has(id));
+      if (filtered.length === 0) {
+        throw new Error("INVALID_OPTIONS");
+      }
+      if (!poll.multiple && filtered.length > 1) {
+        throw new Error("TOO_MANY");
+      }
+      draft.votes[newsId] = draft.votes[newsId] || {};
+      draft.votes[newsId][auth.userId] = filtered;
+      return draft;
+    });
+
+    const poll = data.polls?.[newsId] || null;
+    if (!poll) {
+      return res.status(404).json({ error: "Poll not found" });
+    }
+    const votesByUser = data.votes?.[newsId] || {};
+    const userVotes = votesByUser[auth.userId] || [];
+    const counts = poll.options.map((option) => ({
+      id: option.id,
+      text: option.text,
+      count: Object.values(votesByUser).filter((list) =>
+        Array.isArray(list) && list.includes(option.id),
+      ).length,
+    }));
+    const totalVotes = Object.keys(votesByUser).length;
+    return res.json({
+      poll: { ...poll, options: counts, totalVotes },
+      voted: userVotes,
+    });
+  } catch (error) {
+    if (error?.message === "NOT_FOUND") {
+      return res.status(404).json({ error: "Poll not found" });
+    }
+    if (error?.message === "TOO_MANY") {
+      return res.status(400).json({ error: "Only one choice allowed" });
+    }
+    if (error?.message === "INVALID_OPTIONS") {
+      return res.status(400).json({ error: "Invalid choices" });
+    }
+    console.error("Failed to vote", error);
+    return res.status(500).json({ error: "Failed to vote" });
   }
 });
 
@@ -364,6 +608,8 @@ app.post("/api/comments", async (req, res) => {
     }
 
     const user = await clerkClient.users.getUser(auth.userId);
+    const email = getUserEmail(user);
+    const rank = String(user?.publicMetadata?.rank || "Registered");
     const comment = {
       id: crypto.randomUUID(),
       newsId,
@@ -374,6 +620,8 @@ app.post("/api/comments", async (req, res) => {
       editCount: 0,
       authorName: user?.fullName || user?.username || "User",
       authorImage: user?.imageUrl || "",
+      authorEmail: email,
+      authorRank: rank,
       isDeleted: false,
     };
 
@@ -553,10 +801,10 @@ app.post("/api/news", async (req, res) => {
       return res.status(403).json({ error: "Not authorized" });
     }
 
-    const item = normalizeNewsItem(req.body);
-    if (!item) {
-      return res.status(400).json({ error: "Missing or invalid fields" });
-    }
+  const item = normalizeNewsItem(req.body);
+  if (!item) {
+    return res.status(400).json({ error: "Missing or invalid fields" });
+  }
 
     const adminUser = await getAdminUser();
     if (!adminUser) {
@@ -575,6 +823,22 @@ app.post("/api/news", async (req, res) => {
         news: nextNews,
       },
     });
+
+    const pollPayload = normalizePoll(req.body?.poll);
+    if (pollPayload) {
+      await updatePollsData((draft) => {
+        draft.polls[item.id] = {
+          id: crypto.randomUUID(),
+          newsId: item.id,
+          question: pollPayload.question,
+          multiple: pollPayload.multiple,
+          options: pollPayload.options,
+          createdAt: new Date().toISOString(),
+          createdBy: auth.userId,
+        };
+        return draft;
+      });
+    }
 
     return res.json({ news: nextNews });
   } catch (error) {
@@ -611,6 +875,16 @@ app.delete("/api/news/:id", async (req, res) => {
         ...adminUser.publicMetadata,
         news: nextNews,
       },
+    });
+
+    await updatePollsData((draft) => {
+      if (draft.polls?.[req.params.id]) {
+        delete draft.polls[req.params.id];
+      }
+      if (draft.votes?.[req.params.id]) {
+        delete draft.votes[req.params.id];
+      }
+      return draft;
     });
 
     return res.json({ news: nextNews });

@@ -47,7 +47,8 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.8";
+const VERSION = "1.3.10";
+const STAFF_EMAILS = new Set(["chashsmurfis@gmail.com", "hytaleserver@gmail.com"]);
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const INITIAL_LOADER_MIN_MS = 3200;
 const AUTH_TRANSITION_LOADER_MS = 850;
@@ -619,9 +620,116 @@ function NewsCard({ item, onDelete, onToggleFeatured, canDelete }) {
             ${item.featured ? "Remove featured" : "Feature this"}
           </button>`
         : html``}
+      <${PollPanel} newsId=${item.id} />
       <${ReactionBar} itemType="news" itemId=${item.id} />
       <${CommentThread} newsId=${item.id} />
     </article>
+  `;
+}
+
+function PollPanel({ newsId }) {
+  const { getToken, isSignedIn } = useAuth();
+  const { openSignIn } = useClerk();
+  const [poll, setPoll] = useState(null);
+  const [voted, setVoted] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [choice, setChoice] = useState([]);
+  const [status, setStatus] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    async function loadPoll() {
+      try {
+        const response = await fetch(`/api/polls?newsId=${encodeURIComponent(newsId)}`);
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!alive) return;
+        setPoll(data.poll);
+        setVoted(Array.isArray(data.voted) ? data.voted : []);
+        setChoice(Array.isArray(data.voted) ? data.voted : []);
+      } catch {}
+      if (alive) setLoading(false);
+    }
+    loadPoll();
+    return () => {
+      alive = false;
+    };
+  }, [newsId]);
+
+  if (loading || !poll) return null;
+
+  const hasVoted = voted.length > 0;
+  const totalVotes = poll.totalVotes || 0;
+
+  function toggleOption(id) {
+    if (poll.multiple) {
+      setChoice((prev) =>
+        prev.includes(id) ? prev.filter((entry) => entry !== id) : [...prev, id],
+      );
+    } else {
+      setChoice([id]);
+    }
+  }
+
+  async function submitVote() {
+    if (!isSignedIn) {
+      if (openSignIn) openSignIn({});
+      return;
+    }
+    if (!choice.length) {
+      setStatus("Select an option.");
+      return;
+    }
+    setStatus("Voting...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/polls/vote", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newsId, optionIds: choice }),
+      });
+      if (!response.ok) throw new Error("Vote failed");
+      const data = await response.json();
+      setPoll(data.poll);
+      setVoted(Array.isArray(data.voted) ? data.voted : []);
+      setChoice(Array.isArray(data.voted) ? data.voted : []);
+      setStatus("");
+    } catch {
+      setStatus("Vote failed.");
+    }
+  }
+
+  return html`
+    <div className="poll-panel">
+      <div className="poll-question">${poll.question}</div>
+      <div className="poll-options">
+        ${poll.options.map((option) => {
+          const isSelected = choice.includes(option.id);
+          const percent = totalVotes
+            ? Math.round((option.count / totalVotes) * 100)
+            : 0;
+          return html`<button
+            className=${`poll-option ${isSelected ? "selected" : ""} ${hasVoted ? "voted" : ""}`}
+            type="button"
+            onClick=${() => !hasVoted && toggleOption(option.id)}
+          >
+            <span className="poll-option-text">${option.text}</span>
+            ${hasVoted
+              ? html`<span className="poll-option-meta">${option.count} · ${percent}%</span>`
+              : html``}
+          </button>`;
+        })}
+      </div>
+      ${hasVoted
+        ? html`<div className="poll-footer muted">
+            ${totalVotes} vote${totalVotes === 1 ? "" : "s"}
+          </div>`
+        : html`<div className="poll-footer">
+            <button className="button primary" type="button" onClick=${submitVote}>
+              Vote
+            </button>
+            ${status ? html`<span className="muted">${status}</span>` : html``}
+          </div>`}
+    </div>
   `;
 }
 
@@ -816,6 +924,15 @@ function CommentThread({ newsId }) {
     }
   }, [open, newsId]);
 
+  function resolveRank(comment) {
+    const email = String(comment.authorEmail || "").toLowerCase();
+    if (STAFF_EMAILS.has(email)) {
+      return { label: "STAFF", staff: true };
+    }
+    const rank = comment.authorRank || "Registered";
+    return { label: rank, staff: false };
+  }
+
   async function submitComment(event) {
     event.preventDefault();
     if (!isSignedIn) return;
@@ -927,6 +1044,12 @@ function CommentThread({ newsId }) {
                     <div className="comment-body">
                       <div className="comment-meta">
                         <span className="comment-author">${comment.authorName}</span>
+                        ${(() => {
+                          const rank = resolveRank(comment);
+                          return html`<span className=${`comment-rank ${rank.staff ? "staff" : ""}`}>
+                            ${rank.label}
+                          </span>`;
+                        })()}
                         <span className="comment-time">${formatTimestamp(comment.createdAt)}</span>
                         ${comment.editCount > 0
                           ? html`<button
@@ -1038,6 +1161,10 @@ function AdminPanel({
   const [newsStatus, setNewsStatus] = useState("");
   const [authorMode, setAuthorMode] = useState("system");
   const [newsFeatured, setNewsFeatured] = useState(false);
+  const [pollEnabled, setPollEnabled] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState("");
+  const [pollMultiple, setPollMultiple] = useState(false);
+  const [pollOptions, setPollOptions] = useState(["", "", "", ""]);
   const [notificationTitle, setNotificationTitle] = useState("");
   const [notificationMessage, setNotificationMessage] = useState("");
   const [notificationFeatured, setNotificationFeatured] = useState(false);
@@ -1054,6 +1181,19 @@ function AdminPanel({
     setNewsStatus("Posting...");
 
     try {
+      let poll = null;
+      if (pollEnabled) {
+        const cleaned = pollOptions.map((option) => option.trim()).filter(Boolean);
+        if (!pollQuestion.trim() || cleaned.length < 2) {
+          setNewsStatus("Poll needs a question and at least 2 options.");
+          return;
+        }
+        poll = {
+          question: pollQuestion.trim(),
+          multiple: pollMultiple,
+          options: cleaned.slice(0, 4),
+        };
+      }
       const token = await getToken();
       const response = await fetch("/api/news", {
         method: "POST",
@@ -1068,6 +1208,7 @@ function AdminPanel({
           readMoreUrl: newsReadMoreUrl,
           imageUrl: newsImageUrl,
           featured: newsFeatured,
+          poll,
         }),
       });
 
@@ -1082,6 +1223,10 @@ function AdminPanel({
       setNewsReadMoreUrl("");
       setNewsImageUrl("");
       setNewsFeatured(false);
+      setPollEnabled(false);
+      setPollQuestion("");
+      setPollMultiple(false);
+      setPollOptions(["", "", "", ""]);
       setNewsStatus("Posted!");
     } catch (err) {
       setNewsStatus("Failed to post news.");
@@ -1217,6 +1362,44 @@ function AdminPanel({
         value=${newsImageUrl}
         onInput=${(event) => setNewsImageUrl(event.target.value)}
       />
+      <label className="settings-row inline">
+        <span>Add poll</span>
+        <input
+          type="checkbox"
+          checked=${pollEnabled}
+          onChange=${(event) => setPollEnabled(event.target.checked)}
+        />
+      </label>
+      ${pollEnabled
+        ? html`<div className="poll-admin">
+            <input
+              placeholder="Poll question"
+              value=${pollQuestion}
+              onInput=${(event) => setPollQuestion(event.target.value)}
+            />
+            ${pollOptions.map(
+              (option, index) => html`<input
+                key=${`poll-${index}`}
+                placeholder=${`Option ${index + 1}`}
+                value=${option}
+                onInput=${(event) =>
+                  setPollOptions((prev) => {
+                    const next = [...prev];
+                    next[index] = event.target.value;
+                    return next;
+                  })}
+              />`,
+            )}
+            <label className="settings-row inline">
+              <span>Multi-choice</span>
+              <input
+                type="checkbox"
+                checked=${pollMultiple}
+                onChange=${(event) => setPollMultiple(event.target.checked)}
+              />
+            </label>
+          </div>`
+        : html``}
       <button className="button primary" type="submit">Post News</button>
       <div className="muted">${newsStatus}</div>
     </form>
