@@ -1235,6 +1235,13 @@ body[data-theme="light"] .button.primary {
   font-weight: 500;
 }
 
+.author-name.staff {
+  background-image: linear-gradient(90deg, var(--accent), var(--accent-2));
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 .news-toggle {
   justify-self: start;
 }

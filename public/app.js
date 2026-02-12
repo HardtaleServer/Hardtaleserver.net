@@ -583,6 +583,11 @@ function formatTimestamp(value) {
   });
 }
 
+function isStaffLabel(label = "") {
+  const text = String(label || "").toLowerCase();
+  return text.includes("smurfis") || text.includes("hardtale");
+}
+
 async function apiFetchWithToken(getToken, isSignedIn, url, options = {}) {
   const headers = { ...(options.headers || {}) };
   if (isSignedIn && getToken) {
@@ -614,7 +619,10 @@ function NewsCard({ item, onDelete, onToggleFeatured, canDelete }) {
       </div>
       <p>${item.description}</p>
       <div className="news-meta">
-        <span>By ${item.author} · ${formatTimestamp(item.createdAt)}</span>
+        <span>
+          By <span className=${`author-name ${isStaffLabel(item.author) ? "staff" : ""}`}>${item.author}</span>
+          · ${formatTimestamp(item.createdAt)}
+        </span>
         ${item.readMoreUrl
           ? html`<a href=${item.readMoreUrl} target="_blank" rel="noreferrer">
               Read me
@@ -1541,7 +1549,9 @@ function AdminPanel({
                 </div>
                 <p>${item.message}</p>
                 <div className="news-meta">
-                  <span>By ${item.author}</span>
+                  <span>
+                    By <span className=${`author-name ${isStaffLabel(item.author) ? "staff" : ""}`}>${item.author}</span>
+                  </span>
                   <span className="notification-timestamp">
                     ${formatTimestamp(item.createdAt)}
                   </span>
