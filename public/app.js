@@ -1,4 +1,4 @@
-﻿﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import htm from "htm";
 import HardtaleLoader from "./components/HardtaleLoader.js";
@@ -110,7 +110,7 @@ const CHANGELOG_ENTRIES = [
     version: "1.3.17",
     date: "2026-02-13",
     items: [
-      "Moved 404 admin tools into an admin-only modal and added /panel console command support.",
+      "Moved 404 tools into a redacted modal and added /panel console command support.",
       "Made public News feed user-facing only and consolidated news/notification management inside the admin panel.",
       "Migrated reactions, news, notifications, and carts to Mongo-backed APIs.",
       "Added server-side cart checkout that awards highest purchased rank (Hero/Legend/Mythic) and updates comment rank tags.",
@@ -661,7 +661,7 @@ function NewsCard({ item }) {
         : html``}
       <div className="news-header">
         <div className="news-title-row">
-          ${item.featured ? html`<span className="news-star" title="Featured">★</span>` : html``}
+          ${item.featured ? html`<span className="news-star" title="Featured">?</span>` : html``}
           <h3>${item.title}</h3>
         </div>
       </div>
@@ -1093,7 +1093,7 @@ function CommentThread({ newsId }) {
     <div className="comment-thread">
       <button className="comment-toggle" type="button" onClick=${() => setOpen(!open)}>
         Comments (${commentCount})
-        <span className="comment-toggle-arrow">${open ? "▲" : "▼"}</span>
+        <span className="comment-toggle-arrow">${open ? "?" : "?"}</span>
       </button>
       ${open
         ? html`<div className="comment-panel">
@@ -1157,7 +1157,7 @@ function CommentThread({ newsId }) {
                                 onClick=${() => openHistory(comment.id)}
                                 title="View edits"
                               >
-                                ✎ ${comment.editCount}
+                                ? ${comment.editCount}
                               </button>`
                             : html``}
                           ${comment.editCount > 0
@@ -1627,7 +1627,7 @@ function AdminPanel({
                 <div className="news-header">
                   <div className="news-title-row">
                     ${item.featured
-                      ? html`<span className="news-star" title="Featured">★</span>`
+                      ? html`<span className="news-star" title="Featured">?</span>`
                       : html``}
                     <h3>${item.title}</h3>
                   </div>
@@ -1686,7 +1686,7 @@ function AdminPanel({
                 <div className="news-header">
                   <div className="news-title-row">
                     ${item.featured
-                      ? html`<span className="news-star" title="Featured">★</span>`
+                      ? html`<span className="news-star" title="Featured">?</span>`
                       : html``}
                     <h3>${item.title}</h3>
                   </div>
@@ -2652,7 +2652,7 @@ function NotificationsPanel({ notifications }) {
       ${notifications.map(
         (item) => html`<div key=${item.id} className="notif-card">
           <div className="notif-title">
-            ${item.featured ? html`<span className="news-star mini" title="Featured">★</span>` : html``}
+            ${item.featured ? html`<span className="news-star mini" title="Featured">?</span>` : html``}
             ${item.title}
           </div>
           <div className="notif-body">${item.message}</div>
@@ -2767,7 +2767,7 @@ function HomePage({
                 ${news.slice(0, 3).map(
                   (item) => html`<div key=${item.id} className="news-mini-row">
                     <div className="news-mini-title">
-                      ${item.featured ? html`<span className="news-star mini" title="Featured">★</span>` : html``}
+                      ${item.featured ? html`<span className="news-star mini" title="Featured">?</span>` : html``}
                       ${item.title}
                     </div>
                     <div className="news-mini-meta">
@@ -3578,7 +3578,7 @@ function Layout() {
                       aria-label="Close menu"
                       onClick=${() => setShowMobileNav(false)}
                     >
-                      ✕
+                      ?
                     </button>
                     <${SignedIn}>
                 <${SettingsMenu}
@@ -3647,7 +3647,7 @@ function Layout() {
                       aria-label="Close menu"
                       onClick=${() => setShowMobileNav(false)}
                     >
-                      ✕
+                      ?
                     </button>
                   `}
             </div>
@@ -3819,3 +3819,4 @@ root.render(
     <${App} />
   <//>`
 );
+
