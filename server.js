@@ -67,6 +67,9 @@ let mongoClient = null;
 let mongoDb = null;
 let commentsCollection = null;
 let commentRevisionsCollection = null;
+let reactionsCollection = null;
+let newsCollection = null;
+let notificationsCollection = null;
 let mongoConnectInFlight = null;
 let mongoReconnectTimer = null;
 let mongoReconnectDelayMs = 1000;
@@ -77,6 +80,9 @@ function resetMongoState() {
   mongoDb = null;
   commentsCollection = null;
   commentRevisionsCollection = null;
+  reactionsCollection = null;
+  newsCollection = null;
+  notificationsCollection = null;
   mongoConnectInFlight = null;
 }
 
@@ -99,7 +105,15 @@ async function connectMongo() {
     console.warn("MONGO_URI is not set. Comments will not persist.");
     return;
   }
-  if (commentsCollection && commentRevisionsCollection) return;
+  if (
+    commentsCollection &&
+    commentRevisionsCollection &&
+    reactionsCollection &&
+    newsCollection &&
+    notificationsCollection
+  ) {
+    return;
+  }
   if (mongoConnectInFlight) {
     await mongoConnectInFlight;
     return;
@@ -120,9 +134,19 @@ async function connectMongo() {
       mongoDb = mongoClient.db(MONGO_DB_NAME);
       commentsCollection = mongoDb.collection("comments");
       commentRevisionsCollection = mongoDb.collection("comment_revisions");
+      reactionsCollection = mongoDb.collection("reactions");
+      newsCollection = mongoDb.collection("news");
+      notificationsCollection = mongoDb.collection("notifications");
       await commentsCollection.createIndex({ newsId: 1, createdAt: 1 });
       await commentsCollection.createIndex({ userId: 1 });
       await commentRevisionsCollection.createIndex({ commentId: 1, createdAt: 1 });
+      await reactionsCollection.createIndex({ itemType: 1, itemId: 1, emoji: 1, userId: 1 }, { unique: true });
+      await reactionsCollection.createIndex({ itemType: 1, itemId: 1 });
+      await reactionsCollection.createIndex({ itemType: 1, itemId: 1, userId: 1 });
+      await newsCollection.createIndex({ id: 1 }, { unique: true });
+      await newsCollection.createIndex({ isDeleted: 1, createdAt: -1 });
+      await notificationsCollection.createIndex({ id: 1 }, { unique: true });
+      await notificationsCollection.createIndex({ isDeleted: 1, createdAt: -1 });
       mongoReconnectDelayMs = 1000;
       console.log("Connected to MongoDB");
     } catch (error) {
@@ -157,6 +181,27 @@ function normalizeCommentList(list = []) {
   return list.map(normalizeComment).filter(Boolean);
 }
 
+function stripMongoId(doc) {
+  if (!doc) return null;
+  const { _id, ...rest } = doc;
+  return rest;
+}
+
+function stripMongoIdList(list = []) {
+  return list.map(stripMongoId).filter(Boolean);
+}
+
+async function pruneCollection(collection, maxItems) {
+  const overflow = await collection
+    .find({ isDeleted: false })
+    .sort({ createdAt: -1 })
+    .skip(maxItems)
+    .project({ _id: 1 })
+    .toArray();
+  if (!overflow.length) return;
+  await collection.deleteMany({ _id: { $in: overflow.map((entry) => entry._id) } });
+}
+
 function requireMongo(res) {
   if (!MONGO_URI) {
     res.status(500).json({ error: "Database not configured" });
@@ -167,14 +212,27 @@ function requireMongo(res) {
 
 async function requireMongoReady(res) {
   if (!requireMongo(res)) return false;
-  if (!commentsCollection || !commentRevisionsCollection) {
+  if (
+    !commentsCollection ||
+    !commentRevisionsCollection ||
+    !reactionsCollection ||
+    !newsCollection ||
+    !notificationsCollection
+  ) {
     try {
       await connectMongo();
     } catch {
       // connectMongo already logs details and schedules a retry.
     }
   }
-  if (!mongoClient || !commentsCollection || !commentRevisionsCollection) {
+  if (
+    !mongoClient ||
+    !commentsCollection ||
+    !commentRevisionsCollection ||
+    !reactionsCollection ||
+    !newsCollection ||
+    !notificationsCollection
+  ) {
     res.status(503).json({
       error: "Database not connected",
       detail: "MongoDB connection is not ready. Check MONGO_URI and network access.",
@@ -427,16 +485,12 @@ app.get("/api/me", async (req, res) => {
 
 app.get("/api/news", async (req, res) => {
   try {
-    const adminUser = await getAdminUser();
-    if (!adminUser) {
-      return res.json({ news: [] });
-    }
-
-    const news = Array.isArray(adminUser.publicMetadata?.news)
-      ? adminUser.publicMetadata.news
-      : [];
-
-    return res.json({ news });
+    if (!(await requireMongoReady(res))) return;
+    const news = await newsCollection
+      .find({ isDeleted: false })
+      .sort({ createdAt: -1 })
+      .toArray();
+    return res.json({ news: stripMongoIdList(news) });
   } catch (error) {
     console.error("Failed to load news", error);
     return res.status(500).json({ error: "Failed to load news" });
@@ -445,16 +499,12 @@ app.get("/api/news", async (req, res) => {
 
 app.get("/api/notifications", async (req, res) => {
   try {
-    const adminUser = await getAdminUser();
-    if (!adminUser) {
-      return res.json({ notifications: [] });
-    }
-
-    const notifications = Array.isArray(adminUser.publicMetadata?.notifications)
-      ? adminUser.publicMetadata.notifications
-      : [];
-
-    return res.json({ notifications });
+    if (!(await requireMongoReady(res))) return;
+    const notifications = await notificationsCollection
+      .find({ isDeleted: false })
+      .sort({ createdAt: -1 })
+      .toArray();
+    return res.json({ notifications: stripMongoIdList(notifications) });
   } catch (error) {
     console.error("Failed to load notifications", error);
     return res.status(500).json({ error: "Failed to load notifications" });
@@ -612,6 +662,7 @@ app.post("/api/polls/vote", async (req, res) => {
 
 app.get("/api/reactions", async (req, res) => {
   try {
+    if (!(await requireMongoReady(res))) return;
     const itemType = normalizeText(req.query.type, 20);
     const itemId = normalizeText(req.query.id, 200);
     if (!["news", "changelog"].includes(itemType) || !itemId) {
@@ -620,15 +671,21 @@ app.get("/api/reactions", async (req, res) => {
 
     const auth = getAuth(req);
     const userId = auth?.userId || null;
-    const data = await loadCommunityData();
-    const itemReactions = data.reactions?.[itemType]?.[itemId] || {};
+    const docs = await reactionsCollection
+      .find({ itemType, itemId })
+      .project({ emoji: 1, userId: 1 })
+      .toArray();
 
-    const reactions = Object.entries(itemReactions)
-      .map(([emoji, users]) => ({
-        emoji,
-        count: Array.isArray(users) ? users.length : 0,
-        reactedByMe: userId ? Array.isArray(users) && users.includes(userId) : false,
-      }))
+    const byEmoji = new Map();
+    for (const doc of docs) {
+      const key = doc.emoji;
+      const current = byEmoji.get(key) || { emoji: key, count: 0, reactedByMe: false };
+      current.count += 1;
+      if (userId && doc.userId === userId) current.reactedByMe = true;
+      byEmoji.set(key, current);
+    }
+
+    const reactions = Array.from(byEmoji.values())
       .filter((entry) => entry.count > 0)
       .sort((a, b) => b.count - a.count);
 
@@ -641,6 +698,7 @@ app.get("/api/reactions", async (req, res) => {
 
 app.post("/api/reactions", async (req, res) => {
   try {
+    if (!(await requireMongoReady(res))) return;
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
 
@@ -652,42 +710,41 @@ app.post("/api/reactions", async (req, res) => {
     }
 
     const userId = auth.userId;
-
-    const data = await updateCommunityData((draft) => {
-      const reactionsRoot = draft.reactions[itemType] || {};
-      const itemReactions = reactionsRoot[itemId] || {};
-      const users = Array.isArray(itemReactions[emoji]) ? itemReactions[emoji] : [];
-      const hasReacted = users.includes(userId);
-
-      if (!hasReacted) {
-        const userReactionsCount = Object.values(itemReactions).filter((list) =>
-          Array.isArray(list) && list.includes(userId),
-        ).length;
-        if (userReactionsCount >= 2) {
-          throw new Error("MAX_REACTIONS");
-        }
-        itemReactions[emoji] = [...users, userId];
-      } else {
-        const nextUsers = users.filter((id) => id !== userId);
-        if (nextUsers.length === 0) {
-          delete itemReactions[emoji];
-        } else {
-          itemReactions[emoji] = nextUsers;
-        }
+    const existing = await reactionsCollection.findOne({ itemType, itemId, emoji, userId });
+    if (existing) {
+      await reactionsCollection.deleteOne({ _id: existing._id });
+    } else {
+      const userReactionsCount = await reactionsCollection.countDocuments({
+        itemType,
+        itemId,
+        userId,
+      });
+      if (userReactionsCount >= 2) {
+        throw new Error("MAX_REACTIONS");
       }
+      await reactionsCollection.insertOne({
+        itemType,
+        itemId,
+        emoji,
+        userId,
+        createdAt: new Date(),
+      });
+    }
 
-      reactionsRoot[itemId] = itemReactions;
-      draft.reactions[itemType] = reactionsRoot;
-      return draft;
-    });
+    const docs = await reactionsCollection
+      .find({ itemType, itemId })
+      .project({ emoji: 1, userId: 1 })
+      .toArray();
+    const byEmoji = new Map();
+    for (const doc of docs) {
+      const key = doc.emoji;
+      const current = byEmoji.get(key) || { emoji: key, count: 0, reactedByMe: false };
+      current.count += 1;
+      if (doc.userId === userId) current.reactedByMe = true;
+      byEmoji.set(key, current);
+    }
 
-    const itemReactions = data.reactions?.[itemType]?.[itemId] || {};
-    const reactions = Object.entries(itemReactions)
-      .map(([entryEmoji, users]) => ({
-        emoji: entryEmoji,
-        count: Array.isArray(users) ? users.length : 0,
-        reactedByMe: Array.isArray(users) && users.includes(userId),
-      }))
+    const reactions = Array.from(byEmoji.values())
       .filter((entry) => entry.count > 0)
       .sort((a, b) => b.count - a.count);
 
@@ -921,6 +978,7 @@ app.get("/api/comments/:id/history", async (req, res) => {
 
 app.post("/api/news", async (req, res) => {
   try {
+    if (!(await requireMongoReady(res))) return;
     const auth = getAuth(req);
     if (!auth?.userId) {
       return res.status(401).json({ error: "Not authenticated" });
@@ -931,28 +989,17 @@ app.post("/api/news", async (req, res) => {
       return res.status(403).json({ error: "Not authorized" });
     }
 
-  const item = normalizeNewsItem(req.body);
-  if (!item) {
-    return res.status(400).json({ error: "Missing or invalid fields" });
-  }
-
-    const adminUser = await getAdminUser();
-    if (!adminUser) {
-      return res.status(404).json({ error: "Admin user not found" });
+    const item = normalizeNewsItem(req.body);
+    if (!item) {
+      return res.status(400).json({ error: "Missing or invalid fields" });
     }
 
-    const existing = Array.isArray(adminUser.publicMetadata?.news)
-      ? adminUser.publicMetadata.news
-      : [];
-
-    const nextNews = [item, ...existing].slice(0, 20);
-
-    await clerkClient.users.updateUserMetadata(adminUser.id, {
-      publicMetadata: {
-        ...adminUser.publicMetadata,
-        news: nextNews,
-      },
+    await newsCollection.insertOne({
+      ...item,
+      isDeleted: false,
+      updatedAt: new Date().toISOString(),
     });
+    await pruneCollection(newsCollection, 20);
 
     const pollPayload = normalizePoll(req.body?.poll);
     if (pollPayload) {
@@ -970,7 +1017,11 @@ app.post("/api/news", async (req, res) => {
       });
     }
 
-    return res.json({ news: nextNews });
+    const nextNews = await newsCollection
+      .find({ isDeleted: false })
+      .sort({ createdAt: -1 })
+      .toArray();
+    return res.json({ news: stripMongoIdList(nextNews) });
   } catch (error) {
     console.error("Failed to update news", error);
     return res.status(500).json({ error: "Failed to update news" });
@@ -979,6 +1030,7 @@ app.post("/api/news", async (req, res) => {
 
 app.delete("/api/news/:id", async (req, res) => {
   try {
+    if (!(await requireMongoReady(res))) return;
     const auth = getAuth(req);
     if (!auth?.userId) {
       return res.status(401).json({ error: "Not authenticated" });
@@ -989,23 +1041,16 @@ app.delete("/api/news/:id", async (req, res) => {
       return res.status(403).json({ error: "Not authorized" });
     }
 
-    const adminUser = await getAdminUser();
-    if (!adminUser) {
-      return res.status(404).json({ error: "Admin user not found" });
+    const hardDelete = String(req.query.hard || req.body?.hard || "").toLowerCase();
+    const shouldHardDelete = hardDelete === "1" || hardDelete === "true" || hardDelete === "yes";
+    if (shouldHardDelete) {
+      await newsCollection.deleteOne({ id: req.params.id });
+    } else {
+      await newsCollection.updateOne(
+        { id: req.params.id },
+        { $set: { isDeleted: true, updatedAt: new Date().toISOString() } },
+      );
     }
-
-    const existing = Array.isArray(adminUser.publicMetadata?.news)
-      ? adminUser.publicMetadata.news
-      : [];
-
-    const nextNews = existing.filter((item) => item.id !== req.params.id);
-
-    await clerkClient.users.updateUserMetadata(adminUser.id, {
-      publicMetadata: {
-        ...adminUser.publicMetadata,
-        news: nextNews,
-      },
-    });
 
     await updatePollsData((draft) => {
       if (draft.polls?.[req.params.id]) {
@@ -1017,7 +1062,11 @@ app.delete("/api/news/:id", async (req, res) => {
       return draft;
     });
 
-    return res.json({ news: nextNews });
+    const nextNews = await newsCollection
+      .find({ isDeleted: false })
+      .sort({ createdAt: -1 })
+      .toArray();
+    return res.json({ news: stripMongoIdList(nextNews) });
   } catch (error) {
     console.error("Failed to delete news", error);
     return res.status(500).json({ error: "Failed to delete news" });
@@ -1026,6 +1075,7 @@ app.delete("/api/news/:id", async (req, res) => {
 
 app.patch("/api/news/:id", async (req, res) => {
   try {
+    if (!(await requireMongoReady(res))) return;
     const auth = getAuth(req);
     if (!auth?.userId) {
       return res.status(401).json({ error: "Not authenticated" });
@@ -1036,31 +1086,15 @@ app.patch("/api/news/:id", async (req, res) => {
       return res.status(403).json({ error: "Not authorized" });
     }
 
-    const adminUser = await getAdminUser();
-    if (!adminUser) {
-      return res.status(404).json({ error: "Admin user not found" });
-    }
-
-    const existing = Array.isArray(adminUser.publicMetadata?.news)
-      ? adminUser.publicMetadata.news
-      : [];
-
-    const nextNews = existing.map((item) => {
-      if (item.id !== req.params.id) return item;
-      return {
-        ...item,
-        featured: Boolean(req.body?.featured),
-      };
-    });
-
-    await clerkClient.users.updateUserMetadata(adminUser.id, {
-      publicMetadata: {
-        ...adminUser.publicMetadata,
-        news: nextNews,
-      },
-    });
-
-    return res.json({ news: nextNews });
+    await newsCollection.updateOne(
+      { id: req.params.id, isDeleted: false },
+      { $set: { featured: Boolean(req.body?.featured), updatedAt: new Date().toISOString() } },
+    );
+    const nextNews = await newsCollection
+      .find({ isDeleted: false })
+      .sort({ createdAt: -1 })
+      .toArray();
+    return res.json({ news: stripMongoIdList(nextNews) });
   } catch (error) {
     console.error("Failed to update news", error);
     return res.status(500).json({ error: "Failed to update news" });
@@ -1069,6 +1103,7 @@ app.patch("/api/news/:id", async (req, res) => {
 
 app.post("/api/notifications", async (req, res) => {
   try {
+    if (!(await requireMongoReady(res))) return;
     const auth = getAuth(req);
     if (!auth?.userId) {
       return res.status(401).json({ error: "Not authenticated" });
@@ -1084,24 +1119,18 @@ app.post("/api/notifications", async (req, res) => {
       return res.status(400).json({ error: "Missing or invalid fields" });
     }
 
-    const adminUser = await getAdminUser();
-    if (!adminUser) {
-      return res.status(404).json({ error: "Admin user not found" });
-    }
-
-    const existing = Array.isArray(adminUser.publicMetadata?.notifications)
-      ? adminUser.publicMetadata.notifications
-      : [];
-    const nextNotifications = [item, ...existing].slice(0, 60);
-
-    await clerkClient.users.updateUserMetadata(adminUser.id, {
-      publicMetadata: {
-        ...adminUser.publicMetadata,
-        notifications: nextNotifications,
-      },
+    await notificationsCollection.insertOne({
+      ...item,
+      isDeleted: false,
+      updatedAt: new Date().toISOString(),
     });
+    await pruneCollection(notificationsCollection, 60);
 
-    return res.json({ notifications: nextNotifications });
+    const nextNotifications = await notificationsCollection
+      .find({ isDeleted: false })
+      .sort({ createdAt: -1 })
+      .toArray();
+    return res.json({ notifications: stripMongoIdList(nextNotifications) });
   } catch (error) {
     console.error("Failed to create notification", error);
     return res.status(500).json({ error: "Failed to create notification" });
@@ -1110,6 +1139,7 @@ app.post("/api/notifications", async (req, res) => {
 
 app.patch("/api/notifications/:id", async (req, res) => {
   try {
+    if (!(await requireMongoReady(res))) return;
     const auth = getAuth(req);
     if (!auth?.userId) {
       return res.status(401).json({ error: "Not authenticated" });
@@ -1120,31 +1150,15 @@ app.patch("/api/notifications/:id", async (req, res) => {
       return res.status(403).json({ error: "Not authorized" });
     }
 
-    const adminUser = await getAdminUser();
-    if (!adminUser) {
-      return res.status(404).json({ error: "Admin user not found" });
-    }
-
-    const existing = Array.isArray(adminUser.publicMetadata?.notifications)
-      ? adminUser.publicMetadata.notifications
-      : [];
-
-    const nextNotifications = existing.map((item) => {
-      if (item.id !== req.params.id) return item;
-      return {
-        ...item,
-        featured: Boolean(req.body?.featured),
-      };
-    });
-
-    await clerkClient.users.updateUserMetadata(adminUser.id, {
-      publicMetadata: {
-        ...adminUser.publicMetadata,
-        notifications: nextNotifications,
-      },
-    });
-
-    return res.json({ notifications: nextNotifications });
+    await notificationsCollection.updateOne(
+      { id: req.params.id, isDeleted: false },
+      { $set: { featured: Boolean(req.body?.featured), updatedAt: new Date().toISOString() } },
+    );
+    const nextNotifications = await notificationsCollection
+      .find({ isDeleted: false })
+      .sort({ createdAt: -1 })
+      .toArray();
+    return res.json({ notifications: stripMongoIdList(nextNotifications) });
   } catch (error) {
     console.error("Failed to update notification", error);
     return res.status(500).json({ error: "Failed to update notification" });
@@ -1153,6 +1167,7 @@ app.patch("/api/notifications/:id", async (req, res) => {
 
 app.delete("/api/notifications/:id", async (req, res) => {
   try {
+    if (!(await requireMongoReady(res))) return;
     const auth = getAuth(req);
     if (!auth?.userId) {
       return res.status(401).json({ error: "Not authenticated" });
@@ -1163,24 +1178,22 @@ app.delete("/api/notifications/:id", async (req, res) => {
       return res.status(403).json({ error: "Not authorized" });
     }
 
-    const adminUser = await getAdminUser();
-    if (!adminUser) {
-      return res.status(404).json({ error: "Admin user not found" });
+    const hardDelete = String(req.query.hard || req.body?.hard || "").toLowerCase();
+    const shouldHardDelete = hardDelete === "1" || hardDelete === "true" || hardDelete === "yes";
+    if (shouldHardDelete) {
+      await notificationsCollection.deleteOne({ id: req.params.id });
+    } else {
+      await notificationsCollection.updateOne(
+        { id: req.params.id },
+        { $set: { isDeleted: true, updatedAt: new Date().toISOString() } },
+      );
     }
 
-    const existing = Array.isArray(adminUser.publicMetadata?.notifications)
-      ? adminUser.publicMetadata.notifications
-      : [];
-    const nextNotifications = existing.filter((item) => item.id !== req.params.id);
-
-    await clerkClient.users.updateUserMetadata(adminUser.id, {
-      publicMetadata: {
-        ...adminUser.publicMetadata,
-        notifications: nextNotifications,
-      },
-    });
-
-    return res.json({ notifications: nextNotifications });
+    const nextNotifications = await notificationsCollection
+      .find({ isDeleted: false })
+      .sort({ createdAt: -1 })
+      .toArray();
+    return res.json({ notifications: stripMongoIdList(nextNotifications) });
   } catch (error) {
     console.error("Failed to delete notification", error);
     return res.status(500).json({ error: "Failed to delete notification" });
