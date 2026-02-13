@@ -5,7 +5,7 @@ import { fileURLToPath } from "url";
 import crypto from "crypto";
 import fs from "fs/promises";
 import { clerkMiddleware, getAuth, clerkClient } from "@clerk/express";
-import mongoose from "mongoose";
+import { MongoClient, ServerApiVersion, ObjectId } from "mongodb";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -40,6 +40,7 @@ const POLLS_FILE = "polls.json";
 const PERMISSIONS_FILE = "permissions.json";
 const RANK_PRIORITY = ["Mythic", "Legend", "Hero", "Registered", "Unregistered"];
 const MONGO_URI = process.env.MONGO_URI || "";
+const MONGO_DB_NAME = process.env.MONGO_DB || "hardtaledb";
 
 app.use(express.json({ limit: "100kb" }));
 app.use("/api", clerkMiddleware());
@@ -62,74 +63,44 @@ const EMPTY_POLLS_DATA = {
   votes: {},
 };
 
-mongoose.set("strictQuery", true);
-if (!MONGO_URI) {
-  console.warn("MONGO_URI is not set. Comments will not persist.");
-} else {
-  mongoose
-    .connect(MONGO_URI)
-    .then(() => {
-      console.log("Connected to MongoDB");
-    })
-    .catch((error) => {
-      console.error("Failed to connect to MongoDB", error);
-    });
+let mongoClient = null;
+let mongoDb = null;
+let commentsCollection = null;
+let commentRevisionsCollection = null;
+
+async function connectMongo() {
+  if (!MONGO_URI) {
+    console.warn("MONGO_URI is not set. Comments will not persist.");
+    return;
+  }
+  if (mongoClient) return;
+  mongoClient = new MongoClient(MONGO_URI, {
+    serverApi: {
+      version: ServerApiVersion.v1,
+      strict: true,
+      deprecationErrors: true,
+    },
+  });
+  try {
+    await mongoClient.connect();
+    mongoDb = mongoClient.db(MONGO_DB_NAME);
+    commentsCollection = mongoDb.collection("comments");
+    commentRevisionsCollection = mongoDb.collection("comment_revisions");
+    await commentsCollection.createIndex({ newsId: 1, createdAt: 1 });
+    await commentsCollection.createIndex({ userId: 1 });
+    await commentRevisionsCollection.createIndex({ commentId: 1, createdAt: 1 });
+    console.log("Connected to MongoDB");
+  } catch (error) {
+    console.error("Failed to connect to MongoDB", error);
+  }
 }
 
-const replySchema = new mongoose.Schema(
-  {
-    id: { type: String, required: true },
-    userId: { type: String, required: true },
-    body: { type: String, required: true },
-    createdAt: { type: Date, required: true },
-    authorName: { type: String, required: true },
-    authorImage: { type: String, default: "" },
-    authorEmail: { type: String, default: "" },
-    authorRank: { type: String, default: "Registered" },
-  },
-  { _id: false },
-);
-
-const commentSchema = new mongoose.Schema(
-  {
-    newsId: { type: String, required: true, index: true },
-    userId: { type: String, required: true, index: true },
-    body: { type: String, required: true },
-    editCount: { type: Number, default: 0 },
-    authorName: { type: String, required: true },
-    authorImage: { type: String, default: "" },
-    authorEmail: { type: String, default: "" },
-    authorRank: { type: String, default: "Registered" },
-    replies: { type: [replySchema], default: [] },
-    isDeleted: { type: Boolean, default: false },
-  },
-  { timestamps: { createdAt: "createdAt", updatedAt: "updatedAt" } },
-);
-
-const commentRevisionSchema = new mongoose.Schema(
-  {
-    commentId: { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
-    editedBy: { type: String, required: true },
-    oldBody: { type: String, required: true },
-    newBody: { type: String, required: true },
-    editorName: { type: String, required: true },
-    editorImage: { type: String, default: "" },
-    createdAt: { type: Date, required: true },
-  },
-  { versionKey: false },
-);
-
-const Comment = mongoose.models.Comment || mongoose.model("Comment", commentSchema);
-const CommentRevision =
-  mongoose.models.CommentRevision || mongoose.model("CommentRevision", commentRevisionSchema);
+connectMongo();
 
 function normalizeComment(doc) {
   if (!doc) return null;
-  const plain = doc.toObject ? doc.toObject() : doc;
-  return {
-    ...plain,
-    id: plain._id ? String(plain._id) : plain.id,
-  };
+  const { _id, ...rest } = doc;
+  return { ...rest, id: _id ? String(_id) : doc.id };
 }
 
 function normalizeCommentList(list = []) {
@@ -146,7 +117,7 @@ function requireMongo(res) {
 
 function requireMongoReady(res) {
   if (!requireMongo(res)) return false;
-  if (mongoose.connection.readyState !== 1) {
+  if (!mongoClient || !commentsCollection || !commentRevisionsCollection) {
     res.status(503).json({
       error: "Database not connected",
       detail: "MongoDB connection is not ready. Check MONGO_URI and network access.",
@@ -680,9 +651,10 @@ app.get("/api/comments", async (req, res) => {
     if (!newsId) {
       return res.status(400).json({ error: "Invalid news id" });
     }
-    const comments = await Comment.find({ newsId, isDeleted: false })
+    const comments = await commentsCollection
+      .find({ newsId, isDeleted: false })
       .sort({ createdAt: 1 })
-      .lean();
+      .toArray();
     return res.json({
       newsId,
       comments: normalizeCommentList(comments),
@@ -707,7 +679,7 @@ app.post("/api/comments", async (req, res) => {
     const user = await clerkClient.users.getUser(auth.userId);
     const email = getUserEmail(user);
     const rank = String(user?.publicMetadata?.rank || "Registered");
-    await Comment.create({
+    await commentsCollection.insertOne({
       newsId,
       userId: auth.userId,
       body,
@@ -718,11 +690,14 @@ app.post("/api/comments", async (req, res) => {
       authorRank: rank,
       replies: [],
       isDeleted: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     });
 
-    const comments = await Comment.find({ newsId, isDeleted: false })
+    const comments = await commentsCollection
+      .find({ newsId, isDeleted: false })
       .sort({ createdAt: 1 })
-      .lean();
+      .toArray();
 
     return res.json({
       newsId,
@@ -743,7 +718,7 @@ app.patch("/api/comments/:id", async (req, res) => {
     if (!nextBody) {
       return res.status(400).json({ error: "Invalid comment" });
     }
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    if (!ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ error: "Invalid comment id" });
     }
 
@@ -751,7 +726,10 @@ app.patch("/api/comments/:id", async (req, res) => {
     const editorName = user?.fullName || user?.username || "User";
     const editorImage = user?.imageUrl || "";
 
-    const comment = await Comment.findOne({ _id: req.params.id, isDeleted: false });
+    const comment = await commentsCollection.findOne({
+      _id: new ObjectId(req.params.id),
+      isDeleted: false,
+    });
     if (!comment) {
       return res.status(404).json({ error: "Comment not found" });
     }
@@ -759,7 +737,7 @@ app.patch("/api/comments/:id", async (req, res) => {
       return res.status(403).json({ error: "Not authorized" });
     }
 
-    await CommentRevision.create({
+    await commentRevisionsCollection.insertOne({
       commentId: comment._id,
       editedBy: auth.userId,
       oldBody: comment.body,
@@ -769,11 +747,16 @@ app.patch("/api/comments/:id", async (req, res) => {
       editorImage,
     });
 
-    comment.body = nextBody;
-    comment.editCount = (comment.editCount || 0) + 1;
-    await comment.save();
+    await commentsCollection.updateOne(
+      { _id: comment._id },
+      {
+        $set: { body: nextBody, updatedAt: new Date() },
+        $inc: { editCount: 1 },
+      },
+    );
 
-    return res.json({ comment: normalizeComment(comment) });
+    const updated = await commentsCollection.findOne({ _id: comment._id });
+    return res.json({ comment: normalizeComment(updated) });
   } catch (error) {
     console.error("Failed to update comment", error);
     return res.status(500).json({ error: "Failed to update comment" });
@@ -789,7 +772,7 @@ app.post("/api/comments/:id/replies", async (req, res) => {
     if (!body) {
       return res.status(400).json({ error: "Invalid reply" });
     }
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    if (!ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ error: "Invalid comment id" });
     }
 
@@ -807,14 +790,21 @@ app.post("/api/comments/:id/replies", async (req, res) => {
       authorRank: rank,
     };
 
-    const comment = await Comment.findOne({ _id: req.params.id, isDeleted: false });
+    const comment = await commentsCollection.findOne({
+      _id: new ObjectId(req.params.id),
+      isDeleted: false,
+    });
     if (!comment) {
       return res.status(404).json({ error: "Comment not found" });
     }
-    comment.replies = [...(comment.replies || []), reply].slice(-50);
-    await comment.save();
+    const updatedReplies = [...(comment.replies || []), reply].slice(-50);
+    await commentsCollection.updateOne(
+      { _id: comment._id },
+      { $set: { replies: updatedReplies, updatedAt: new Date() } },
+    );
 
-    return res.json({ comment: normalizeComment(comment) });
+    const updated = await commentsCollection.findOne({ _id: comment._id });
+    return res.json({ comment: normalizeComment(updated) });
   } catch (error) {
     console.error("Failed to add reply", error);
     return res.status(500).json({ error: "Failed to add reply" });
@@ -826,13 +816,16 @@ app.delete("/api/comments/:id", async (req, res) => {
     if (!requireMongoReady(res)) return;
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    if (!ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ error: "Invalid comment id" });
     }
     const user = await clerkClient.users.getUser(auth.userId);
     const isAdmin = isAdminUser(user);
 
-    const comment = await Comment.findOne({ _id: req.params.id, isDeleted: false });
+    const comment = await commentsCollection.findOne({
+      _id: new ObjectId(req.params.id),
+      isDeleted: false,
+    });
     if (!comment) {
       return res.json({ success: true });
     }
@@ -840,8 +833,10 @@ app.delete("/api/comments/:id", async (req, res) => {
       return res.status(403).json({ error: "Not authorized" });
     }
 
-    comment.isDeleted = true;
-    await comment.save();
+    await commentsCollection.updateOne(
+      { _id: comment._id },
+      { $set: { isDeleted: true, updatedAt: new Date() } },
+    );
 
     return res.json({ success: true });
   } catch (error) {
@@ -853,12 +848,13 @@ app.delete("/api/comments/:id", async (req, res) => {
 app.get("/api/comments/:id/history", async (req, res) => {
   try {
     if (!requireMongoReady(res)) return;
-    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+    if (!ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ error: "Invalid comment id" });
     }
-    const history = await CommentRevision.find({ commentId: req.params.id })
+    const history = await commentRevisionsCollection
+      .find({ commentId: new ObjectId(req.params.id) })
       .sort({ createdAt: 1 })
-      .lean();
+      .toArray();
     return res.json({ commentId: req.params.id, history });
   } catch (error) {
     console.error("Failed to load comment history", error);

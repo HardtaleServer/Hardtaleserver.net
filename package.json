@@ -11,6 +11,6 @@
     "dotenv": "^16.6.1",
     "express": "^4.19.2",
     "frimousse": "^0.3.0",
-    "mongoose": "^8.8.3"
+    "mongodb": "^7.1.0"
   }
 }
