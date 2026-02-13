@@ -601,6 +601,8 @@ async function apiFetchWithToken(getToken, isSignedIn, url, options = {}) {
 }
 
 function NewsCard({ item, onDelete, onToggleFeatured, canDelete }) {
+  const [showImagePreview, setShowImagePreview] = useState(false);
+
   return html`
     <article className="news-card">
       ${item.imageUrl
@@ -623,7 +625,15 @@ function NewsCard({ item, onDelete, onToggleFeatured, canDelete }) {
           By <span className=${`author-name ${isStaffLabel(item.author) ? "staff" : ""}`}>${item.author}</span>
           · ${formatTimestamp(item.createdAt)}
         </span>
-        ${item.readMoreUrl
+        ${item.imageUrl
+          ? html`<button
+              type="button"
+              className="button ghost-btn news-image-preview-btn"
+              onClick=${() => setShowImagePreview(true)}
+            >
+              View image
+            </button>`
+          : item.readMoreUrl
           ? html`<a href=${item.readMoreUrl} target="_blank" rel="noreferrer">
               Read me
             </a>`
@@ -640,6 +650,22 @@ function NewsCard({ item, onDelete, onToggleFeatured, canDelete }) {
       <${PollPanel} newsId=${item.id} />
       <${ReactionBar} itemType="news" itemId=${item.id} />
       <${CommentThread} newsId=${item.id} />
+
+      <${PopUp}
+        show=${showImagePreview}
+        onClose=${() => setShowImagePreview(false)}
+        title=${item.title || "Image preview"}
+        className="image-preview-overlay"
+      >
+        <div className="image-preview-modal">
+          <img
+            className="image-preview-modal-image"
+            src=${item.imageUrl}
+            alt=${item.title || "News image preview"}
+            loading="lazy"
+          />
+        </div>
+      <//>
     </article>
   `;
 }
