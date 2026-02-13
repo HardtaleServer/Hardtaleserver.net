@@ -1799,7 +1799,6 @@ function SettingsMenu({
   const [spinning, setSpinning] = useState(false);
   const [showLogoPicker, setShowLogoPicker] = useState(false);
   const [showDesktopLogoPicker, setShowDesktopLogoPicker] = useState(false);
-  const isSystem = theme === "system";
   const menuRef = useRef(null);
   const isMobileView =
     typeof window !== "undefined"
@@ -2063,28 +2062,15 @@ function SettingsMenu({
                 `
               : html``}
             <div className="settings-row">
-              <label>Theme mode</label>
-              <select
-                value=${theme}
-                onChange=${(event) => setTheme(event.target.value)}
-              >
-                <option value="system">System</option>
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-              </select>
-            </div>
-            <div className="settings-row">
-              <label>Quick toggle</label>
+              <label>Quick toggles</label>
               <div className="toggle">
                 <span>${theme === "light" ? "Light" : "Dark"}</span>
                 <button
                   className=${`switch ${theme === "dark" ? "on" : ""}`}
                   onClick=${toggleLightDark}
-                  disabled=${isSystem}
-                  title=${isSystem ? "Disable system to toggle" : "Toggle light/dark"}
+                  title="Toggle light/dark"
                 ></button>
               </div>
-              <div className="muted">System uses device settings (best for mobile).</div>
             </div>
             ${isMobileView
               ? html`<div className="settings-row">
