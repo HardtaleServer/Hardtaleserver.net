@@ -39,6 +39,13 @@ const COMMUNITY_FILE = "community.json";
 const POLLS_FILE = "polls.json";
 const PERMISSIONS_FILE = "permissions.json";
 const RANK_PRIORITY = ["Mythic", "Legend", "Hero", "Registered", "Unregistered"];
+const STORE_RANK_PRODUCTS = {
+  "rank-hero": { id: "rank-hero", name: "Hero Rank", price: 6.99, rank: "Hero", tier: 1 },
+  "rank-legend": { id: "rank-legend", name: "Legend Rank", price: 14.0, rank: "Legend", tier: 2 },
+  "rank-mythic": { id: "rank-mythic", name: "Mythic Rank", price: 24.0, rank: "Mythic", tier: 3 },
+};
+const STORE_PRODUCT_IDS = new Set(Object.keys(STORE_RANK_PRODUCTS));
+const STORE_RANK_BY_LABEL = { Hero: 1, Legend: 2, Mythic: 3 };
 const MONGO_URI = process.env.MONGO_URI || "";
 const MONGO_DB_NAME = process.env.MONGO_DB || "hardtaledb";
 
@@ -70,6 +77,8 @@ let commentRevisionsCollection = null;
 let reactionsCollection = null;
 let newsCollection = null;
 let notificationsCollection = null;
+let cartsCollection = null;
+let purchasesCollection = null;
 let mongoConnectInFlight = null;
 let mongoReconnectTimer = null;
 let mongoReconnectDelayMs = 1000;
@@ -83,6 +92,8 @@ function resetMongoState() {
   reactionsCollection = null;
   newsCollection = null;
   notificationsCollection = null;
+  cartsCollection = null;
+  purchasesCollection = null;
   mongoConnectInFlight = null;
 }
 
@@ -110,7 +121,9 @@ async function connectMongo() {
     commentRevisionsCollection &&
     reactionsCollection &&
     newsCollection &&
-    notificationsCollection
+    notificationsCollection &&
+    cartsCollection &&
+    purchasesCollection
   ) {
     return;
   }
@@ -137,6 +150,8 @@ async function connectMongo() {
       reactionsCollection = mongoDb.collection("reactions");
       newsCollection = mongoDb.collection("news");
       notificationsCollection = mongoDb.collection("notifications");
+      cartsCollection = mongoDb.collection("carts");
+      purchasesCollection = mongoDb.collection("purchases");
       await commentsCollection.createIndex({ newsId: 1, createdAt: 1 });
       await commentsCollection.createIndex({ userId: 1 });
       await commentRevisionsCollection.createIndex({ commentId: 1, createdAt: 1 });
@@ -147,6 +162,8 @@ async function connectMongo() {
       await newsCollection.createIndex({ isDeleted: 1, createdAt: -1 });
       await notificationsCollection.createIndex({ id: 1 }, { unique: true });
       await notificationsCollection.createIndex({ isDeleted: 1, createdAt: -1 });
+      await cartsCollection.createIndex({ userId: 1 }, { unique: true });
+      await purchasesCollection.createIndex({ userId: 1, createdAt: -1 });
       mongoReconnectDelayMs = 1000;
       console.log("Connected to MongoDB");
     } catch (error) {
@@ -217,7 +234,9 @@ async function requireMongoReady(res) {
     !commentRevisionsCollection ||
     !reactionsCollection ||
     !newsCollection ||
-    !notificationsCollection
+    !notificationsCollection ||
+    !cartsCollection ||
+    !purchasesCollection
   ) {
     try {
       await connectMongo();
@@ -231,7 +250,9 @@ async function requireMongoReady(res) {
     !commentRevisionsCollection ||
     !reactionsCollection ||
     !newsCollection ||
-    !notificationsCollection
+    !notificationsCollection ||
+    !cartsCollection ||
+    !purchasesCollection
   ) {
     res.status(503).json({
       error: "Database not connected",
@@ -408,6 +429,50 @@ function normalizePoll(payload) {
 function extractRank(groups = []) {
   const set = new Set(groups);
   return RANK_PRIORITY.find((rank) => set.has(rank)) || "Unregistered";
+}
+
+function normalizeCartItems(items) {
+  if (!Array.isArray(items)) return [];
+  const seen = new Set();
+  let highestRankEntry = null;
+  let highestTier = 0;
+  const normalized = [];
+  for (const entry of items) {
+    const id = normalizeText(entry?.id, 60);
+    if (!id || seen.has(id) || !STORE_PRODUCT_IDS.has(id)) continue;
+    seen.add(id);
+    const product = STORE_RANK_PRODUCTS[id];
+    if (product?.tier) {
+      if (product.tier > highestTier) {
+        highestTier = product.tier;
+        highestRankEntry = { id };
+      }
+      continue;
+    }
+    normalized.push({ id });
+  }
+  if (highestRankEntry) normalized.push(highestRankEntry);
+  return normalized;
+}
+
+function getHighestRankFromItems(items = []) {
+  let best = null;
+  let bestTier = 0;
+  for (const entry of items) {
+    const product = STORE_RANK_PRODUCTS[entry?.id];
+    if (!product) continue;
+    if (product.tier > bestTier) {
+      best = product.rank;
+      bestTier = product.tier;
+    }
+  }
+  return best;
+}
+
+function maxRankLabel(currentRank, nextRank) {
+  const currentTier = STORE_RANK_BY_LABEL[currentRank] || 0;
+  const nextTier = STORE_RANK_BY_LABEL[nextRank] || 0;
+  return nextTier > currentTier ? nextRank : currentRank;
 }
 
 function normalizeNewsItem(item) {
@@ -1197,6 +1262,116 @@ app.delete("/api/notifications/:id", async (req, res) => {
   } catch (error) {
     console.error("Failed to delete notification", error);
     return res.status(500).json({ error: "Failed to delete notification" });
+  }
+});
+
+app.get("/api/cart", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const cart = await cartsCollection.findOne({ userId: auth.userId });
+    return res.json({ items: normalizeCartItems(cart?.items || []) });
+  } catch (error) {
+    console.error("Failed to load cart", error);
+    return res.status(500).json({ error: "Failed to load cart" });
+  }
+});
+
+app.post("/api/cart", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const items = normalizeCartItems(req.body?.items);
+    await cartsCollection.updateOne(
+      { userId: auth.userId },
+      {
+        $set: {
+          userId: auth.userId,
+          items,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+      { upsert: true },
+    );
+    return res.json({ items });
+  } catch (error) {
+    console.error("Failed to save cart", error);
+    return res.status(500).json({ error: "Failed to save cart" });
+  }
+});
+
+app.post("/api/cart/checkout", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const cart = await cartsCollection.findOne({ userId: auth.userId });
+    const items = normalizeCartItems(cart?.items || []);
+    if (items.length === 0) {
+      return res.status(400).json({ error: "Cart is empty" });
+    }
+
+    const total = items.reduce((sum, entry) => sum + (STORE_RANK_PRODUCTS[entry.id]?.price || 0), 0);
+    const purchasedHighestRank = getHighestRankFromItems(items);
+
+    let awardedRank = "";
+    if (purchasedHighestRank) {
+      const user = await clerkClient.users.getUser(auth.userId);
+      const currentRank = String(user?.publicMetadata?.rank || "Registered");
+      awardedRank = maxRankLabel(currentRank, purchasedHighestRank);
+      if (awardedRank !== currentRank) {
+        await clerkClient.users.updateUserMetadata(auth.userId, {
+          publicMetadata: {
+            ...user.publicMetadata,
+            rank: awardedRank,
+          },
+        });
+        await commentsCollection.updateMany(
+          { userId: auth.userId, isDeleted: false },
+          { $set: { authorRank: awardedRank, updatedAt: new Date() } },
+        );
+      }
+    }
+
+    await purchasesCollection.insertOne({
+      id: crypto.randomUUID(),
+      userId: auth.userId,
+      items,
+      total,
+      awardedRank: awardedRank || null,
+      createdAt: new Date().toISOString(),
+    });
+
+    await cartsCollection.updateOne(
+      { userId: auth.userId },
+      {
+        $set: {
+          userId: auth.userId,
+          items: [],
+          updatedAt: new Date().toISOString(),
+        },
+      },
+      { upsert: true },
+    );
+
+    return res.json({
+      success: true,
+      cart: { items: [] },
+      awardedRank: awardedRank || null,
+    });
+  } catch (error) {
+    console.error("Failed to checkout cart", error);
+    return res.status(500).json({ error: "Failed to checkout cart" });
   }
 });
 

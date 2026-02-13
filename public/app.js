@@ -35,8 +35,6 @@ const NAV_KEY = "hardtale-nav";
 const MENU_SIDE_KEY = "hardtale-menu-side";
 const MOBILE_NAV_STYLE_KEY = "hardtale-mobile-nav-style";
 const NOTIFICATIONS_SEEN_KEY = "hardtale-notifications-seen";
-const CART_KEY_PREFIX = "hardtale-cart";
-const PURCHASE_KEY_PREFIX = "hardtale-purchases";
 const TICKET_COOLDOWN_KEY = "hardtale-ticket-cooldown";
 const TICKET_COOLDOWN_MS = 60 * 60 * 1000;
 const LOGO_SIDE_KEY = "hardtale-logo-side";
@@ -47,7 +45,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.16";
+const VERSION = "1.3.17";
 const STAFF_EMAILS = new Set(["chashsmurfis@gmail.com", "hytaleserver@gmail.com"]);
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const INITIAL_LOADER_MIN_MS = 3200;
@@ -108,6 +106,17 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.17",
+    date: "2026-02-13",
+    items: [
+      "Moved 404 admin tools into an admin-only modal and added /panel console command support.",
+      "Made public News feed user-facing only and consolidated news/notification management inside the admin panel.",
+      "Migrated reactions, news, notifications, and carts to Mongo-backed APIs.",
+      "Added server-side cart checkout that awards highest purchased rank (Hero/Legend/Mythic) and updates comment rank tags.",
+      "Fixed mobile cart UI issues by removing duplicate drawer cart controls, hiding empty cart button states, and improving checkout layout.",
+    ],
+  },
   {
     version: "1.3.4",
     date: "2026-02-11",
@@ -310,6 +319,48 @@ const SAMPLE_STORE = [
     icon: "shield",
   },
 ];
+const STORE_ITEM_BY_ID = new Map(SAMPLE_STORE.map((item) => [item.id, item]));
+const RANK_TIER_ORDER = {
+  "rank-hero": 1,
+  "rank-legend": 2,
+  "rank-mythic": 3,
+};
+
+function buildCartFromIds(entries = []) {
+  if (!Array.isArray(entries)) return [];
+  const seen = new Set();
+  return entries
+    .map((entry) => {
+      const id = typeof entry === "string" ? entry : String(entry?.id || "");
+      if (!id || seen.has(id)) return null;
+      const base = STORE_ITEM_BY_ID.get(id);
+      if (!base) return null;
+      seen.add(id);
+      return { ...base };
+    })
+    .filter(Boolean);
+}
+
+function serializeCartItems(cart = []) {
+  return cart
+    .map((item) => ({ id: String(item?.id || "") }))
+    .filter((item) => item.id && STORE_ITEM_BY_ID.has(item.id));
+}
+
+function applyRankTierRules(cart = [], nextItem) {
+  const nextRankTier = RANK_TIER_ORDER[nextItem.id] || 0;
+  if (!nextRankTier) {
+    return cart.some((entry) => entry.id === nextItem.id) ? cart : [...cart, nextItem];
+  }
+
+  const filtered = cart.filter((entry) => {
+    const tier = RANK_TIER_ORDER[entry.id] || 0;
+    return tier === 0 || tier > nextRankTier;
+  });
+  const hasHigherTier = filtered.some((entry) => (RANK_TIER_ORDER[entry.id] || 0) > nextRankTier);
+  if (hasHigherTier) return filtered;
+  return [...filtered.filter((entry) => entry.id !== nextItem.id), nextItem];
+}
 
 function applyTheme(value) {
   const root = document.body;
@@ -600,7 +651,7 @@ async function apiFetchWithToken(getToken, isSignedIn, url, options = {}) {
   return response;
 }
 
-function NewsCard({ item, onDelete, onToggleFeatured, canDelete }) {
+function NewsCard({ item }) {
   const [showImagePreview, setShowImagePreview] = useState(false);
 
   return html`
@@ -613,11 +664,6 @@ function NewsCard({ item, onDelete, onToggleFeatured, canDelete }) {
           ${item.featured ? html`<span className="news-star" title="Featured">★</span>` : html``}
           <h3>${item.title}</h3>
         </div>
-        ${canDelete
-          ? html`<button className="ghost-btn" onClick=${() => onDelete(item.id)}>
-              Delete
-            </button>`
-          : html``}
       </div>
       <p>${item.description}</p>
       <div className="news-meta">
@@ -639,14 +685,6 @@ function NewsCard({ item, onDelete, onToggleFeatured, canDelete }) {
             </a>`
           : html`<span></span>`}
       </div>
-      ${canDelete
-        ? html`<button
-            className="ghost-btn news-toggle"
-            onClick=${() => onToggleFeatured(item.id, !item.featured)}
-          >
-            ${item.featured ? "Remove featured" : "Feature this"}
-          </button>`
-        : html``}
       <${PollPanel} newsId=${item.id} />
       <${ReactionBar} itemType="news" itemId=${item.id} />
       <${CommentThread} newsId=${item.id} />
@@ -1285,6 +1323,7 @@ function CommentThread({ newsId }) {
 }
 
 function AdminPanel({
+  news,
   onNewsUpdate,
   onNotificationsUpdate,
   notifications,
@@ -1406,6 +1445,42 @@ function AdminPanel({
       setNotificationStatus("Sent!");
     } catch (err) {
       setNotificationStatus("Failed to send notification.");
+    }
+  }
+
+  async function deleteNews(id) {
+    try {
+      const token = await getToken();
+      const response = await fetch(`/api/news/${id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) throw new Error("Delete failed");
+      const data = await response.json();
+      onNewsUpdate(Array.isArray(data.news) ? data.news : []);
+    } catch (err) {
+      alert("Failed to delete news.");
+    }
+  }
+
+  async function toggleNewsFeatured(id, featured) {
+    try {
+      const token = await getToken();
+      const response = await fetch(`/api/news/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ featured }),
+      });
+      if (!response.ok) throw new Error("Feature update failed");
+      const data = await response.json();
+      onNewsUpdate(Array.isArray(data.news) ? data.news : []);
+    } catch (err) {
+      alert("Failed to update featured status.");
     }
   }
 
@@ -1543,6 +1618,40 @@ function AdminPanel({
         <button className="button primary" type="submit">Post News</button>
       </div>
       <div className="muted">${newsStatus}</div>
+      <div className="section-title">Manage News</div>
+      ${news.length === 0
+        ? html`<p className="muted">No news posted yet.</p>`
+        : html`<div className="news-list">
+            ${news.map(
+              (item) => html`<article key=${item.id} className="news-card">
+                <div className="news-header">
+                  <div className="news-title-row">
+                    ${item.featured
+                      ? html`<span className="news-star" title="Featured">★</span>`
+                      : html``}
+                    <h3>${item.title}</h3>
+                  </div>
+                  <button className="ghost-btn" type="button" onClick=${() => deleteNews(item.id)}>
+                    Delete
+                  </button>
+                </div>
+                <p>${item.description}</p>
+                <div className="news-meta">
+                  <span>
+                    By <span className=${`author-name ${isStaffLabel(item.author) ? "staff" : ""}`}>${item.author}</span>
+                  </span>
+                  <span className="notification-timestamp">${formatTimestamp(item.createdAt)}</span>
+                </div>
+                <button
+                  className="ghost-btn news-toggle"
+                  type="button"
+                  onClick=${() => toggleNewsFeatured(item.id, !item.featured)}
+                >
+                  ${item.featured ? "Remove featured" : "Feature this"}
+                </button>
+              </article>`,
+            )}
+          </div>`}
     </form>
     <form className="card admin-panel" onSubmit=${submitNotification}>
       <div className="section-title">Send Notification</div>
@@ -1660,11 +1769,14 @@ function SettingsMenu({
   }, [open]);
 
   function handleClick(event) {
-    if (uiFlashEnabled && event?.currentTarget) {
-      event.currentTarget.classList.remove("flash");
-      void event.currentTarget.offsetWidth;
-      event.currentTarget.classList.add("flash");
-      setTimeout(() => event.currentTarget.classList.remove("flash"), 400);
+    const buttonEl = event?.currentTarget;
+    if (uiFlashEnabled && buttonEl) {
+      buttonEl.classList.remove("flash");
+      void buttonEl.offsetWidth;
+      buttonEl.classList.add("flash");
+      setTimeout(() => {
+        if (buttonEl?.classList) buttonEl.classList.remove("flash");
+      }, 400);
     }
   }
 
@@ -1960,11 +2072,14 @@ function CartButton({ onClick, count }) {
 
 function NotificationsButton({ count, onClick, flashEnabled }) {
   function handleClick(event) {
-    if (flashEnabled && event?.currentTarget) {
-      event.currentTarget.classList.remove("flash");
-      void event.currentTarget.offsetWidth;
-      event.currentTarget.classList.add("flash");
-      setTimeout(() => event.currentTarget.classList.remove("flash"), 400);
+    const buttonEl = event?.currentTarget;
+    if (flashEnabled && buttonEl) {
+      buttonEl.classList.remove("flash");
+      void buttonEl.offsetWidth;
+      buttonEl.classList.add("flash");
+      setTimeout(() => {
+        if (buttonEl?.classList) buttonEl.classList.remove("flash");
+      }, 400);
     }
     onClick();
   }
@@ -2323,12 +2438,14 @@ function SubscriptionsPage() {
 
 function NotFoundPage({
   isAdmin,
+  news,
   notifications,
   onNewsUpdate,
   onNotificationsUpdate,
 }) {
   const navigate = useNavigate();
   const { user } = useUser();
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [timeLabel, setTimeLabel] = useState("");
   const [copyLabel, setCopyLabel] = useState("Copy Crash Log");
   const [command, setCommand] = useState("");
@@ -2369,6 +2486,15 @@ function NotFoundPage({
       navigate("/");
       return;
     }
+    if (next === "/panel") {
+      if (!isAdmin) {
+        setCommandStatus("Admin only command.");
+        return;
+      }
+      setShowAdminPanel(true);
+      setCommandStatus("Opening admin panel...");
+      return;
+    }
     setCommandStatus("Unknown command. Try /support.");
   }
 
@@ -2377,9 +2503,20 @@ function NotFoundPage({
       <div className="not-found-wrap">
         <main className="not-found-card" role="main" aria-label="404 error">
           <section className="not-found-left">
-            <div className="not-found-badge">
-              <span className="not-found-dot"></span>
-              WORLDGEN ERROR - CHUNK_NOT_FOUND
+            <div className="not-found-badge-row">
+              <div className="not-found-badge">
+                <span className="not-found-dot"></span>
+                WORLDGEN ERROR - CHUNK_NOT_FOUND
+              </div>
+              ${isAdmin
+                ? html`<button
+                    type="button"
+                    className="button ghost-btn not-found-admin-open"
+                    onClick=${() => setShowAdminPanel(true)}
+                  >
+                    Open Admin Panel
+                  </button>`
+                : html``}
             </div>
             <h1 className="not-found-title">
               <span className="not-found-glow">ERROR 404</span>
@@ -2464,17 +2601,25 @@ function NotFoundPage({
             </div>
           </aside>
         </main>
-        ${isAdmin
-          ? html`<div className="fade-in">
+      </div>
+      ${isAdmin
+        ? html`<${PopUp}
+            show=${showAdminPanel}
+            onClose=${() => setShowAdminPanel(false)}
+            title="Admin Panel"
+            className="admin-panel-overlay"
+          >
+            <div className="admin-panel-modal-content">
               <${AdminPanel}
+                news=${news}
                 onNewsUpdate=${onNewsUpdate}
                 onNotificationsUpdate=${onNotificationsUpdate}
                 notifications=${notifications}
                 isAdmin=${isAdmin}
               />
-            </div>`
-          : html``}
-      </div>
+            </div>
+          <//>`
+        : html``}
     </section>
   `;
 }
@@ -2644,9 +2789,6 @@ function NewsPage({
   news,
   loading,
   error,
-  onDelete,
-  onToggleFeatured,
-  canDelete,
 }) {
   const featuredItem = news.find((item) => item.featured);
   return html`
@@ -2665,22 +2807,7 @@ function NewsPage({
           ${featuredItem
             ? html`<div className="news-callout-title">${featuredItem.title}</div>
                 <div className="news-callout-copy">${featuredItem.description}</div>
-                ${canDelete
-                  ? html`<div className="news-callout-actions">
-                      <button
-                        className="ghost-btn"
-                        onClick=${() => onToggleFeatured(featuredItem.id, false)}
-                      >
-                        Remove featured
-                      </button>
-                      <button
-                        className="ghost-btn"
-                        onClick=${() => onDelete(featuredItem.id)}
-                      >
-                        Delete
-                      </button>
-                    </div>`
-                  : html``}`
+                `
             : html`<div className="news-callout-title">No featured updates yet</div>
                 <div className="news-callout-copy">Mark a post as featured to highlight it here.</div>`}
         </div>
@@ -2699,9 +2826,6 @@ function NewsPage({
                 html`<${NewsCard}
                   key=${item.id}
                   item=${item}
-                  onDelete=${onDelete}
-                  onToggleFeatured=${onToggleFeatured}
-                  canDelete=${canDelete}
                 />`,
               )}
             </div>`}
@@ -2775,7 +2899,8 @@ function Layout() {
   const [criticalImagesReady, setCriticalImagesReady] = useState(false);
   const [loaderVariant, setLoaderVariant] = useState(LOADER_VARIANTS[0]);
   const [cart, setCart] = useState([]);
-  const [purchases, setPurchases] = useState([]);
+  const [cartLoaded, setCartLoaded] = useState(false);
+  const [cartStatus, setCartStatus] = useState("");
   const [pendingItem, setPendingItem] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
   const [topbarHeight, setTopbarHeight] = useState(0);
@@ -2784,10 +2909,7 @@ function Layout() {
   const playRef = useRef(null);
   const initialLoaderStartRef = useRef(Date.now());
   const previousSignedInRef = useRef(null);
-  const cartCount = useMemo(
-    () => cart.reduce((sum, item) => sum + (item.quantity || 1), 0),
-    [cart],
-  );
+  const cartCount = useMemo(() => cart.length, [cart]);
   const sortedNews = useMemo(() => {
     const copy = [...news];
     copy.sort((a, b) => {
@@ -3012,52 +3134,57 @@ function Layout() {
   }, [setNews, setNotifications]);
 
   useEffect(() => {
+    if (!isAuthLoaded) return;
     if (!isSignedIn || !userId) {
       setCart([]);
-      setPurchases([]);
+      setCartLoaded(false);
       return;
     }
-    const stored = localStorage.getItem(`${CART_KEY_PREFIX}:${userId}`);
-    if (stored) {
+    let cancelled = false;
+    (async () => {
       try {
-        const parsed = JSON.parse(stored);
-        setCart(Array.isArray(parsed) ? parsed : []);
+        const response = await apiFetchWithToken(getToken, true, "/api/cart");
+        if (!response.ok) {
+          if (!cancelled) {
+            setCart([]);
+            setCartLoaded(true);
+          }
+          return;
+        }
+        const data = await response.json();
+        if (!cancelled) {
+          setCart(buildCartFromIds(data?.items || []));
+          setCartLoaded(true);
+        }
       } catch (err) {
-        setCart([]);
+        if (!cancelled) {
+          setCart([]);
+          setCartLoaded(true);
+        }
       }
-    } else {
-      setCart([]);
-    }
-    const storedPurchases = localStorage.getItem(`${PURCHASE_KEY_PREFIX}:${userId}`);
-    if (storedPurchases) {
-      try {
-        const parsedPurchases = JSON.parse(storedPurchases);
-        setPurchases(Array.isArray(parsedPurchases) ? parsedPurchases : []);
-      } catch (err) {
-        setPurchases([]);
-      }
-    } else {
-      setPurchases([]);
-    }
-  }, [isSignedIn, userId]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthLoaded, isSignedIn, userId, getToken]);
 
   useEffect(() => {
-    if (!isSignedIn || !userId) return;
-    localStorage.setItem(`${CART_KEY_PREFIX}:${userId}`, JSON.stringify(cart));
-  }, [cart, isSignedIn, userId]);
-
-  useEffect(() => {
-    if (!isSignedIn || !userId) return;
-    localStorage.setItem(`${PURCHASE_KEY_PREFIX}:${userId}`, JSON.stringify(purchases));
-  }, [purchases, isSignedIn, userId]);
+    if (!isSignedIn || !userId || !cartLoaded) return;
+    apiFetchWithToken(getToken, true, "/api/cart", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: serializeCartItems(cart) }),
+    }).catch(() => {});
+  }, [cart, isSignedIn, userId, cartLoaded, getToken]);
 
   useEffect(() => {
     if (!pendingItem) return;
     if (!isSignedIn) return;
-    setCart((prev) => [...prev, pendingItem]);
+    if (!cartLoaded) return;
+    setCart((prev) => applyRankTierRules(prev, pendingItem));
     setPendingItem(null);
     setShowCart(true);
-  }, [pendingItem, isSignedIn]);
+  }, [pendingItem, isSignedIn, cartLoaded]);
 
   function markNotificationsRead() {
     const newest = sortedNotifications[0]?.createdAt;
@@ -3067,56 +3194,12 @@ function Layout() {
     }
   }
 
-  async function deleteNews(id) {
-    try {
-      const token = await getToken();
-      const response = await fetch(`/api/news/${id}`, {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error("Delete failed");
-      }
-
-      const data = await response.json();
-      setNews(Array.isArray(data.news) ? data.news : []);
-    } catch (err) {
-      alert("Failed to delete post.");
-    }
-  }
-
   function handleLogoError(event) {
     event.currentTarget.style.display = "none";
   }
 
   function openHowModal() {
     setShowConnectHelp(true);
-  }
-
-  async function toggleFeatured(id, featured) {
-    try {
-      const token = await getToken();
-      const response = await fetch(`/api/news/${id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ featured }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Feature update failed");
-      }
-
-      const data = await response.json();
-      setNews(Array.isArray(data.news) ? data.news : []);
-    } catch (err) {
-      alert("Failed to update featured status.");
-    }
   }
 
   function scrollToSection(section) {
@@ -3132,25 +3215,14 @@ function Layout() {
       if (openSignIn) openSignIn({});
       return;
     }
-    setCart((prev) => {
-      const existingIndex = prev.findIndex((entry) => entry.id === item.id);
-      if (existingIndex === -1) {
-        return [...prev, { ...item, quantity: 1 }];
-      }
-      const next = [...prev];
-      const current = next[existingIndex];
-      next[existingIndex] = { ...current, quantity: (current.quantity || 1) + 1 };
-      return next;
-    });
+    setCartStatus("");
+    setCart((prev) => applyRankTierRules(prev, item));
     setShowCart(true);
   }
 
 
   function total() {
-    return cart.reduce(
-      (sum, item) => sum + item.price * (item.quantity || 1),
-      0,
-    );
+    return cart.reduce((sum, item) => sum + item.price, 0);
   }
 
   function openNotifications() {
@@ -3158,43 +3230,31 @@ function Layout() {
     markNotificationsRead();
   }
 
-  function incrementItem(id) {
-    setCart((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? { ...item, quantity: (item.quantity || 1) + 1 }
-          : item,
-      ),
-    );
-  }
-
-  function decrementItem(id) {
-    setCart((prev) =>
-      prev.flatMap((item) => {
-        if (item.id !== id) return [item];
-        const nextQuantity = (item.quantity || 1) - 1;
-        if (nextQuantity < 1) return [];
-        return [{ ...item, quantity: nextQuantity }];
-      }),
-    );
-  }
-
   function removeItem(id) {
+    setCartStatus("");
     setCart((prev) => prev.filter((item) => item.id !== id));
   }
 
-  function checkout() {
+  async function checkout() {
     if (!isSignedIn || cart.length === 0) return;
-    const purchase = {
-      id: crypto.randomUUID(),
-      createdAt: new Date().toISOString(),
-      total: total(),
-      title: cart.map((item) => `${item.name} x${item.quantity || 1}`).join(", "),
-      items: cart,
-    };
-    setPurchases((prev) => [purchase, ...prev].slice(0, 20));
-    setCart([]);
-    setShowCart(false);
+    setCartStatus("Processing checkout...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/cart/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      if (!response.ok) throw new Error("Checkout failed");
+      const data = await response.json();
+      setCart(buildCartFromIds(data?.cart?.items || []));
+      const awardedRank = String(data?.awardedRank || "").trim();
+      setCartStatus(awardedRank ? `Checkout complete. Rank awarded: ${awardedRank}` : "Checkout complete.");
+      setTimeout(() => {
+        setShowCart(false);
+        setCartStatus("");
+      }, 900);
+    } catch (error) {
+      setCartStatus("Checkout failed. Please try again.");
+    }
   }
 
   function openCart() {
@@ -3202,6 +3262,7 @@ function Layout() {
       if (openSignIn) openSignIn({});
       return;
     }
+    setCartStatus("");
     setShowCart(true);
   }
 
@@ -3212,7 +3273,7 @@ function Layout() {
   const desktopStickyVisible = !isMobile && hideLogo;
   const stickyTransparentActive =
     desktopStickyVisible && desktopStickyStyle === "transparent" && !isMobile;
-  const lockedNavHover = stickyTransparentActive && (settingsOpen || showNotifications);
+  const lockedNavHover = stickyTransparentActive && showNotifications;
   const navActive = stickyTransparentActive && showConnectHelp ? "play" : active;
   const desktopStickyLogoVisible = desktopStickyStyle === "solid";
   const desktopStickyLogoSrc = desktopStickyWide
@@ -3224,6 +3285,11 @@ function Layout() {
       : "logo"
     : "island";
 
+  function handleDesktopNavEnter(id) {
+    if (lockedNavHover) return;
+    setHoveredNav(id);
+  }
+
   function DesktopNavShell() {
     return html`
       <div className=${`nav-shell ${placement === "left" ? "left" : placement === "right" ? "right" : ""}`}>
@@ -3231,7 +3297,7 @@ function Layout() {
           <button
             className=${`nav-link ${navActive === "home" ? "active" : ""} ${lockedNavHover && hoveredNav === "home" ? "hover-locked" : ""}`}
             onClick=${() => navigate("/")}
-            onMouseEnter=${() => setHoveredNav("home")}
+            onMouseEnter=${() => handleDesktopNavEnter("home")}
             onMouseLeave=${() => {
               if (!lockedNavHover) setHoveredNav("");
             }}
@@ -3241,7 +3307,7 @@ function Layout() {
           <button
             className=${`nav-link ${navActive === "news" ? "active" : ""} ${lockedNavHover && hoveredNav === "news" ? "hover-locked" : ""}`}
             onClick=${() => navigate("/news")}
-            onMouseEnter=${() => setHoveredNav("news")}
+            onMouseEnter=${() => handleDesktopNavEnter("news")}
             onMouseLeave=${() => {
               if (!lockedNavHover) setHoveredNav("");
             }}
@@ -3251,7 +3317,7 @@ function Layout() {
           <button
             className=${`nav-link ${navActive === "store" ? "active" : ""} ${lockedNavHover && hoveredNav === "store" ? "hover-locked" : ""}`}
             onClick=${() => navigate("/store")}
-            onMouseEnter=${() => setHoveredNav("store")}
+            onMouseEnter=${() => handleDesktopNavEnter("store")}
             onMouseLeave=${() => {
               if (!lockedNavHover) setHoveredNav("");
             }}
@@ -3261,7 +3327,7 @@ function Layout() {
           <button
             className=${`nav-link ${navActive === "vote" ? "active" : ""} ${lockedNavHover && hoveredNav === "vote" ? "hover-locked" : ""}`}
             onClick=${() => navigate("/vote")}
-            onMouseEnter=${() => setHoveredNav("vote")}
+            onMouseEnter=${() => handleDesktopNavEnter("vote")}
             onMouseLeave=${() => {
               if (!lockedNavHover) setHoveredNav("");
             }}
@@ -3271,7 +3337,7 @@ function Layout() {
           <button
             className=${`nav-link ${navActive === "play" ? "active" : ""} ${lockedNavHover && hoveredNav === "play" ? "hover-locked" : ""}`}
             onClick=${openHowModal}
-            onMouseEnter=${() => setHoveredNav("play")}
+            onMouseEnter=${() => handleDesktopNavEnter("play")}
             onMouseLeave=${() => {
               if (!lockedNavHover) setHoveredNav("");
             }}
@@ -3386,10 +3452,10 @@ function Layout() {
                       <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />
                     </svg>
                   </button>
-                  <${CartButton} onClick=${openCart} count=${cartCount} />
+                  ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
                 `
               : html`
-                  <${CartButton} onClick=${openCart} count=${cartCount} />
+                  ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
                   <button
                     className="settings-button mobile-menu"
                     title="Menu"
@@ -3456,9 +3522,6 @@ function Layout() {
               news=${sortedNews}
               loading=${loading}
               error=${error}
-              onDelete=${deleteNews}
-              onToggleFeatured=${toggleFeatured}
-              canDelete=${isAdmin}
             />`}
           />
           <${Route}
@@ -3477,6 +3540,7 @@ function Layout() {
             path="*"
             element=${html`<${NotFoundPage}
               isAdmin=${isAdmin}
+              news=${sortedNews}
               notifications=${sortedNotifications}
               onNewsUpdate=${setNews}
               onNotificationsUpdate=${setNotifications}
@@ -3545,12 +3609,10 @@ function Layout() {
                   isMobile=${isMobile}
                 />
                       <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
-                      <${CartButton} onClick=${openCart} count=${cartCount} />
                     <//>
                   `
                 : html`
                     <${SignedIn}>
-                      <${CartButton} onClick=${openCart} count=${cartCount} />
                       <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
                       <${SettingsMenu}
                         theme=${theme}
@@ -3658,7 +3720,8 @@ function Layout() {
               ${cart.map(
                 (item) => html`<div key=${item.id} className="cart-row">
                   <div className="cart-info">
-                    <div className="cart-name">${item.name}</div>
+                    <div className="cart-rank">${item.name}</div>
+                    <div className="cart-name">Rank package</div>
                     ${item.blurb
                       ? html`<ul className="cart-perks">
                           ${perkBullets(item.blurb).map(
@@ -3671,13 +3734,8 @@ function Layout() {
                         </ul>`
                       : html``}
                   </div>
-                  <div className="cart-qty">
-                    <button className="ghost-btn" onClick=${() => decrementItem(item.id)}>-</button>
-                    <span>${item.quantity || 1}</span>
-                    <button className="ghost-btn" onClick=${() => incrementItem(item.id)}>+</button>
-                  </div>
                   <div className="cart-actions">
-                    <span>$${(item.price * (item.quantity || 1)).toFixed(2)}</span>
+                    <span>$${item.price.toFixed(2)}</span>
                     <button className="ghost-btn icon-only" onClick=${() => removeItem(item.id)} aria-label="Remove item">
                       <svg viewBox="0 0 24 24" aria-hidden="true">
                         <path d="M9 3h6l1 2h4v2H4V5h4l1-2zm1 6h2v9h-2V9zm4 0h2v9h-2V9zM7 9h2v9H7V9z" />
@@ -3691,7 +3749,8 @@ function Layout() {
                 <span>$${total().toFixed(2)}</span>
               </div>
             </div>`}
-        <button className="button primary" disabled=${cart.length === 0}>
+        ${cartStatus ? html`<div className="muted">${cartStatus}</div>` : html``}
+        <button className="button primary" onClick=${checkout} disabled=${cart.length === 0}>
           Checkout
         </button>
       <//>
