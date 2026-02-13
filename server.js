@@ -963,6 +963,8 @@ app.post("/api/comments/:id/replies", async (req, res) => {
       userId: auth.userId,
       body,
       createdAt: new Date(),
+      updatedAt: new Date(),
+      editCount: 0,
       authorName: user?.fullName || user?.username || "User",
       authorImage: user?.imageUrl || "",
       authorEmail: email,
@@ -987,6 +989,125 @@ app.post("/api/comments/:id/replies", async (req, res) => {
   } catch (error) {
     console.error("Failed to add reply", error);
     return res.status(500).json({ error: "Failed to add reply" });
+  }
+});
+
+app.patch("/api/comments/:id/replies/:replyId", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const nextBody = normalizeText(req.body?.text, 276);
+    if (!nextBody) {
+      return res.status(400).json({ error: "Invalid reply" });
+    }
+    if (!ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: "Invalid comment id" });
+    }
+    const replyId = normalizeText(req.params.replyId, 128);
+    if (!replyId) {
+      return res.status(400).json({ error: "Invalid reply id" });
+    }
+
+    const user = await clerkClient.users.getUser(auth.userId);
+    const editorName = user?.fullName || user?.username || "User";
+    const editorImage = user?.imageUrl || "";
+
+    const comment = await commentsCollection.findOne({
+      _id: new ObjectId(req.params.id),
+      isDeleted: false,
+    });
+    if (!comment) {
+      return res.status(404).json({ error: "Comment not found" });
+    }
+    const replies = Array.isArray(comment.replies) ? comment.replies : [];
+    const replyIndex = replies.findIndex((entry) => String(entry?.id || "") === replyId);
+    if (replyIndex < 0) {
+      return res.status(404).json({ error: "Reply not found" });
+    }
+
+    const reply = replies[replyIndex];
+    if (reply?.userId !== auth.userId) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    await commentRevisionsCollection.insertOne({
+      commentId: comment._id,
+      replyId,
+      editedBy: auth.userId,
+      oldBody: reply.body || "",
+      newBody: nextBody,
+      createdAt: new Date(),
+      editorName,
+      editorImage,
+      type: "reply",
+    });
+
+    const updatedReplies = [...replies];
+    updatedReplies[replyIndex] = {
+      ...reply,
+      body: nextBody,
+      updatedAt: new Date(),
+      editCount: Number(reply?.editCount || 0) + 1,
+    };
+    await commentsCollection.updateOne(
+      { _id: comment._id },
+      { $set: { replies: updatedReplies, updatedAt: new Date() } },
+    );
+
+    const updated = await commentsCollection.findOne({ _id: comment._id });
+    return res.json({ comment: normalizeComment(updated) });
+  } catch (error) {
+    console.error("Failed to update reply", error);
+    return res.status(500).json({ error: "Failed to update reply" });
+  }
+});
+
+app.delete("/api/comments/:id/replies/:replyId", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    if (!ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({ error: "Invalid comment id" });
+    }
+    const replyId = normalizeText(req.params.replyId, 128);
+    if (!replyId) {
+      return res.status(400).json({ error: "Invalid reply id" });
+    }
+
+    const user = await clerkClient.users.getUser(auth.userId);
+    const isAdmin = isAdminUser(user);
+
+    const comment = await commentsCollection.findOne({
+      _id: new ObjectId(req.params.id),
+      isDeleted: false,
+    });
+    if (!comment) {
+      return res.status(404).json({ error: "Comment not found" });
+    }
+
+    const replies = Array.isArray(comment.replies) ? comment.replies : [];
+    const replyIndex = replies.findIndex((entry) => String(entry?.id || "") === replyId);
+    if (replyIndex < 0) {
+      return res.json({ comment: normalizeComment(comment) });
+    }
+    const reply = replies[replyIndex];
+    if (reply?.userId !== auth.userId && !isAdmin) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    const updatedReplies = replies.filter((entry) => String(entry?.id || "") !== replyId);
+    await commentsCollection.updateOne(
+      { _id: comment._id },
+      { $set: { replies: updatedReplies, updatedAt: new Date() } },
+    );
+
+    const updated = await commentsCollection.findOne({ _id: comment._id });
+    return res.json({ comment: normalizeComment(updated) });
+  } catch (error) {
+    console.error("Failed to delete reply", error);
+    return res.status(500).json({ error: "Failed to delete reply" });
   }
 });
 
@@ -1031,7 +1152,10 @@ app.get("/api/comments/:id/history", async (req, res) => {
       return res.status(400).json({ error: "Invalid comment id" });
     }
     const history = await commentRevisionsCollection
-      .find({ commentId: new ObjectId(req.params.id) })
+      .find({
+        commentId: new ObjectId(req.params.id),
+        $or: [{ type: { $exists: false } }, { type: "comment" }],
+      })
       .sort({ createdAt: 1 })
       .toArray();
     return res.json({ commentId: req.params.id, history });

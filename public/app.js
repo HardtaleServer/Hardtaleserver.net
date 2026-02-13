@@ -1036,6 +1036,8 @@ function CommentThread({ newsId }) {
   const [status, setStatus] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editingText, setEditingText] = useState("");
+  const [editingReplyKey, setEditingReplyKey] = useState(null);
+  const [editingReplyText, setEditingReplyText] = useState("");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState([]);
 
@@ -1053,6 +1055,10 @@ function CommentThread({ newsId }) {
   useEffect(() => {
     loadComments();
   }, [newsId]);
+
+  useEffect(() => {
+    setCommentCount(comments.length);
+  }, [comments]);
 
   function resolveRank(comment) {
     const email = String(comment.authorEmail || "").toLowerCase();
@@ -1123,6 +1129,66 @@ function CommentThread({ newsId }) {
       setStatus("");
     } catch {
       setStatus("Delete failed.");
+    }
+  }
+
+  function startReplyEdit(commentId, reply) {
+    setEditingReplyKey(`${commentId}:${reply.id}`);
+    setEditingReplyText(reply.body || "");
+  }
+
+  function cancelReplyEdit() {
+    setEditingReplyKey(null);
+    setEditingReplyText("");
+  }
+
+  async function saveReplyEdit(commentId, replyId) {
+    if (!editingReplyText.trim()) return;
+    setStatus("Saving reply...");
+    try {
+      const response = await apiFetchWithToken(
+        getToken,
+        true,
+        `/api/comments/${commentId}/replies/${replyId}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: editingReplyText }),
+        },
+      );
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      if (data?.comment) {
+        setComments((prev) =>
+          prev.map((entry) => (entry.id === data.comment.id ? data.comment : entry)),
+        );
+      }
+      cancelReplyEdit();
+      setStatus("");
+    } catch {
+      setStatus("Reply edit failed.");
+    }
+  }
+
+  async function deleteReply(commentId, replyId) {
+    setStatus("Deleting reply...");
+    try {
+      const response = await apiFetchWithToken(
+        getToken,
+        true,
+        `/api/comments/${commentId}/replies/${replyId}`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      if (data?.comment) {
+        setComments((prev) =>
+          prev.map((entry) => (entry.id === data.comment.id ? data.comment : entry)),
+        );
+      }
+      setStatus("");
+    } catch {
+      setStatus("Reply delete failed.");
     }
   }
 
@@ -1278,11 +1344,58 @@ function CommentThread({ newsId }) {
                                   <div className="comment-meta">
                                     <div className="comment-meta-right">
                                       <span className="comment-time">${formatTimestamp(reply.createdAt)}</span>
+                                      ${reply.editCount > 0
+                                        ? html`<span className="comment-edited">
+                                            Edited ${formatTimestamp(reply.updatedAt)}
+                                          </span>`
+                                        : html``}
                                     </div>
                                   </div>
-                                  <p className=${`comment-text ${resolveRank(reply).staff ? "staff" : ""}`}>
-                                    ${reply.body}
-                                  </p>
+                                  ${editingReplyKey === `${comment.id}:${reply.id}`
+                                    ? html`<div className="comment-editor">
+                                        <textarea
+                                          rows="2"
+                                          value=${editingReplyText}
+                                          onInput=${(event) => setEditingReplyText(event.target.value)}
+                                        ></textarea>
+                                        <div className="comment-actions right">
+                                          <button
+                                            className="button primary"
+                                            type="button"
+                                            onClick=${() => saveReplyEdit(comment.id, reply.id)}
+                                          >
+                                            Save
+                                          </button>
+                                          <button
+                                            className="button ghost-btn"
+                                            type="button"
+                                            onClick=${cancelReplyEdit}
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
+                                      </div>`
+                                    : html`<p className=${`comment-text ${resolveRank(reply).staff ? "staff" : ""}`}>
+                                        ${reply.body}
+                                      </p>`}
+                                  ${reply.userId === userId && editingReplyKey !== `${comment.id}:${reply.id}`
+                                    ? html`<div className="comment-controls right">
+                                        <button
+                                          className="ghost-btn"
+                                          type="button"
+                                          onClick=${() => startReplyEdit(comment.id, reply)}
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          className="ghost-btn"
+                                          type="button"
+                                          onClick=${() => deleteReply(comment.id, reply.id)}
+                                        >
+                                          Delete
+                                        </button>
+                                      </div>`
+                                    : html``}
                                 </div>
                               </div>`,
                             )}

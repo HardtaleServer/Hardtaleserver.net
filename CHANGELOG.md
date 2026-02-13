@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-13 (v1.3.17)
+- Added Mongo-backed reply edit and reply delete APIs with auth/ownership checks.
+- Stored reply edit metadata (`editCount`, `updatedAt`) so reply changes persist across reloads.
+- Added signed-in UI controls to edit/delete your own replies directly in the news comment thread.
+
 ## 2026-02-12 (v1.3.8)
 - Installed Frimousse locally and updated emoji picker imports.
 - Updated picker styling to match light/dark theme.
