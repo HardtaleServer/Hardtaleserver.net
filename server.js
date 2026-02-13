@@ -67,35 +67,81 @@ let mongoClient = null;
 let mongoDb = null;
 let commentsCollection = null;
 let commentRevisionsCollection = null;
+let mongoConnectInFlight = null;
+let mongoReconnectTimer = null;
+let mongoReconnectDelayMs = 1000;
+const MAX_MONGO_RECONNECT_DELAY_MS = 30000;
+
+function resetMongoState() {
+  mongoClient = null;
+  mongoDb = null;
+  commentsCollection = null;
+  commentRevisionsCollection = null;
+  mongoConnectInFlight = null;
+}
+
+function scheduleMongoReconnect() {
+  if (mongoReconnectTimer) return;
+  const delay = mongoReconnectDelayMs;
+  mongoReconnectDelayMs = Math.min(mongoReconnectDelayMs * 2, MAX_MONGO_RECONNECT_DELAY_MS);
+  mongoReconnectTimer = setTimeout(async () => {
+    mongoReconnectTimer = null;
+    await connectMongo();
+  }, delay);
+}
 
 async function connectMongo() {
   if (!MONGO_URI) {
     console.warn("MONGO_URI is not set. Comments will not persist.");
     return;
   }
-  if (mongoClient) return;
-  mongoClient = new MongoClient(MONGO_URI, {
-    serverApi: {
-      version: ServerApiVersion.v1,
-      strict: true,
-      deprecationErrors: true,
-    },
-  });
-  try {
-    await mongoClient.connect();
-    mongoDb = mongoClient.db(MONGO_DB_NAME);
-    commentsCollection = mongoDb.collection("comments");
-    commentRevisionsCollection = mongoDb.collection("comment_revisions");
-    await commentsCollection.createIndex({ newsId: 1, createdAt: 1 });
-    await commentsCollection.createIndex({ userId: 1 });
-    await commentRevisionsCollection.createIndex({ commentId: 1, createdAt: 1 });
-    console.log("Connected to MongoDB");
-  } catch (error) {
-    console.error("Failed to connect to MongoDB", error);
+  if (commentsCollection && commentRevisionsCollection) return;
+  if (mongoConnectInFlight) {
+    await mongoConnectInFlight;
+    return;
   }
+
+  mongoConnectInFlight = (async () => {
+    const client = new MongoClient(MONGO_URI, {
+      serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+      },
+    });
+
+    try {
+      await client.connect();
+      mongoClient = client;
+      mongoDb = mongoClient.db(MONGO_DB_NAME);
+      commentsCollection = mongoDb.collection("comments");
+      commentRevisionsCollection = mongoDb.collection("comment_revisions");
+      await commentsCollection.createIndex({ newsId: 1, createdAt: 1 });
+      await commentsCollection.createIndex({ userId: 1 });
+      await commentRevisionsCollection.createIndex({ commentId: 1, createdAt: 1 });
+      mongoReconnectDelayMs = 1000;
+      console.log("Connected to MongoDB");
+    } catch (error) {
+      console.error("Failed to connect to MongoDB", error);
+      try {
+        await client.close();
+      } catch {
+        // noop
+      }
+      resetMongoState();
+      scheduleMongoReconnect();
+      throw error;
+    } finally {
+      mongoConnectInFlight = null;
+    }
+  })();
+
+  await mongoConnectInFlight;
 }
 
-connectMongo();
+connectMongo().catch(() => {
+  // Initial connection errors are logged in connectMongo and retried in background.
+});
 
 function normalizeComment(doc) {
   if (!doc) return null;
@@ -115,8 +161,15 @@ function requireMongo(res) {
   return true;
 }
 
-function requireMongoReady(res) {
+async function requireMongoReady(res) {
   if (!requireMongo(res)) return false;
+  if (!commentsCollection || !commentRevisionsCollection) {
+    try {
+      await connectMongo();
+    } catch {
+      // connectMongo already logs details and schedules a retry.
+    }
+  }
   if (!mongoClient || !commentsCollection || !commentRevisionsCollection) {
     res.status(503).json({
       error: "Database not connected",
@@ -646,7 +699,7 @@ app.post("/api/reactions", async (req, res) => {
 
 app.get("/api/comments", async (req, res) => {
   try {
-    if (!requireMongoReady(res)) return;
+    if (!(await requireMongoReady(res))) return;
     const newsId = normalizeText(req.query.newsId, 200);
     if (!newsId) {
       return res.status(400).json({ error: "Invalid news id" });
@@ -667,7 +720,7 @@ app.get("/api/comments", async (req, res) => {
 
 app.post("/api/comments", async (req, res) => {
   try {
-    if (!requireMongoReady(res)) return;
+    if (!(await requireMongoReady(res))) return;
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const newsId = normalizeText(req.body?.newsId, 200);
@@ -711,7 +764,7 @@ app.post("/api/comments", async (req, res) => {
 
 app.patch("/api/comments/:id", async (req, res) => {
   try {
-    if (!requireMongoReady(res)) return;
+    if (!(await requireMongoReady(res))) return;
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const nextBody = normalizeText(req.body?.text, 276);
@@ -765,7 +818,7 @@ app.patch("/api/comments/:id", async (req, res) => {
 
 app.post("/api/comments/:id/replies", async (req, res) => {
   try {
-    if (!requireMongoReady(res)) return;
+    if (!(await requireMongoReady(res))) return;
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const body = normalizeText(req.body?.text, 276);
@@ -813,7 +866,7 @@ app.post("/api/comments/:id/replies", async (req, res) => {
 
 app.delete("/api/comments/:id", async (req, res) => {
   try {
-    if (!requireMongoReady(res)) return;
+    if (!(await requireMongoReady(res))) return;
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     if (!ObjectId.isValid(req.params.id)) {
@@ -847,7 +900,7 @@ app.delete("/api/comments/:id", async (req, res) => {
 
 app.get("/api/comments/:id/history", async (req, res) => {
   try {
-    if (!requireMongoReady(res)) return;
+    if (!(await requireMongoReady(res))) return;
     if (!ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ error: "Invalid comment id" });
     }
