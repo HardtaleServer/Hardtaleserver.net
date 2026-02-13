@@ -639,6 +639,30 @@ function isStaffLabel(label = "") {
   return text.includes("smurfis") || text.includes("hardtale");
 }
 
+function renderNewsRichText(text) {
+  const source = String(text || "").trim();
+  if (!source) return [];
+  const blocks = source.split(/\n{2,}/).map((entry) => entry.trim()).filter(Boolean);
+  return blocks.map((block, index) => {
+    if (block.startsWith("### ")) {
+      return html`<h5 key=${`news-h5-${index}`} className="news-body-heading h5">${block.slice(4)}</h5>`;
+    }
+    if (block.startsWith("## ")) {
+      return html`<h4 key=${`news-h4-${index}`} className="news-body-heading h4">${block.slice(3)}</h4>`;
+    }
+    if (block.startsWith("# ")) {
+      return html`<h3 key=${`news-h3-${index}`} className="news-body-heading h3">${block.slice(2)}</h3>`;
+    }
+    const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
+    const isList = lines.length > 1 && lines.every((line) => line.startsWith("- "));
+    if (isList) {
+      return html`<ul key=${`news-list-${index}`} className="news-body-list">
+        ${lines.map((line, lineIndex) => html`<li key=${`news-li-${index}-${lineIndex}`}>${line.slice(2)}</li>`)}
+      </ul>`;
+    }
+    return html`<p key=${`news-p-${index}`} className="news-body-paragraph">${block}</p>`;
+  });
+}
 async function apiFetchWithToken(getToken, isSignedIn, url, options = {}) {
   const headers = { ...(options.headers || {}) };
   if (isSignedIn && getToken) {
@@ -653,6 +677,14 @@ async function apiFetchWithToken(getToken, isSignedIn, url, options = {}) {
 
 function NewsCard({ item }) {
   const [showImagePreview, setShowImagePreview] = useState(false);
+  const [expandedDescription, setExpandedDescription] = useState(false);
+  const descriptionText = String(item.description || "");
+  const descriptionLimit = 350;
+  const hasLongDescription = descriptionText.length > descriptionLimit;
+  const visibleDescription =
+    hasLongDescription && !expandedDescription
+      ? `${descriptionText.slice(0, descriptionLimit).trimEnd()}...`
+      : descriptionText;
 
   return html`
     <article className="news-card">
@@ -661,29 +693,45 @@ function NewsCard({ item }) {
         : html``}
       <div className="news-header">
         <div className="news-title-row">
-          ${item.featured ? html`<span className="news-star" title="Featured">?</span>` : html``}
+          ${item.featured ? html`<span className="news-star" title="Featured">*</span>` : html``}
           <h3>${item.title}</h3>
         </div>
       </div>
-      <p>${item.description}</p>
+      <div className="news-body">
+        ${hasLongDescription && !expandedDescription
+          ? html`<p className="news-body-paragraph">${visibleDescription}</p>`
+          : renderNewsRichText(visibleDescription)}
+      </div>
+      ${hasLongDescription
+        ? html`<button
+            type="button"
+            className="ghost-btn news-read-more-btn"
+            onClick=${() => setExpandedDescription((prev) => !prev)}
+          >
+            ${expandedDescription ? "Show less" : "Read more"}
+          </button>`
+        : html``}
       <div className="news-meta">
         <span>
           By <span className=${`author-name ${isStaffLabel(item.author) ? "staff" : ""}`}>${item.author}</span>
-          · ${formatTimestamp(item.createdAt)}
+          - ${formatTimestamp(item.createdAt)}
         </span>
-        ${item.imageUrl
-          ? html`<button
-              type="button"
-              className="button ghost-btn news-image-preview-btn"
-              onClick=${() => setShowImagePreview(true)}
-            >
-              View image
-            </button>`
-          : item.readMoreUrl
-          ? html`<a href=${item.readMoreUrl} target="_blank" rel="noreferrer">
-              Read me
-            </a>`
-          : html`<span></span>`}
+        <div className="news-meta-actions">
+          ${item.imageUrl
+            ? html`<button
+                type="button"
+                className="button ghost-btn news-image-preview-btn"
+                onClick=${() => setShowImagePreview(true)}
+              >
+                View image
+              </button>`
+            : html``}
+          ${item.readMoreUrl
+            ? html`<a href=${item.readMoreUrl} target="_blank" rel="noreferrer">
+                Read source
+              </a>`
+            : html``}
+        </div>
       </div>
       <${PollPanel} newsId=${item.id} />
       <${ReactionBar} itemType="news" itemId=${item.id} />
@@ -707,7 +755,6 @@ function NewsCard({ item }) {
     </article>
   `;
 }
-
 function PollPanel({ newsId }) {
   const { getToken, isSignedIn } = useAuth();
   const { openSignIn } = useClerk();
@@ -1548,6 +1595,9 @@ function AdminPanel({
         onInput=${(event) => setNewsDescription(event.target.value)}
         required
       ></textarea>
+      <div className="muted">
+        Supports formatting: <code># Heading</code>, <code>## Subheading</code>, blank lines for paragraphs, and list lines with <code>- item</code>.
+      </div>
       <label className="settings-row">
         <span>Author</span>
         <select
@@ -1627,7 +1677,7 @@ function AdminPanel({
                 <div className="news-header">
                   <div className="news-title-row">
                     ${item.featured
-                      ? html`<span className="news-star" title="Featured">?</span>`
+                      ? html`<span className="news-star" title="Featured">★</span>`
                       : html``}
                     <h3>${item.title}</h3>
                   </div>
@@ -1686,7 +1736,7 @@ function AdminPanel({
                 <div className="news-header">
                   <div className="news-title-row">
                     ${item.featured
-                      ? html`<span className="news-star" title="Featured">?</span>`
+                      ? html`<span className="news-star" title="Featured">★</span>`
                       : html``}
                     <h3>${item.title}</h3>
                   </div>
@@ -2652,7 +2702,7 @@ function NotificationsPanel({ notifications }) {
       ${notifications.map(
         (item) => html`<div key=${item.id} className="notif-card">
           <div className="notif-title">
-            ${item.featured ? html`<span className="news-star mini" title="Featured">?</span>` : html``}
+            ${item.featured ? html`<span className="news-star mini" title="Featured">★</span>` : html``}
             ${item.title}
           </div>
           <div className="notif-body">${item.message}</div>
@@ -2767,7 +2817,7 @@ function HomePage({
                 ${news.slice(0, 3).map(
                   (item) => html`<div key=${item.id} className="news-mini-row">
                     <div className="news-mini-title">
-                      ${item.featured ? html`<span className="news-star mini" title="Featured">?</span>` : html``}
+                      ${item.featured ? html`<span className="news-star mini" title="Featured">★</span>` : html``}
                       ${item.title}
                     </div>
                     <div className="news-mini-meta">
@@ -2789,8 +2839,13 @@ function NewsPage({
   news,
   loading,
   error,
+  isAdmin,
+  notifications,
+  onNewsUpdate,
+  onNotificationsUpdate,
 }) {
   const featuredItem = news.find((item) => item.featured);
+  const [showManagePanel, setShowManagePanel] = useState(false);
   return html`
     <section className="news-page fade-in">
       <div className="news-hero">
@@ -2801,12 +2856,21 @@ function NewsPage({
             Patch notes, events, and community highlights. Stay up to date with
             everything happening on the server.
           </p>
+          ${isAdmin
+            ? html`<button
+                type="button"
+                className="ghost-btn news-manage-btn"
+                onClick=${() => setShowManagePanel(true)}
+              >
+                Manage
+              </button>`
+            : html``}
         </div>
         <div className="news-callout">
           <div className="news-callout-label">Featured</div>
           ${featuredItem
             ? html`<div className="news-callout-title">${featuredItem.title}</div>
-                <div className="news-callout-copy">${featuredItem.description}</div>
+                <div className="news-callout-copy">${String(featuredItem.description || "").slice(0, 420)}</div>
                 `
             : html`<div className="news-callout-title">No featured updates yet</div>
                 <div className="news-callout-copy">Mark a post as featured to highlight it here.</div>`}
@@ -2830,10 +2894,27 @@ function NewsPage({
               )}
             </div>`}
       </section>
+      ${isAdmin
+        ? html`<${PopUp}
+            show=${showManagePanel}
+            onClose=${() => setShowManagePanel(false)}
+            title="Admin Panel"
+            className="admin-panel-overlay"
+          >
+            <div className="admin-panel-modal-content">
+              <${AdminPanel}
+                news=${news}
+                onNewsUpdate=${onNewsUpdate}
+                onNotificationsUpdate=${onNotificationsUpdate}
+                notifications=${notifications}
+                isAdmin=${isAdmin}
+              />
+            </div>
+          <//>`
+        : html``}
     </section>
   `;
 }
-
 function VotePage() {
   return html`
     <section className="vote-page fade-in">
@@ -3522,6 +3603,10 @@ function Layout() {
               news=${sortedNews}
               loading=${loading}
               error=${error}
+              isAdmin=${isAdmin}
+              notifications=${sortedNotifications}
+              onNewsUpdate=${setNews}
+              onNotificationsUpdate=${setNotifications}
             />`}
           />
           <${Route}
@@ -3578,7 +3663,7 @@ function Layout() {
                       aria-label="Close menu"
                       onClick=${() => setShowMobileNav(false)}
                     >
-                      ?
+                      X
                     </button>
                     <${SignedIn}>
                 <${SettingsMenu}
@@ -3647,7 +3732,7 @@ function Layout() {
                       aria-label="Close menu"
                       onClick=${() => setShowMobileNav(false)}
                     >
-                      ?
+                      X
                     </button>
                   `}
             </div>

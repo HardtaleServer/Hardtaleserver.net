@@ -477,7 +477,7 @@ function maxRankLabel(currentRank, nextRank) {
 
 function normalizeNewsItem(item) {
   const title = String(item?.title || "").trim().slice(0, 120);
-  const description = String(item?.description || "").trim().slice(0, 600);
+  const description = String(item?.description || "").trim();
   const author = String(item?.author || "").trim().slice(0, 80);
   const readMoreUrl = String(item?.readMoreUrl || "").trim().slice(0, 500);
   const imageUrl = String(item?.imageUrl || "").trim().slice(0, 500);
