@@ -144,6 +144,18 @@ function requireMongo(res) {
   return true;
 }
 
+function requireMongoReady(res) {
+  if (!requireMongo(res)) return false;
+  if (mongoose.connection.readyState !== 1) {
+    res.status(503).json({
+      error: "Database not connected",
+      detail: "MongoDB connection is not ready. Check MONGO_URI and network access.",
+    });
+    return false;
+  }
+  return true;
+}
+
 let communityWriteQueue = Promise.resolve();
 
 async function ensureCommunityStorage() {
@@ -663,7 +675,7 @@ app.post("/api/reactions", async (req, res) => {
 
 app.get("/api/comments", async (req, res) => {
   try {
-    if (!requireMongo(res)) return;
+    if (!requireMongoReady(res)) return;
     const newsId = normalizeText(req.query.newsId, 200);
     if (!newsId) {
       return res.status(400).json({ error: "Invalid news id" });
@@ -683,7 +695,7 @@ app.get("/api/comments", async (req, res) => {
 
 app.post("/api/comments", async (req, res) => {
   try {
-    if (!requireMongo(res)) return;
+    if (!requireMongoReady(res)) return;
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const newsId = normalizeText(req.body?.newsId, 200);
@@ -724,7 +736,7 @@ app.post("/api/comments", async (req, res) => {
 
 app.patch("/api/comments/:id", async (req, res) => {
   try {
-    if (!requireMongo(res)) return;
+    if (!requireMongoReady(res)) return;
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const nextBody = normalizeText(req.body?.text, 276);
@@ -770,7 +782,7 @@ app.patch("/api/comments/:id", async (req, res) => {
 
 app.post("/api/comments/:id/replies", async (req, res) => {
   try {
-    if (!requireMongo(res)) return;
+    if (!requireMongoReady(res)) return;
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const body = normalizeText(req.body?.text, 276);
@@ -811,7 +823,7 @@ app.post("/api/comments/:id/replies", async (req, res) => {
 
 app.delete("/api/comments/:id", async (req, res) => {
   try {
-    if (!requireMongo(res)) return;
+    if (!requireMongoReady(res)) return;
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
@@ -840,7 +852,7 @@ app.delete("/api/comments/:id", async (req, res) => {
 
 app.get("/api/comments/:id/history", async (req, res) => {
   try {
-    if (!requireMongo(res)) return;
+    if (!requireMongoReady(res)) return;
     if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
       return res.status(400).json({ error: "Invalid comment id" });
     }
