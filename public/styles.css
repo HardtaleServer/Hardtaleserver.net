@@ -3572,4 +3572,39 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   .not-found-wrap {
     padding: 16px;
   }
+
+  .comment-item {
+    gap: 10px;
+  }
+
+  .comment-avatar {
+    width: 90px;
+    height: 90px;
+  }
+
+  .comment-avatar.small {
+    width: 21px;
+    height: 21px;
+  }
+
+  .comment-left {
+    width: 104px;
+    min-width: 104px;
+    gap: 4px;
+  }
+
+  .comment-reply .comment-left {
+    width: 88px;
+    min-width: 88px;
+  }
+
+  .comment-right {
+    min-width: 0;
+  }
+
+  .comment-author {
+    font-size: 13px;
+    line-height: 1.2;
+    word-break: break-word;
+  }
 }
