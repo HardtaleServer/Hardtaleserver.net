@@ -2785,21 +2785,61 @@ function HomePage({
 
       <section className="grid fade-in">
         <div className="card">
-          <div className="section-title">Performance first</div>
+          <div className="section-title">Performance First</div>
           <p className="muted">
-            A smooth, lag-free realm with persistent progression across adventures.
+            A stable, optimized realm built for long sessions and real progression.
+          </p>
+          <p className="muted">
+            Server-first architecture (Hub designed for network expansion)
+            <br />
+            Controlled world size & clean entity management
+            <br />
+            Progression systems built to scale, not inflate
+            <br />
+            Minimal unnecessary plugins  performance over bloat
+            <br />
+            Designed to support instanced content later without breaking the core world
+          </p>
+          <p className="muted">
+            Hardtale is being built to run clean before it runs big.
           </p>
         </div>
         <div className="card">
-          <div className="section-title">True to the game</div>
+          <div className="section-title">True to the Game</div>
           <p className="muted">
-            Vanilla+ RPG systems that respect the core Hytale experience.
+            Vanilla-first design. MMO depth without destroying the sandbox.
+          </p>
+          <p className="muted">
+            Core survival loop remains intact
+            <br />
+            No overpowered donor kits or pay-to-win gear
+            <br />
+            RPG systems layered on top  not replacing base mechanics
+            <br />
+            Combat progression designed to complement Hytale, not override it
+            <br />
+            Scarcity and crafting still matter
+          </p>
+          <p className="muted">
+            This is Vanilla+, not a total conversion.
           </p>
         </div>
         <div className="card">
-          <div className="section-title">Who we are</div>
+          <div className="section-title">Who We Are</div>
           <p className="muted">
-            A dedicated team of designers and builders crafting the best RPG SMP.
+            Hardtale isnt a quick-launch cash grab. Its a long-term project.
+          </p>
+          <p className="muted">
+            Designers focused on progression pacing and economy balance
+            <br />
+            Builders creating structured hubs and meaningful world spaces
+            <br />
+            Systems-first development before cosmetics or hype
+            <br />
+            MMO-inspired structure inside a survival sandbox
+          </p>
+          <p className="muted">
+            Were building something persistent  not seasonal.
           </p>
         </div>
       </section>
