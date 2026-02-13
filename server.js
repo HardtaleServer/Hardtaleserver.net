@@ -86,7 +86,11 @@ function scheduleMongoReconnect() {
   mongoReconnectDelayMs = Math.min(mongoReconnectDelayMs * 2, MAX_MONGO_RECONNECT_DELAY_MS);
   mongoReconnectTimer = setTimeout(async () => {
     mongoReconnectTimer = null;
-    await connectMongo();
+    try {
+      await connectMongo();
+    } catch {
+      // connectMongo already logs the error and schedules the next retry.
+    }
   }, delay);
 }
 
