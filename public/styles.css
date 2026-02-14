@@ -3428,6 +3428,8 @@ body[data-theme="dark"] .store-cta {
   background: var(--bg-soft);
   display: grid;
   gap: 6px;
+  position: relative;
+  padding-top: 28px;
   background-image:
     radial-gradient(circle at 20% 0%, rgba(42, 163, 255, 0.06), transparent 45%),
     radial-gradient(circle at 80% 0%, rgba(255, 59, 59, 0.06), transparent 45%);
@@ -3445,10 +3447,27 @@ body[data-theme="dark"] .store-cta {
   color: var(--accent);
   font-size: 12px;
   font-weight: 600;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
+  display: block;
+  margin-top: 2px;
+}
+
+.notif-card .notification-timestamp {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.notif-card .author-name.staff {
+  background-image: linear-gradient(270deg, var(--accent-2), var(--accent));
+  background-size: 220% 100%;
+  animation: staffReflect 2.4s ease-in-out infinite reverse;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
 .notif-actions {
