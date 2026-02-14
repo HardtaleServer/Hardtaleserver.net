@@ -4573,7 +4573,6 @@ function Layout() {
       { id: "store", label: "Store", onClick: () => navigate("/store") },
       { id: "vote", label: "Vote", onClick: () => navigate("/vote") },
       { id: "forum", label: "Forum", onClick: () => navigate("/forum") },
-      { id: "support", label: "Support", onClick: () => navigate("/support") },
       { id: "play", label: "Play", onClick: openHowModal },
     ];
     return html`
