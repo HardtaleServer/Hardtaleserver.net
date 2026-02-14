@@ -46,7 +46,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.17";
+const VERSION = "1.3.18";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_EMAILS = new Set([
   "chashsmurfis@gmail.com",
@@ -117,6 +117,17 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.18",
+    date: "2026-02-14",
+    items: [
+      "Added /link auth page with six-digit code input UX (auto-advance, keyboard navigation, and paste support).",
+      "Moved comment/reply identity to username-first staff-aware rendering and added staff reflectance animation.",
+      "Redesigned comment responses as a full-width dropdown section with improved mobile stacking/alignment.",
+      "Added avatar profile cards from comment/reply images, including staff badge metadata for future badge expansion.",
+      "Updated admin delete actions to hard-delete news and notifications from MongoDB when deleting entries.",
+    ],
+  },
   {
     version: "1.3.17",
     date: "2026-02-13",
@@ -645,6 +656,16 @@ function formatTimestamp(value) {
   });
 }
 
+function triggerFlash(buttonEl) {
+  if (!buttonEl?.classList) return;
+  buttonEl.classList.remove("flash");
+  void buttonEl.offsetWidth;
+  buttonEl.classList.add("flash");
+  setTimeout(() => {
+    if (buttonEl?.classList) buttonEl.classList.remove("flash");
+  }, 420);
+}
+
 function isStaffLabel(label = "") {
   const text = String(label || "").trim().toLowerCase();
   if (!text) return false;
@@ -728,8 +749,8 @@ function NewsCard({ item }) {
       <div className="news-meta">
         <span>
           By <span className=${`author-name ${isStaffLabel(item.author) ? "staff" : ""}`}>${item.author}</span>
-          - ${formatTimestamp(item.createdAt)}
         </span>
+        <span className="notification-timestamp">${formatTimestamp(item.createdAt)}</span>
         <div className="news-meta-actions">
           ${item.imageUrl
             ? html`<button
@@ -1053,6 +1074,8 @@ function CommentThread({ newsId }) {
   const [editingReplyKey, setEditingReplyKey] = useState(null);
   const [editingReplyText, setEditingReplyText] = useState("");
   const [openResponses, setOpenResponses] = useState({});
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileUser, setProfileUser] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState([]);
 
@@ -1226,6 +1249,19 @@ function CommentThread({ newsId }) {
     } catch {}
   }
 
+  function openProfileCard(entry) {
+    if (!entry) return;
+    const rank = resolveRank(entry);
+    setProfileUser({
+      name: String(entry.authorName || "User"),
+      image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
+      rankLabel: rank.label,
+      staff: rank.staff,
+      username: String(entry.authorUsername || ""),
+    });
+    setProfileOpen(true);
+  }
+
   return html`
     <div className="comment-thread">
       <button className="comment-toggle" type="button" onClick=${() => setOpen(!open)}>
@@ -1268,11 +1304,18 @@ function CommentThread({ newsId }) {
               : comments.map(
                   (comment) => html`<div key=${comment.id} className="comment-item">
                     <div className="comment-left comment-left-main">
-                      <img
-                        className="comment-avatar"
-                        src=${comment.authorImage || "/assets/HardTale_H_GreyScale.png"}
-                        alt=${comment.authorName}
-                      />
+                      <button
+                        className="comment-avatar-trigger"
+                        type="button"
+                        onClick=${() => openProfileCard(comment)}
+                        title="Open profile card"
+                      >
+                        <img
+                          className="comment-avatar"
+                          src=${comment.authorImage || "/assets/HardTale_H_GreyScale.png"}
+                          alt=${comment.authorName}
+                        />
+                      </button>
                       <div className="comment-identity">
                         <div className="comment-author">${comment.authorName}</div>
                         ${(() => {
@@ -1288,20 +1331,21 @@ function CommentThread({ newsId }) {
                         <div className="comment-meta-right">
                           <span className="comment-time">${formatTimestamp(comment.createdAt)}</span>
                           ${comment.editCount > 0
+                            ? html`<span className="comment-edited">
+                                Edited ${formatTimestamp(comment.updatedAt)}
+                              </span>`
+                            : html``}
+                          ${comment.editCount > 0
                             ? html`<button
                                 className="comment-history-btn"
                                 type="button"
+                                onMouseDown=${(event) => triggerFlash(event.currentTarget)}
                                 onClick=${() => openHistory(comment.id)}
                                 title="View edits"
                               >
                                 <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
                                 <span>${comment.editCount}</span>
                               </button>`
-                            : html``}
-                          ${comment.editCount > 0
-                            ? html`<span className="comment-edited">
-                                Edited ${formatTimestamp(comment.updatedAt)}
-                              </span>`
                             : html``}
                         </div>
                       </div>
@@ -1337,11 +1381,21 @@ function CommentThread({ newsId }) {
                           </p>`}
                       ${comment.userId === userId && editingId !== comment.id
                         ? html`<div className="comment-controls right">
-                            <button className="ghost-btn" type="button" onClick=${() => startEdit(comment)}>
+                            <button
+                              className="ghost-btn"
+                              type="button"
+                              onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                              onClick=${() => startEdit(comment)}
+                            >
                               <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
                               Edit
                             </button>
-                            <button className="ghost-btn" type="button" onClick=${() => deleteComment(comment.id)}>
+                            <button
+                              className="ghost-btn"
+                              type="button"
+                              onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                              onClick=${() => deleteComment(comment.id)}
+                            >
                               Delete
                             </button>
                           </div>`
@@ -1366,11 +1420,18 @@ function CommentThread({ newsId }) {
                                 ${replies.map(
                                   (reply) => html`<div key=${reply.id} className="comment-reply">
                                     <div className="comment-left comment-left-reply">
-                                      <img
-                                        className="comment-avatar small"
-                                        src=${reply.authorImage || "/assets/HardTale_H_GreyScale.png"}
-                                        alt=${reply.authorName}
-                                      />
+                                      <button
+                                        className="comment-avatar-trigger"
+                                        type="button"
+                                        onClick=${() => openProfileCard(reply)}
+                                        title="Open profile card"
+                                      >
+                                        <img
+                                          className="comment-avatar small"
+                                          src=${reply.authorImage || "/assets/HardTale_H_GreyScale.png"}
+                                          alt=${reply.authorName}
+                                        />
+                                      </button>
                                       <div className="comment-identity">
                                         <div className="comment-author">${reply.authorName}</div>
                                         ${(() => {
@@ -1424,6 +1485,7 @@ function CommentThread({ newsId }) {
                                             <button
                                               className="ghost-btn"
                                               type="button"
+                                              onMouseDown=${(event) => triggerFlash(event.currentTarget)}
                                               onClick=${() => startReplyEdit(comment.id, reply)}
                                             >
                                               <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
@@ -1432,6 +1494,7 @@ function CommentThread({ newsId }) {
                                             <button
                                               className="ghost-btn"
                                               type="button"
+                                              onMouseDown=${(event) => triggerFlash(event.currentTarget)}
                                               onClick=${() => deleteReply(comment.id, reply.id)}
                                             >
                                               Delete
@@ -1493,6 +1556,25 @@ function CommentThread({ newsId }) {
                 )}
           </div>`
         : html``}
+      <${PopUp}
+        show=${profileOpen}
+        onClose=${() => setProfileOpen(false)}
+        title="Profile Card"
+      >
+        ${profileUser
+          ? html`<div className="profile-card">
+              <img className="profile-card-avatar" src=${profileUser.image} alt=${profileUser.name} />
+              <div className="profile-card-name">${profileUser.name}</div>
+              ${profileUser.username
+                ? html`<div className="profile-card-username">@${profileUser.username}</div>`
+                : html``}
+              <div className=${`comment-rank ${profileUser.staff ? "staff" : ""}`}>${profileUser.rankLabel}</div>
+              ${profileUser.staff
+                ? html`<div className="profile-card-badge">Hardtale Staff Member</div>`
+                : html``}
+            </div>`
+          : html``}
+      <//>
       <${PopUp}
         show=${historyOpen}
         onClose=${() => setHistoryOpen(false)}
@@ -1658,7 +1740,7 @@ function AdminPanel({
   async function deleteNews(id) {
     try {
       const token = await getToken();
-      const response = await fetch(`/api/news/${id}`, {
+      const response = await fetch(`/api/news/${id}?hard=true`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -1694,7 +1776,7 @@ function AdminPanel({
   async function deleteNotification(id) {
     try {
       const token = await getToken();
-      const response = await fetch(`/api/notifications/${id}`, {
+      const response = await fetch(`/api/notifications/${id}?hard=true`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -1841,7 +1923,12 @@ function AdminPanel({
                       : html``}
                     <h3>${item.title}</h3>
                   </div>
-                  <button className="ghost-btn" type="button" onClick=${() => deleteNews(item.id)}>
+                  <button
+                    className="ghost-btn"
+                    type="button"
+                    onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                    onClick=${() => deleteNews(item.id)}
+                  >
                     Delete
                   </button>
                 </div>
@@ -1900,7 +1987,12 @@ function AdminPanel({
                       : html``}
                     <h3>${item.title}</h3>
                   </div>
-                  <button className="ghost-btn" type="button" onClick=${() => deleteNotification(item.id)}>
+                  <button
+                    className="ghost-btn"
+                    type="button"
+                    onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                    onClick=${() => deleteNotification(item.id)}
+                  >
                     Delete
                   </button>
                 </div>
@@ -3127,6 +3219,101 @@ function VotePage() {
   `;
 }
 
+function LinkPage() {
+  const [digits, setDigits] = useState(["", "", "", "", "", ""]);
+  const inputRefs = useRef([]);
+  const fullCode = digits.join("");
+  const isComplete = fullCode.length === 6 && /^\d{6}$/.test(fullCode);
+
+  function setDigitAt(index, value) {
+    const next = [...digits];
+    next[index] = value;
+    setDigits(next);
+  }
+
+  function onInput(index, event) {
+    const raw = String(event.target.value || "");
+    const value = raw.replace(/\D/g, "").slice(-1);
+    setDigitAt(index, value);
+    if (value && index < 5) {
+      inputRefs.current[index + 1]?.focus();
+      inputRefs.current[index + 1]?.select();
+    }
+  }
+
+  function onKeyDown(index, event) {
+    if (event.key === "Backspace" && !digits[index] && index > 0) {
+      inputRefs.current[index - 1]?.focus();
+      return;
+    }
+    if (event.key === "ArrowLeft" && index > 0) {
+      event.preventDefault();
+      inputRefs.current[index - 1]?.focus();
+      return;
+    }
+    if (event.key === "ArrowRight" && index < 5) {
+      event.preventDefault();
+      inputRefs.current[index + 1]?.focus();
+    }
+  }
+
+  function onPaste(event) {
+    const text = String(event.clipboardData?.getData("text") || "");
+    const pastedDigits = text.replace(/\D/g, "").slice(0, 6).split("");
+    if (pastedDigits.length === 0) return;
+    event.preventDefault();
+    const next = ["", "", "", "", "", ""];
+    for (let i = 0; i < pastedDigits.length; i += 1) {
+      next[i] = pastedDigits[i];
+    }
+    setDigits(next);
+    const focusIndex = Math.min(pastedDigits.length - 1, 5);
+    inputRefs.current[focusIndex]?.focus();
+    inputRefs.current[focusIndex]?.select();
+  }
+
+  return html`
+    <section className="link-page fade-in">
+      <div className="card link-card">
+        <div className="link-eyebrow">Account Linking</div>
+        <h1 className="link-title">Link Hardtale UUID to Clerk</h1>
+        <p className="link-copy">
+          Enter your 6-digit link code. This page is prepared for the upcoming HardtaleNetwork plugin auth flow.
+        </p>
+        <div className="link-code-grid" onPaste=${onPaste}>
+          ${digits.map(
+            (digit, index) => html`<input
+              key=${`link-digit-${index}`}
+              ref=${(node) => {
+                inputRefs.current[index] = node;
+              }}
+              className="link-code-input"
+              type="text"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              pattern="[0-9]*"
+              maxLength="1"
+              value=${digit}
+              aria-label=${`Link code digit ${index + 1}`}
+              onInput=${(event) => onInput(index, event)}
+              onKeyDown=${(event) => onKeyDown(index, event)}
+              onFocus=${(event) => event.target.select()}
+            />`,
+          )}
+        </div>
+        <div className="link-actions">
+          <button className="button primary" type="button" disabled=${!isComplete}>
+            Verify Link Code
+          </button>
+          <div className="muted link-hint">
+            Use `/link` in-game soon to generate this code from your UUID.
+          </div>
+        </div>
+      </div>
+    </section>
+  `;
+}
+
 function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -3354,6 +3541,8 @@ function Layout() {
       setActive("news");
     } else if (location.pathname === "/vote") {
       setActive("vote");
+    } else if (location.pathname === "/link") {
+      setActive("link");
     }
   }, [location.pathname]);
 
@@ -3806,6 +3995,10 @@ function Layout() {
           <${Route}
             path="/subscriptions"
             element=${html`<${SubscriptionsPage} />`}
+          />
+          <${Route}
+            path="/link"
+            element=${html`<${LinkPage} />`}
           />
           <${Route}
             path="*"

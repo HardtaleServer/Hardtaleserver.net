@@ -1589,7 +1589,7 @@ emoji-picker.reaction-picker-panel {
   flex-wrap: wrap;
   align-items: flex-start;
   gap: 16px;
-  padding: 12px;
+  padding: 10px 12px 12px;
   border-radius: 12px;
   border: 1px solid var(--stroke);
   background: var(--bg);
@@ -1608,6 +1608,29 @@ emoji-picker.reaction-picker-panel {
   height: 28px;
 }
 
+.comment-avatar-trigger {
+  border: none;
+  background: transparent;
+  padding: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.comment-avatar-trigger:hover {
+  transform: scale(1.04);
+  box-shadow: 0 0 0 2px rgba(42, 163, 255, 0.25);
+}
+
+.comment-avatar-trigger:active {
+  transform: scale(0.96);
+}
+
+.comment-avatar-trigger:focus-visible {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+}
+
 .comment-body {
   flex: 1;
 }
@@ -1624,6 +1647,7 @@ emoji-picker.reaction-picker-panel {
   display: grid;
   gap: 6px;
   min-width: 0;
+  justify-items: stretch;
 }
 
 .comment-meta {
@@ -1665,6 +1689,8 @@ emoji-picker.reaction-picker-panel {
 
 .comment-rank.staff {
   background-image: linear-gradient(90deg, var(--accent), var(--accent-2));
+  background-size: 220% 100%;
+  animation: staffReflect 2.4s ease-in-out infinite;
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -1680,8 +1706,9 @@ emoji-picker.reaction-picker-panel {
 }
 
 .comment-text {
-  margin: 6px 0 0;
+  margin: 10px 0 0;
   color: var(--text);
+  text-align: left;
 }
 
 .comment-controls {
@@ -1711,12 +1738,24 @@ emoji-picker.reaction-picker-panel {
   background: var(--bg-soft);
 }
 
+.comment-reply .comment-right {
+  gap: 8px;
+}
+
+.comment-reply .comment-text {
+  margin-top: 0;
+  padding-top: 10px;
+}
+
 .comment-left.comment-left-main {
   min-width: 0;
 }
 
 .comment-left.comment-left-reply {
-  min-width: 160px;
+  min-width: 120px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
 }
 
 .comment-responses-section {
@@ -1728,7 +1767,7 @@ emoji-picker.reaction-picker-panel {
   width: 100%;
   display: inline-flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
   border: none;
   background: transparent;
@@ -1783,6 +1822,18 @@ emoji-picker.reaction-picker-panel {
   gap: 6px;
 }
 
+@keyframes staffReflect {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
 .comment-history {
   display: grid;
   gap: 12px;
@@ -1831,6 +1882,45 @@ emoji-picker.reaction-picker-panel {
 
 .comment-history-body .muted:last-of-type + p {
   box-shadow: inset 3px 0 0 0 var(--accent-2);
+}
+
+.profile-card {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.profile-card-avatar {
+  width: 92px;
+  height: 92px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid var(--stroke);
+  background: var(--bg-soft);
+}
+
+.profile-card-name {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.profile-card-username {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.profile-card-badge {
+  margin-top: 2px;
+  border-radius: 999px;
+  border: 1px solid var(--stroke);
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--bg-soft);
 }
 
 .news-page {
@@ -1898,6 +1988,83 @@ emoji-picker.reaction-picker-panel {
 
 .vote-button {
   width: 100%;
+}
+
+.link-page {
+  display: grid;
+  gap: 20px;
+}
+
+.link-card {
+  max-width: 760px;
+  margin: 0 auto;
+  display: grid;
+  gap: 16px;
+  padding: 26px;
+  background-image:
+    radial-gradient(560px 260px at 8% 0%, rgba(42, 163, 255, 0.16), transparent 58%),
+    radial-gradient(560px 260px at 92% 0%, rgba(255, 59, 59, 0.14), transparent 58%);
+}
+
+.link-eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.link-title {
+  margin: 0;
+  font-size: clamp(32px, 4vw, 48px);
+  font-family: "Bebas Neue", sans-serif;
+  letter-spacing: 1px;
+}
+
+.link-copy {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+  max-width: 62ch;
+}
+
+.link-code-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.link-code-input {
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  background: var(--bg-soft);
+  color: var(--text);
+  width: 100%;
+  height: 64px;
+  text-align: center;
+  font-size: 30px;
+  font-weight: 700;
+  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.link-code-input:focus {
+  outline: none;
+  border-color: transparent;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.12),
+    0 0 0 3px rgba(42, 163, 255, 0.35);
+  transform: translateY(-1px);
+}
+
+.link-actions {
+  display: grid;
+  gap: 8px;
+}
+
+.link-hint {
+  font-size: 12px;
 }
 
 .news-hero {
@@ -2062,6 +2229,21 @@ emoji-picker.reaction-picker-panel {
   .image-preview-modal {
     height: calc(82vh - 76px);
     min-height: 240px;
+  }
+
+  .link-card {
+    width: 100%;
+    padding: 18px;
+  }
+
+  .link-code-grid {
+    gap: 8px;
+  }
+
+  .link-code-input {
+    height: 56px;
+    font-size: 24px;
+    border-radius: 12px;
   }
 
   .comment-history-overlay {
@@ -3646,29 +3828,48 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   }
 
   .comment-item {
+    display: grid;
+    grid-template-columns: 1fr;
     gap: 10px;
   }
 
   .comment-avatar {
-    width: 90px;
-    height: 90px;
+    width: 45px;
+    height: 45px;
   }
 
   .comment-avatar.small {
-    width: 21px;
-    height: 21px;
+    width: 14px;
+    height: 14px;
   }
 
   .comment-left {
     gap: 8px;
   }
 
+  .comment-left.comment-left-main {
+    width: 100%;
+  }
+
   .comment-left.comment-left-reply {
-    min-width: 120px;
+    min-width: 0;
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
   }
 
   .comment-right {
+    width: 100%;
     min-width: 0;
+  }
+
+  .comment-reply {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .comment-responses-toggle {
+    gap: 6px;
   }
 
   .comment-author {

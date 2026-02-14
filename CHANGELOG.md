@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-14 (v1.3.18)
+- Added `/link` auth page with six-digit code input UX (auto-advance, keyboard navigation, and paste support).
+- Moved comment/reply identity to username-first staff-aware rendering and added staff reflectance animation.
+- Redesigned comment responses as a full-width dropdown section with improved mobile stacking/alignment.
+- Added avatar profile cards from comment/reply images, including staff badge metadata for future badge expansion.
+- Updated admin delete actions to hard-delete news and notifications from MongoDB when deleting entries.
+
 ## 2026-02-13 (v1.3.17)
 - Added Mongo-backed reply edit and reply delete APIs with auth/ownership checks.
 - Stored reply edit metadata (`editCount`, `updatedAt`) so reply changes persist across reloads.
