@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-14 (v1.3.19)
+- Fixed `/link` page runtime crash and kept six single-digit code inputs with URL prefill support (e.g. `?123456`).
+- Improved mobile comment/reply presentation: larger avatars, inline compact timestamp/edited metadata, and smart long-name scaling.
+- Replaced comment toggle `?` glyphs with consistent chevrons (`>` collapsed, `v` expanded).
+- Left-aligned news metadata rows so `By System` aligns correctly on both desktop and mobile.
+- Updated staff text gradients to flow red-to-blue across author names, rank labels, and staff message text.
+- Added server-side author profile refresh for comments/replies/news so name/username/avatar/rank updates sync from Clerk.
+- Added targeted reply notifications (`who replied`) with `View` actions that deep-link into news posts and auto-scroll/highlight the related comment or reply.
+- Added admin News Publisher option to send a linked notification on post (header + small info + `View` route to the news article).
+
 ## 2026-02-14 (v1.3.18)
 - Added `/link` auth page with six-digit code input UX (auto-advance, keyboard navigation, and paste support).
 - Moved comment/reply identity to username-first staff-aware rendering and added staff reflectance animation.
