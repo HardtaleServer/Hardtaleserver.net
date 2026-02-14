@@ -1073,7 +1073,8 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
   const [comments, setComments] = useState([]);
   const [commentCount, setCommentCount] = useState(0);
   const [draft, setDraft] = useState("");
-  const [status, setStatus] = useState("");
+  const [composerStatus, setComposerStatus] = useState("");
+  const [actionStatusByComment, setActionStatusByComment] = useState({});
   const [editingId, setEditingId] = useState(null);
   const [editingText, setEditingText] = useState("");
   const [editingReplyKey, setEditingReplyKey] = useState(null);
@@ -1154,11 +1155,16 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
     return "";
   }
 
+  function setCommentActionStatus(commentId, value) {
+    if (!commentId) return;
+    setActionStatusByComment((prev) => ({ ...prev, [commentId]: value }));
+  }
+
   async function submitComment(event) {
     event.preventDefault();
     if (!isSignedIn) return;
     if (!draft.trim()) return;
-    setStatus("Posting...");
+    setComposerStatus("Posting...");
     try {
       const response = await apiFetchWithToken(getToken, true, "/api/comments", {
         method: "POST",
@@ -1169,9 +1175,9 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
       const data = await response.json();
       setComments(Array.isArray(data.comments) ? data.comments : []);
       setDraft("");
-      setStatus("");
+      setComposerStatus("");
     } catch {
-      setStatus("Failed to post.");
+      setComposerStatus("Failed to post.");
     }
   }
 
@@ -1182,7 +1188,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
 
   async function saveEdit(commentId) {
     if (!editingText.trim()) return;
-    setStatus("Saving...");
+    setCommentActionStatus(commentId, "Saving...");
     try {
       const response = await apiFetchWithToken(getToken, true, `/api/comments/${commentId}`, {
         method: "PATCH",
@@ -1197,23 +1203,23 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
       }
       setEditingId(null);
       setEditingText("");
-      setStatus("");
+      setCommentActionStatus(commentId, "");
     } catch {
-      setStatus("Edit failed.");
+      setCommentActionStatus(commentId, "Edit failed.");
     }
   }
 
   async function deleteComment(commentId) {
-    setStatus("Deleting...");
+    setCommentActionStatus(commentId, "Deleting...");
     try {
       const response = await apiFetchWithToken(getToken, true, `/api/comments/${commentId}`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error("Failed");
       setComments((prev) => prev.filter((entry) => entry.id !== commentId));
-      setStatus("");
+      setCommentActionStatus(commentId, "");
     } catch {
-      setStatus("Delete failed.");
+      setCommentActionStatus(commentId, "Delete failed.");
     }
   }
 
@@ -1279,7 +1285,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
 
   async function saveReplyEdit(commentId, replyId) {
     if (!editingReplyText.trim()) return;
-    setStatus("Saving reply...");
+    setCommentActionStatus(commentId, "Saving reply...");
     try {
       const response = await apiFetchWithToken(
         getToken,
@@ -1299,14 +1305,14 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
         );
       }
       cancelReplyEdit();
-      setStatus("");
+      setCommentActionStatus(commentId, "");
     } catch {
-      setStatus("Reply edit failed.");
+      setCommentActionStatus(commentId, "Reply edit failed.");
     }
   }
 
   async function deleteReply(commentId, replyId) {
-    setStatus("Deleting reply...");
+    setCommentActionStatus(commentId, "Deleting reply...");
     try {
       const response = await apiFetchWithToken(
         getToken,
@@ -1321,9 +1327,9 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
           prev.map((entry) => (entry.id === data.comment.id ? data.comment : entry)),
         );
       }
-      setStatus("");
+      setCommentActionStatus(commentId, "");
     } catch {
-      setStatus("Reply delete failed.");
+      setCommentActionStatus(commentId, "Reply delete failed.");
     }
   }
 
@@ -1373,7 +1379,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                   <div className="comment-actions right">
                     <div className="comment-char-count">${draft.length}/276</div>
                     <button className="button primary" type="submit">Post</button>
-                    ${status ? html`<span className="muted">${status}</span>` : html``}
+                    ${composerStatus ? html`<span className="muted">${composerStatus}</span>` : html``}
                   </div>
                 </form>`
               : html`<div
@@ -1405,7 +1411,11 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                         />
                       </button>
                       <div className="comment-identity">
-                        <div className=${`comment-author ${authorSizeClass(comment.authorName)}`}>
+                        <div
+                          className=${`comment-author ${authorSizeClass(comment.authorName)} ${
+                            resolveRank(comment).staff ? "staff" : ""
+                          }`}
+                        >
                           ${comment.authorName}
                         </div>
                         ${(() => {
@@ -1427,6 +1437,21 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                       </div>
                     </div>
                     <div className="comment-right">
+                      <div className="comment-header-desktop">
+                        <div
+                          className=${`comment-author ${authorSizeClass(comment.authorName)} ${
+                            resolveRank(comment).staff ? "staff" : ""
+                          }`}
+                        >
+                          ${comment.authorName}
+                        </div>
+                        ${(() => {
+                          const rank = resolveRank(comment);
+                          return html`<div className=${`comment-rank ${rank.staff ? "staff" : ""}`}>
+                            ${rank.label}
+                          </div>`;
+                        })()}
+                      </div>
                       <div className="comment-meta comment-meta-desktop">
                         <div className="comment-meta-right">
                           <span className="comment-time">${formatTimestamp(comment.createdAt)}</span>
@@ -1516,6 +1541,11 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                             </button>
                           </div>`
                         : html``}
+                      ${actionStatusByComment[comment.id]
+                        ? html`<div className="muted comment-inline-status">
+                            ${actionStatusByComment[comment.id]}
+                          </div>`
+                        : html``}
                     </div>
                     <div className="comment-responses-section">
                       ${(() => {
@@ -1553,7 +1583,11 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                                         />
                                       </button>
                                       <div className="comment-identity">
-                                        <div className=${`comment-author ${authorSizeClass(reply.authorName)}`}>
+                                        <div
+                                          className=${`comment-author ${authorSizeClass(reply.authorName)} ${
+                                            resolveRank(reply).staff ? "staff" : ""
+                                          }`}
+                                        >
                                           ${reply.authorName}
                                         </div>
                                         ${(() => {
@@ -1575,6 +1609,21 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                                       </div>
                                     </div>
                                     <div className="comment-right">
+                                      <div className="comment-header-desktop">
+                                        <div
+                                          className=${`comment-author ${authorSizeClass(reply.authorName)} ${
+                                            resolveRank(reply).staff ? "staff" : ""
+                                          }`}
+                                        >
+                                          ${reply.authorName}
+                                        </div>
+                                        ${(() => {
+                                          const rank = resolveRank(reply);
+                                          return html`<div className=${`comment-rank ${rank.staff ? "staff" : ""}`}>
+                                            ${rank.label}
+                                          </div>`;
+                                        })()}
+                                      </div>
                                       <div className="comment-meta comment-meta-desktop">
                                         <div className="comment-meta-right">
                                           <span className="comment-time">${formatTimestamp(reply.createdAt)}</span>
