@@ -419,6 +419,157 @@ function getUserDisplayName(user) {
   );
 }
 
+async function getFreshAuthorSnapshot(userId, cache = new Map()) {
+  const key = normalizeText(userId, 128);
+  if (!key) return null;
+  if (cache.has(key)) return cache.get(key);
+  try {
+    const user = await clerkClient.users.getUser(key);
+    const snapshot = {
+      authorName: getUserDisplayName(user),
+      authorUsername: normalizeText(user?.username, 80),
+      authorEmail: getUserEmail(user),
+      authorImage: user?.imageUrl || "",
+      authorRank: String(user?.publicMetadata?.rank || "Registered"),
+    };
+    cache.set(key, snapshot);
+    return snapshot;
+  } catch {
+    cache.set(key, null);
+    return null;
+  }
+}
+
+function hasAuthorSnapshotChanged(entry, snapshot) {
+  if (!entry || !snapshot) return false;
+  return (
+    normalizeText(entry.authorName, 80) !== snapshot.authorName ||
+    normalizeText(entry.authorUsername, 80) !== snapshot.authorUsername ||
+    String(entry.authorEmail || "") !== String(snapshot.authorEmail || "") ||
+    String(entry.authorImage || "") !== String(snapshot.authorImage || "") ||
+    String(entry.authorRank || "Registered") !== String(snapshot.authorRank || "Registered")
+  );
+}
+
+async function refreshCommentAuthorFields(comments = []) {
+  if (!Array.isArray(comments) || comments.length === 0) return comments;
+  const cache = new Map();
+  const ops = [];
+  const nextComments = [];
+
+  for (const comment of comments) {
+    if (!comment) continue;
+    let nextComment = comment;
+    let commentChanged = false;
+    let repliesChanged = false;
+
+    if (comment.userId) {
+      const snapshot = await getFreshAuthorSnapshot(comment.userId, cache);
+      if (snapshot && hasAuthorSnapshotChanged(comment, snapshot)) {
+        nextComment = { ...nextComment, ...snapshot };
+        commentChanged = true;
+      }
+    }
+
+    const replies = Array.isArray(nextComment.replies) ? nextComment.replies : [];
+    const nextReplies = [];
+    for (const reply of replies) {
+      if (!reply) continue;
+      let nextReply = reply;
+      if (reply.userId) {
+        const snapshot = await getFreshAuthorSnapshot(reply.userId, cache);
+        if (snapshot && hasAuthorSnapshotChanged(reply, snapshot)) {
+          nextReply = { ...nextReply, ...snapshot };
+          repliesChanged = true;
+        }
+      }
+      nextReplies.push(nextReply);
+    }
+
+    if (repliesChanged) {
+      nextComment = { ...nextComment, replies: nextReplies };
+    }
+
+    if ((commentChanged || repliesChanged) && comment._id) {
+      const setPayload = {};
+      if (commentChanged) {
+        setPayload.authorName = nextComment.authorName;
+        setPayload.authorUsername = nextComment.authorUsername;
+        setPayload.authorEmail = nextComment.authorEmail;
+        setPayload.authorImage = nextComment.authorImage;
+        setPayload.authorRank = nextComment.authorRank;
+      }
+      if (repliesChanged) {
+        setPayload.replies = nextComment.replies;
+      }
+      ops.push({
+        updateOne: {
+          filter: { _id: comment._id },
+          update: { $set: setPayload },
+        },
+      });
+    }
+
+    nextComments.push(nextComment);
+  }
+
+  if (ops.length > 0 && commentsCollection) {
+    await commentsCollection.bulkWrite(ops, { ordered: false });
+  }
+  return nextComments;
+}
+
+async function refreshNewsAuthorFields(news = []) {
+  if (!Array.isArray(news) || news.length === 0) return news;
+  const cache = new Map();
+  const ops = [];
+  const nextNews = [];
+
+  for (const item of news) {
+    if (!item) continue;
+    let nextItem = item;
+    const authorUserId = normalizeText(item.authorUserId, 128);
+    if (authorUserId) {
+      const snapshot = await getFreshAuthorSnapshot(authorUserId, cache);
+      if (snapshot) {
+        const authorChanged =
+          normalizeText(item.author, 80) !== snapshot.authorName ||
+          normalizeText(item.authorUsername, 80) !== snapshot.authorUsername ||
+          String(item.authorImage || "") !== String(snapshot.authorImage || "");
+        if (authorChanged) {
+          nextItem = {
+            ...nextItem,
+            author: snapshot.authorName,
+            authorUsername: snapshot.authorUsername,
+            authorImage: snapshot.authorImage,
+          };
+          if (item._id) {
+            ops.push({
+              updateOne: {
+                filter: { _id: item._id },
+                update: {
+                  $set: {
+                    author: nextItem.author,
+                    authorUsername: nextItem.authorUsername,
+                    authorImage: nextItem.authorImage,
+                    updatedAt: new Date().toISOString(),
+                  },
+                },
+              },
+            });
+          }
+        }
+      }
+    }
+    nextNews.push(nextItem);
+  }
+
+  if (ops.length > 0 && newsCollection) {
+    await newsCollection.bulkWrite(ops, { ordered: false });
+  }
+  return nextNews;
+}
+
 function normalizePoll(payload) {
   const question = normalizeText(payload?.question, 140);
   const multiple = Boolean(payload?.multiple);
@@ -513,6 +664,12 @@ function normalizeNotificationItem(item) {
   const message = String(item?.message || "").trim().slice(0, 600);
   const author = String(item?.author || "").trim().slice(0, 80);
   const featured = Boolean(item?.featured);
+  const readMoreUrl = String(item?.readMoreUrl || "").trim().slice(0, 500);
+  const targetUserId = normalizeText(item?.targetUserId, 128);
+  const type = normalizeText(item?.type, 40);
+  const newsId = normalizeText(item?.newsId, 200);
+  const commentId = normalizeText(item?.commentId, 128);
+  const replyId = normalizeText(item?.replyId, 128);
 
   if (!title || !message || !author) {
     return null;
@@ -524,6 +681,12 @@ function normalizeNotificationItem(item) {
     message,
     author,
     featured,
+    readMoreUrl,
+    targetUserId,
+    type,
+    newsId,
+    commentId,
+    replyId,
     createdAt: new Date().toISOString(),
   };
 }
@@ -560,10 +723,11 @@ app.get("/api/me", async (req, res) => {
 app.get("/api/news", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
-    const news = await newsCollection
+    const rawNews = await newsCollection
       .find({ isDeleted: false })
       .sort({ createdAt: -1 })
       .toArray();
+    const news = await refreshNewsAuthorFields(rawNews);
     return res.json({ news: stripMongoIdList(news) });
   } catch (error) {
     console.error("Failed to load news", error);
@@ -574,8 +738,33 @@ app.get("/api/news", async (req, res) => {
 app.get("/api/notifications", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    const userId = normalizeText(auth?.userId, 128);
+    let query = { isDeleted: false, $or: [{ targetUserId: { $exists: false } }, { targetUserId: "" }] };
+    if (userId) {
+      let isAdmin = false;
+      try {
+        const user = await clerkClient.users.getUser(userId);
+        isAdmin = isAdminUser(user);
+      } catch {
+        isAdmin = false;
+      }
+      if (!isAdmin) {
+        query = {
+          isDeleted: false,
+          $or: [
+            { targetUserId: { $exists: false } },
+            { targetUserId: "" },
+            { targetUserId: userId },
+          ],
+        };
+      } else {
+        query = { isDeleted: false };
+      }
+    }
+
     const notifications = await notificationsCollection
-      .find({ isDeleted: false })
+      .find(query)
       .sort({ createdAt: -1 })
       .toArray();
     return res.json({ notifications: stripMongoIdList(notifications) });
@@ -839,10 +1028,11 @@ app.get("/api/comments", async (req, res) => {
     if (!newsId) {
       return res.status(400).json({ error: "Invalid news id" });
     }
-    const comments = await commentsCollection
+    const rawComments = await commentsCollection
       .find({ newsId, isDeleted: false })
       .sort({ createdAt: 1 })
       .toArray();
+    const comments = await refreshCommentAuthorFields(rawComments);
     return res.json({
       newsId,
       comments: normalizeCommentList(comments),
@@ -884,10 +1074,11 @@ app.post("/api/comments", async (req, res) => {
       updatedAt: new Date(),
     });
 
-    const comments = await commentsCollection
+    const rawComments = await commentsCollection
       .find({ newsId, isDeleted: false })
       .sort({ createdAt: 1 })
       .toArray();
+    const comments = await refreshCommentAuthorFields(rawComments);
 
     return res.json({
       newsId,
@@ -996,6 +1187,43 @@ app.post("/api/comments/:id/replies", async (req, res) => {
       { _id: comment._id },
       { $set: { replies: updatedReplies, updatedAt: new Date() } },
     );
+
+    if (comment.userId && comment.userId !== auth.userId) {
+      let newsTitle = "";
+      if (newsCollection && comment.newsId) {
+        try {
+          const newsDoc = await newsCollection.findOne(
+            { id: String(comment.newsId), isDeleted: false },
+            { projection: { title: 1 } },
+          );
+          newsTitle = normalizeText(newsDoc?.title, 120);
+        } catch {
+          newsTitle = "";
+        }
+      }
+
+      const authorLabel = getUserDisplayName(user);
+      const snippet = normalizeText(body, 140);
+      const targetCommentId = String(comment._id);
+      const replyLink = `/news?newsId=${encodeURIComponent(String(comment.newsId || ""))}&commentId=${encodeURIComponent(targetCommentId)}&replyId=${encodeURIComponent(String(reply.id || ""))}`;
+      await notificationsCollection.insertOne({
+        id: crypto.randomUUID(),
+        title: newsTitle ? `New reply on ${newsTitle}` : "New reply to your comment",
+        message: `${authorLabel} replied: ${snippet}`,
+        author: "System",
+        featured: false,
+        type: "reply",
+        targetUserId: comment.userId,
+        newsId: String(comment.newsId || ""),
+        commentId: targetCommentId,
+        replyId: String(reply.id || ""),
+        readMoreUrl: replyLink,
+        isDeleted: false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      await pruneCollection(notificationsCollection, 120);
+    }
 
     const updated = await commentsCollection.findOne({ _id: comment._id });
     return res.json({ comment: normalizeComment(updated) });
@@ -1196,8 +1424,20 @@ app.post("/api/news", async (req, res) => {
       return res.status(400).json({ error: "Missing or invalid fields" });
     }
 
+    const normalizedAuthor = getUserDisplayName(user);
+    const newsAuthorTracking =
+      String(item.author || "").toLowerCase() === "system"
+        ? {}
+        : {
+            author: normalizedAuthor,
+            authorUserId: auth.userId,
+            authorUsername: normalizeText(user?.username, 80),
+            authorImage: user?.imageUrl || "",
+          };
+
     await newsCollection.insertOne({
       ...item,
+      ...newsAuthorTracking,
       isDeleted: false,
       updatedAt: new Date().toISOString(),
     });
@@ -1219,11 +1459,12 @@ app.post("/api/news", async (req, res) => {
       });
     }
 
-    const nextNews = await newsCollection
+    const nextNewsRaw = await newsCollection
       .find({ isDeleted: false })
       .sort({ createdAt: -1 })
       .toArray();
-    return res.json({ news: stripMongoIdList(nextNews) });
+    const nextNews = await refreshNewsAuthorFields(nextNewsRaw);
+    return res.json({ news: stripMongoIdList(nextNews), createdId: item.id });
   } catch (error) {
     console.error("Failed to update news", error);
     return res.status(500).json({ error: "Failed to update news" });
@@ -1264,10 +1505,11 @@ app.delete("/api/news/:id", async (req, res) => {
       return draft;
     });
 
-    const nextNews = await newsCollection
+    const nextNewsRaw = await newsCollection
       .find({ isDeleted: false })
       .sort({ createdAt: -1 })
       .toArray();
+    const nextNews = await refreshNewsAuthorFields(nextNewsRaw);
     return res.json({ news: stripMongoIdList(nextNews) });
   } catch (error) {
     console.error("Failed to delete news", error);
@@ -1292,10 +1534,11 @@ app.patch("/api/news/:id", async (req, res) => {
       { id: req.params.id, isDeleted: false },
       { $set: { featured: Boolean(req.body?.featured), updatedAt: new Date().toISOString() } },
     );
-    const nextNews = await newsCollection
+    const nextNewsRaw = await newsCollection
       .find({ isDeleted: false })
       .sort({ createdAt: -1 })
       .toArray();
+    const nextNews = await refreshNewsAuthorFields(nextNewsRaw);
     return res.json({ news: stripMongoIdList(nextNews) });
   } catch (error) {
     console.error("Failed to update news", error);

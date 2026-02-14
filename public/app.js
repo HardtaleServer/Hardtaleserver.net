@@ -710,7 +710,7 @@ async function apiFetchWithToken(getToken, isSignedIn, url, options = {}) {
   return response;
 }
 
-function NewsCard({ item }) {
+function NewsCard({ item, focusCommentId, focusReplyId, autoOpenComments }) {
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [expandedDescription, setExpandedDescription] = useState(false);
   const descriptionText = String(item.description || "");
@@ -722,7 +722,7 @@ function NewsCard({ item }) {
       : descriptionText;
 
   return html`
-    <article className="news-card">
+    <article className="news-card" data-news-id=${item.id}>
       ${item.imageUrl
         ? html`<div className="news-photo" style=${{ backgroundImage: `url(${item.imageUrl})` }}></div>`
         : html``}
@@ -770,7 +770,12 @@ function NewsCard({ item }) {
       </div>
       <${PollPanel} newsId=${item.id} />
       <${ReactionBar} itemType="news" itemId=${item.id} />
-      <${CommentThread} newsId=${item.id} />
+      <${CommentThread}
+        newsId=${item.id}
+        focusCommentId=${focusCommentId}
+        focusReplyId=${focusReplyId}
+        autoOpen=${autoOpenComments}
+      />
 
       <${PopUp}
         show=${showImagePreview}
@@ -1062,9 +1067,9 @@ function ReactionBar({ itemType, itemId }) {
   `;
 }
 
-function CommentThread({ newsId }) {
+function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
   const { getToken, isSignedIn, userId } = useAuth();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(Boolean(autoOpen));
   const [comments, setComments] = useState([]);
   const [commentCount, setCommentCount] = useState(0);
   const [draft, setDraft] = useState("");
@@ -1078,6 +1083,7 @@ function CommentThread({ newsId }) {
   const [profileUser, setProfileUser] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState([]);
+  const focusAppliedRef = useRef(false);
 
   async function loadComments() {
     try {
@@ -1095,8 +1101,39 @@ function CommentThread({ newsId }) {
   }, [newsId]);
 
   useEffect(() => {
+    if (autoOpen) setOpen(true);
+  }, [autoOpen]);
+
+  useEffect(() => {
+    focusAppliedRef.current = false;
+    if (focusCommentId) setOpen(true);
+  }, [newsId, focusCommentId, focusReplyId]);
+
+  useEffect(() => {
+    if (!focusCommentId || !focusReplyId) return;
+    setOpenResponses((prev) => ({ ...prev, [focusCommentId]: true }));
+  }, [focusCommentId, focusReplyId]);
+
+  useEffect(() => {
     setCommentCount(comments.length);
   }, [comments]);
+
+  useEffect(() => {
+    if (!open || !focusCommentId || focusAppliedRef.current) return;
+    const timer = setTimeout(() => {
+      const targetSelector = focusReplyId
+        ? `[data-reply-id="${focusReplyId}"]`
+        : `[data-comment-id="${focusCommentId}"]`;
+      const fallbackSelector = `[data-comment-id="${focusCommentId}"]`;
+      const target = document.querySelector(targetSelector) || document.querySelector(fallbackSelector);
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.classList.add("notif-focus-target");
+      window.setTimeout(() => target.classList.remove("notif-focus-target"), 1400);
+      focusAppliedRef.current = true;
+    }, 110);
+    return () => clearTimeout(timer);
+  }, [open, comments, openResponses, focusCommentId, focusReplyId]);
 
   function resolveRank(comment) {
     const email = String(comment.authorEmail || "").toLowerCase();
@@ -1107,6 +1144,13 @@ function CommentThread({ newsId }) {
     }
     const rank = comment.authorRank || "Registered";
     return { label: rank, staff: false };
+  }
+
+  function authorSizeClass(value) {
+    const length = String(value || "").trim().length;
+    if (length >= 26) return "tiny";
+    if (length >= 18) return "small";
+    return "";
   }
 
   async function submitComment(event) {
@@ -1266,7 +1310,7 @@ function CommentThread({ newsId }) {
     <div className="comment-thread">
       <button className="comment-toggle" type="button" onClick=${() => setOpen(!open)}>
         Comments (${commentCount})
-        <span className="comment-toggle-arrow">${open ? "?" : "?"}</span>
+        <span className="comment-toggle-arrow">${open ? "v" : ">"}</span>
       </button>
       ${open
         ? html`<div className="comment-panel">
@@ -1302,7 +1346,7 @@ function CommentThread({ newsId }) {
             ${comments.length === 0
               ? html``
               : comments.map(
-                  (comment) => html`<div key=${comment.id} className="comment-item">
+                  (comment) => html`<div key=${comment.id} className="comment-item" data-comment-id=${comment.id}>
                     <div className="comment-left comment-left-main">
                       <button
                         className="comment-avatar-trigger"
@@ -1317,7 +1361,9 @@ function CommentThread({ newsId }) {
                         />
                       </button>
                       <div className="comment-identity">
-                        <div className="comment-author">${comment.authorName}</div>
+                        <div className=${`comment-author ${authorSizeClass(comment.authorName)}`}>
+                          ${comment.authorName}
+                        </div>
                         ${(() => {
                           const rank = resolveRank(comment);
                           return html`<div className=${`comment-rank ${rank.staff ? "staff" : ""}`}>
@@ -1325,9 +1371,19 @@ function CommentThread({ newsId }) {
                           </div>`;
                         })()}
                       </div>
+                      <div className="comment-meta-mobile">
+                        <div className="comment-meta-right">
+                          <span className="comment-time">${formatTimestamp(comment.createdAt)}</span>
+                          ${comment.editCount > 0
+                            ? html`<span className="comment-edited">
+                                Edited ${formatTimestamp(comment.updatedAt)}
+                              </span>`
+                            : html``}
+                        </div>
+                      </div>
                     </div>
                     <div className="comment-right">
-                      <div className="comment-meta">
+                      <div className="comment-meta comment-meta-desktop">
                         <div className="comment-meta-right">
                           <span className="comment-time">${formatTimestamp(comment.createdAt)}</span>
                           ${comment.editCount > 0
@@ -1418,7 +1474,11 @@ function CommentThread({ newsId }) {
                           ${responsesOpen
                             ? html`<div className="comment-replies">
                                 ${replies.map(
-                                  (reply) => html`<div key=${reply.id} className="comment-reply">
+                                  (reply) => html`<div
+                                    key=${reply.id}
+                                    className="comment-reply"
+                                    data-reply-id=${reply.id}
+                                  >
                                     <div className="comment-left comment-left-reply">
                                       <button
                                         className="comment-avatar-trigger"
@@ -1433,7 +1493,9 @@ function CommentThread({ newsId }) {
                                         />
                                       </button>
                                       <div className="comment-identity">
-                                        <div className="comment-author">${reply.authorName}</div>
+                                        <div className=${`comment-author ${authorSizeClass(reply.authorName)}`}>
+                                          ${reply.authorName}
+                                        </div>
                                         ${(() => {
                                           const rank = resolveRank(reply);
                                           return html`<div className=${`comment-rank ${rank.staff ? "staff" : ""}`}>
@@ -1441,9 +1503,19 @@ function CommentThread({ newsId }) {
                                           </div>`;
                                         })()}
                                       </div>
+                                      <div className="comment-meta-mobile">
+                                        <div className="comment-meta-right">
+                                          <span className="comment-time">${formatTimestamp(reply.createdAt)}</span>
+                                          ${reply.editCount > 0
+                                            ? html`<span className="comment-edited">
+                                                Edited ${formatTimestamp(reply.updatedAt)}
+                                              </span>`
+                                            : html``}
+                                        </div>
+                                      </div>
                                     </div>
                                     <div className="comment-right">
-                                      <div className="comment-meta">
+                                      <div className="comment-meta comment-meta-desktop">
                                         <div className="comment-meta-right">
                                           <span className="comment-time">${formatTimestamp(reply.createdAt)}</span>
                                           ${reply.editCount > 0
@@ -1632,6 +1704,8 @@ function AdminPanel({
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollMultiple, setPollMultiple] = useState(false);
   const [pollOptions, setPollOptions] = useState(["", "", "", ""]);
+  const [sendNewsNotification, setSendNewsNotification] = useState(true);
+  const [newsNotificationInfo, setNewsNotificationInfo] = useState("");
   const [notificationTitle, setNotificationTitle] = useState("");
   const [notificationMessage, setNotificationMessage] = useState("");
   const [notificationFeatured, setNotificationFeatured] = useState(false);
@@ -1685,6 +1759,37 @@ function AdminPanel({
 
       const data = await response.json();
       onNewsUpdate(Array.isArray(data.news) ? data.news : []);
+
+      if (sendNewsNotification) {
+        const createdId = String(data?.createdId || "");
+        const fallbackNewsId = createdId || String(data?.news?.[0]?.id || "");
+        const info =
+          newsNotificationInfo.trim() ||
+          String(newsDescription || "").replace(/\s+/g, " ").trim().slice(0, 140);
+        if (fallbackNewsId && info) {
+          const notifyResponse = await fetch("/api/notifications", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              title: newsTitle,
+              message: info,
+              author: "System",
+              featured: false,
+              type: "news",
+              newsId: fallbackNewsId,
+              readMoreUrl: `/news?newsId=${encodeURIComponent(fallbackNewsId)}`,
+            }),
+          });
+          if (notifyResponse.ok) {
+            const notifyData = await notifyResponse.json();
+            onNotificationsUpdate(Array.isArray(notifyData.notifications) ? notifyData.notifications : []);
+          }
+        }
+      }
+
       setNewsTitle("");
       setNewsDescription("");
       setNewsReadMoreUrl("");
@@ -1694,6 +1799,8 @@ function AdminPanel({
       setPollQuestion("");
       setPollMultiple(false);
       setPollOptions(["", "", "", ""]);
+      setSendNewsNotification(true);
+      setNewsNotificationInfo("");
       setNewsStatus("Posted!");
     } catch (err) {
       setNewsStatus("Failed to post news.");
@@ -1858,6 +1965,21 @@ function AdminPanel({
           onChange=${(event) => setNewsFeatured(event.target.checked)}
         />
       </label>
+      <label className="settings-row inline">
+        <span>Send notification</span>
+        <input
+          type="checkbox"
+          checked=${sendNewsNotification}
+          onChange=${(event) => setSendNewsNotification(event.target.checked)}
+        />
+      </label>
+      ${sendNewsNotification
+        ? html`<input
+            placeholder="Small info for notification"
+            value=${newsNotificationInfo}
+            onInput=${(event) => setNewsNotificationInfo(event.target.value)}
+          />`
+        : html``}
       <input
         placeholder="Read more URL (optional)"
         value=${newsReadMoreUrl}
@@ -2930,7 +3052,7 @@ function renderStoreIcon(type) {
   }
 }
 
-function NotificationsPanel({ notifications }) {
+function NotificationsPanel({ notifications, onView }) {
   if (!notifications.length) {
     return html`<p className="muted">No notifications yet.</p>`;
   }
@@ -2950,6 +3072,13 @@ function NotificationsPanel({ notifications }) {
               Sent by <span className=${`author-name ${isStaffLabel(item.author) ? "staff" : ""}`}>${item.author}</span>
             </span>
           </div>
+          ${item.readMoreUrl
+            ? html`<div className="notif-actions">
+                <button className="ghost-btn" type="button" onClick=${() => onView(item)}>
+                  View
+                </button>
+              </div>`
+            : html``}
         </div>`,
       )}
     </div>
@@ -3122,8 +3251,26 @@ function NewsPage({
   onNewsUpdate,
   onNotificationsUpdate,
 }) {
+  const location = useLocation();
   const featuredItem = news.find((item) => item.featured);
   const [showManagePanel, setShowManagePanel] = useState(false);
+  const searchParams = useMemo(() => new URLSearchParams(location.search || ""), [location.search]);
+  const focusNewsId = searchParams.get("newsId") || "";
+  const focusCommentId = searchParams.get("commentId") || "";
+  const focusReplyId = searchParams.get("replyId") || "";
+
+  useEffect(() => {
+    if (!focusNewsId) return;
+    const timer = setTimeout(() => {
+      const target = document.querySelector(`[data-news-id="${focusNewsId}"]`);
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      target.classList.add("notif-focus-target");
+      window.setTimeout(() => target.classList.remove("notif-focus-target"), 1400);
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [focusNewsId, news.length]);
+
   return html`
     <section className="news-page fade-in">
       <div className="news-hero">
@@ -3168,6 +3315,9 @@ function NewsPage({
                 html`<${NewsCard}
                   key=${item.id}
                   item=${item}
+                  focusCommentId=${item.id === focusNewsId ? focusCommentId : ""}
+                  focusReplyId=${item.id === focusNewsId ? focusReplyId : ""}
+                  autoOpenComments=${item.id === focusNewsId && Boolean(focusCommentId)}
                 />`,
               )}
             </div>`}
@@ -3220,10 +3370,22 @@ function VotePage() {
 }
 
 function LinkPage() {
+  const location = useLocation();
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const inputRefs = useRef([]);
   const fullCode = digits.join("");
   const isComplete = fullCode.length === 6 && /^\d{6}$/.test(fullCode);
+
+  useEffect(() => {
+    const rawSearch = String(location.search || "").replace(/^\?/, "");
+    if (!rawSearch) return;
+    const decoded = decodeURIComponent(rawSearch);
+    const match = decoded.match(/\d{6}/);
+    if (!match) return;
+    const parsed = match[0].split("");
+    if (parsed.length !== 6) return;
+    setDigits(parsed);
+  }, [location.search]);
 
   function setDigitAt(index, value) {
     const next = [...digits];
@@ -3305,9 +3467,7 @@ function LinkPage() {
           <button className="button primary" type="button" disabled=${!isComplete}>
             Verify Link Code
           </button>
-          <div className="muted link-hint">
-            Use `/link` in-game soon to generate this code from your UUID.
-          </div>
+          <div className="muted link-hint">Use /link in-game soon to generate this code from your UUID.</div>
         </div>
       </div>
     </section>
@@ -3684,6 +3844,13 @@ function Layout() {
   function openNotifications() {
     setShowNotifications(true);
     markNotificationsRead();
+  }
+
+  function viewNotification(item) {
+    const url = String(item?.readMoreUrl || "").trim();
+    if (!url) return;
+    setShowNotifications(false);
+    navigate(url);
   }
 
   function removeItem(id) {
@@ -4224,7 +4391,7 @@ function Layout() {
         onClose=${() => setShowNotifications(false)}
         title="Notifications"
       >
-        <${NotificationsPanel} notifications=${sortedNotifications} />
+        <${NotificationsPanel} notifications=${sortedNotifications} onView=${viewNotification} />
       <//>
       <${PopUp}
         show=${showConnectHelp}
