@@ -668,6 +668,73 @@ body[data-theme="light"] .settings-icon {
   }
 }
 
+.support-page-launch {
+  margin-top: 16px;
+}
+
+.support-page-launch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.support-modal-layout {
+  margin-top: 0;
+}
+
+.forum-hub .news-callout {
+  display: grid;
+  gap: 10px;
+}
+
+.forum-section-list {
+  display: grid;
+  gap: 10px;
+}
+
+.forum-section-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.14));
+  background: color-mix(in srgb, var(--panel, #121212) 88%, transparent);
+}
+
+.forum-section-stat {
+  font-size: 11px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted, rgba(255, 255, 255, 0.72));
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.2));
+  border-radius: 999px;
+  padding: 4px 9px;
+}
+
+.forum-section-body {
+  min-width: 0;
+}
+
+.forum-section-title {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+@media (max-width: 860px) {
+  .support-page-launch-row {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .forum-section-card {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+}
+
 .settings-row {
   display: grid;
   gap: 6px;
@@ -1610,6 +1677,7 @@ emoji-picker.reaction-picker-panel {
   border-radius: 12px;
   border: 1px solid var(--stroke);
   background: var(--bg);
+  box-shadow: inset 3px 0 0 0 var(--accent);
 }
 
 .comment-avatar {
@@ -1754,10 +1822,12 @@ emoji-picker.reaction-picker-panel {
   display: flex;
   gap: 10px;
   margin-top: 8px;
+  flex-wrap: nowrap;
 }
 
 .comment-controls.right {
   justify-content: flex-end;
+  align-items: center;
 }
 
 .comment-inline-status {
@@ -1782,6 +1852,7 @@ emoji-picker.reaction-picker-panel {
   border: 1px solid var(--stroke);
   background: var(--bg-soft);
   text-align: center;
+  box-shadow: inset 3px 0 0 0 var(--accent-2);
 }
 
 .comment-reply .comment-right {
@@ -3942,6 +4013,7 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 
   .comment-left {
     gap: 8px;
+    align-items: flex-start;
   }
 
   .comment-left.comment-left-main {
@@ -3950,9 +4022,35 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 
   .comment-left.comment-left-reply {
     min-width: 0;
-    flex-direction: column;
-    align-items: center;
+    flex-direction: row;
+    align-items: flex-start;
     width: 100%;
+    text-align: left;
+  }
+
+  .comment-left.comment-left-reply .comment-identity {
+    justify-items: start;
+  }
+
+  .comment-reply {
+    display: grid;
+    grid-template-columns: 1fr;
+    text-align: left;
+  }
+
+  .comment-reply .comment-right {
+    justify-items: stretch;
+    gap: 6px;
+  }
+
+  .comment-reply .comment-text {
+    text-align: left;
+    padding-top: 0;
+    margin: 8px 0 0;
+  }
+
+  .comment-reply .comment-controls.right {
+    justify-content: flex-end;
   }
 
   .comment-meta-desktop {
@@ -3962,6 +4060,7 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   .comment-meta-mobile {
     display: block;
     margin-left: auto;
+    align-self: flex-start;
   }
 
   .comment-meta-mobile .comment-meta-right {
@@ -4027,31 +4126,43 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
     gap: 10px;
   }
 
+  .comment-header-desktop .comment-identity {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
   .comment-header-desktop .comment-rank {
     margin-top: 0;
+    font-size: 10px;
   }
 
   .comment-right {
-    gap: 2px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
     align-content: start;
   }
 
   .comment-text {
-    margin: 0;
+    margin: -1px 0 0;
   }
 
   .comment-meta.comment-meta-desktop {
-    margin-top: 0;
-    align-self: start;
+    margin-top: -2px;
+    align-self: flex-end;
   }
 
   .comment-meta-right {
-    gap: 2px;
+    gap: 1px;
   }
 
   .comment-controls.right {
-    justify-content: flex-start;
-    margin-top: 4px;
+    justify-content: flex-end;
+    margin-top: 6px;
+    align-self: flex-end;
+    display: inline-flex;
+    gap: 10px;
   }
 
   .comment-inline-status {
@@ -4069,6 +4180,11 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
     align-items: center;
   }
 
+  .comment-left.comment-left-reply .comment-avatar.small {
+    width: 23px;
+    height: 23px;
+  }
+
   .comment-reply .comment-right {
     justify-items: stretch;
     gap: 2px;
@@ -4076,7 +4192,7 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 
   .comment-reply .comment-text {
     text-align: left;
-    margin: 0;
+    margin: -1px 0 0;
     padding-top: 0;
   }
 

@@ -1474,46 +1474,46 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                         : html`<p className=${`comment-text ${resolveRank(comment).staff ? "staff" : ""}`}>
                             ${comment.body}
                           </p>`}
-                      ${comment.userId === userId && editingId !== comment.id
-                        ? html`<div className="comment-controls right">
-                            <button
-                              className="ghost-btn"
-                              type="button"
-                              onMouseDown=${(event) => triggerFlash(event.currentTarget)}
-                              onClick=${() => startEdit(comment)}
-                            >
-                              <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
-                              Edit
-                            </button>
-                            <button
-                              className="ghost-btn"
-                              type="button"
-                              onMouseDown=${(event) => triggerFlash(event.currentTarget)}
-                              onClick=${() => deleteComment(comment.id)}
-                            >
-                              Delete
-                            </button>
-                          </div>`
-                        : html``}
-                      ${isSignedIn
-                        ? html`<div className="comment-controls right">
-                            <button
-                              className="ghost-btn"
-                              type="button"
-                              onClick=${() =>
-                                setReplyTarget(comment.id, {
-                                  type: "comment",
-                                  id: comment.id,
-                                  name: comment.authorName,
-                                })}
-                            >
-                              Reply
-                            </button>
-                          </div>`
-                        : html``}
                       ${actionStatusByComment[comment.id]
                         ? html`<div className="muted comment-inline-status">
                             ${actionStatusByComment[comment.id]}
+                          </div>`
+                        : html``}
+                      ${(editingId !== comment.id && (comment.userId === userId || isSignedIn))
+                        ? html`<div className="comment-controls right">
+                            ${comment.userId === userId
+                              ? html`<button
+                                  className="ghost-btn"
+                                  type="button"
+                                  onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                                  onClick=${() => startEdit(comment)}
+                                >
+                                  <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
+                                  Edit
+                                </button>
+                                <button
+                                  className="ghost-btn"
+                                  type="button"
+                                  onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                                  onClick=${() => deleteComment(comment.id)}
+                                >
+                                  Delete
+                                </button>`
+                              : html``}
+                            ${isSignedIn
+                              ? html`<button
+                                  className="ghost-btn"
+                                  type="button"
+                                  onClick=${() =>
+                                    setReplyTarget(comment.id, {
+                                      type: "comment",
+                                      id: comment.id,
+                                      name: comment.authorName,
+                                    })}
+                                >
+                                  Reply
+                                </button>`
+                              : html``}
                           </div>`
                         : html``}
                     </div>
@@ -1610,41 +1610,42 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                                               ${reply.body}
                                             </p>
                                           </div>`}
-                                      ${reply.userId === userId && editingReplyKey !== `${comment.id}:${reply.id}`
+                                      ${(editingReplyKey !== `${comment.id}:${reply.id}` &&
+                                      (reply.userId === userId || isSignedIn))
                                         ? html`<div className="comment-controls right">
-                                            <button
-                                              className="ghost-btn"
-                                              type="button"
-                                              onMouseDown=${(event) => triggerFlash(event.currentTarget)}
-                                              onClick=${() => startReplyEdit(comment.id, reply)}
-                                            >
-                                              <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
-                                              Edit
-                                            </button>
-                                            <button
-                                              className="ghost-btn"
-                                              type="button"
-                                              onMouseDown=${(event) => triggerFlash(event.currentTarget)}
-                                              onClick=${() => deleteReply(comment.id, reply.id)}
-                                            >
-                                              Delete
-                                            </button>
-                                          </div>`
-                                        : html``}
-                                      ${isSignedIn
-                                        ? html`<div className="comment-controls right">
-                                            <button
-                                              className="ghost-btn"
-                                              type="button"
-                                              onClick=${() =>
-                                                setReplyTarget(comment.id, {
-                                                  type: "reply",
-                                                  id: reply.id,
-                                                  name: reply.authorName,
-                                                })}
-                                            >
-                                              Reply
-                                            </button>
+                                            ${reply.userId === userId
+                                              ? html`<button
+                                                  className="ghost-btn"
+                                                  type="button"
+                                                  onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                                                  onClick=${() => startReplyEdit(comment.id, reply)}
+                                                >
+                                                  <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
+                                                  Edit
+                                                </button>
+                                                <button
+                                                  className="ghost-btn"
+                                                  type="button"
+                                                  onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                                                  onClick=${() => deleteReply(comment.id, reply.id)}
+                                                >
+                                                  Delete
+                                                </button>`
+                                              : html``}
+                                            ${isSignedIn
+                                              ? html`<button
+                                                  className="ghost-btn"
+                                                  type="button"
+                                                  onClick=${() =>
+                                                    setReplyTarget(comment.id, {
+                                                      type: "reply",
+                                                      id: reply.id,
+                                                      name: reply.authorName,
+                                                    })}
+                                                >
+                                                  Reply
+                                                </button>`
+                                              : html``}
                                           </div>`
                                         : html``}
                                     </div>
@@ -2808,9 +2809,11 @@ function capitalizePerk(text) {
   return value;
 }
 
-function ForumPage({ isAdmin }) {
+function SupportPage({ isAdmin }) {
   const { getToken, isSignedIn } = useAuth();
   const { openSignIn } = useClerk();
+  const navigate = useNavigate();
+  const [showTicketModal, setShowTicketModal] = useState(true);
   const [tickets, setTickets] = useState([]);
   const [selectedTicketId, setSelectedTicketId] = useState("");
   const [selectedTicket, setSelectedTicket] = useState(null);
@@ -2951,125 +2954,230 @@ function ForumPage({ isAdmin }) {
     <section className="news-page fade-in">
       <div className="news-hero">
         <div>
-          <div className="news-eyebrow">Forum</div>
-          <h1 className="news-title">Community Hub</h1>
+          <div className="news-eyebrow">Support</div>
+          <h1 className="news-title">Player Support</h1>
           <p className="news-copy">
-            Support tickets are live now. General posts and suggestions are scaffolded for next phase.
+            Open a private ticket to contact staff for account issues, appeals, bug help, or warnings.
           </p>
         </div>
         <div className="news-callout">
-          <div className="news-callout-label">Sections</div>
-          <div className="news-callout-title">Support</div>
-          <div className="news-callout-copy">Live: 1:1 ticket messaging between players and admins.</div>
-          <div className="news-callout-title">General Posts</div>
-          <div className="news-callout-copy">Coming next: public community discussions.</div>
-          <div className="news-callout-title">Suggestions</div>
-          <div className="news-callout-copy">Coming next: structured feedback and voting.</div>
+          <div className="news-callout-label">Status</div>
+          <div className="news-callout-title">Live Ticket Inbox</div>
+          <div className="news-callout-copy">1:1 staff messaging with status updates and full history.</div>
+          <div className="news-callout-title">Forum Sections</div>
+          <div className="news-callout-copy">
+            Public categories are now in Forum. Use Support for private help cases.
+          </div>
         </div>
       </div>
 
-      ${!isSignedIn
-        ? html`<section className="card">
-            <p className="muted">Sign in to create and manage support tickets.</p>
-            <button className="button primary" type="button" onClick=${() => openSignIn && openSignIn({})}>
-              Sign in
-            </button>
-          </section>`
-        : html`<section className="card admin-tools">
-            <form className="admin-panel" onSubmit=${submitTicket}>
-              <div className="section-title">Create Support Ticket</div>
-              <input
-                placeholder="Subject"
-                value=${newSubject}
-                onInput=${(event) => setNewSubject(event.target.value)}
-                required
-              />
-              <label className="settings-row">
-                <span>Category</span>
-                <select value=${newCategory} onChange=${(event) => setNewCategory(event.target.value)}>
-                  <option value="support">Support</option>
-                  <option value="appeal">Ban Appeal</option>
-                  <option value="warning">Warning Appeal</option>
-                  <option value="general">General</option>
-                </select>
-              </label>
-              <textarea
-                placeholder="Describe your issue..."
-                value=${newBody}
-                onInput=${(event) => setNewBody(event.target.value)}
-                required
-              ></textarea>
-              <button className="button primary" type="submit">Create Ticket</button>
-              ${status ? html`<div className="muted">${status}</div>` : html``}
-            </form>
+      <section className="card support-page-launch">
+        <div className="support-page-launch-row">
+          <div>
+            <div className="section-title">Support Tickets</div>
+            <p className="muted">Open ticket inbox and private staff chat.</p>
+          </div>
+          <button className="button primary" type="button" onClick=${() => setShowTicketModal(true)}>
+            Open Support
+          </button>
+        </div>
+      </section>
 
-            <div className="admin-panel">
-              <div className="section-title">Ticket Inbox</div>
-              ${loading
-                ? html`<p className="muted">Loading tickets...</p>`
-                : tickets.length === 0
-                ? html`<p className="muted">No tickets yet.</p>`
-                : html`<div className="news-list">
-                    ${tickets.map(
-                      (ticket) => html`<button
-                        key=${ticket.id}
-                        className="drawer-link"
-                        type="button"
-                        onClick=${() => setSelectedTicketId(ticket.id)}
-                      >
-                        ${ticket.subject} - ${ticket.status.toUpperCase()}
-                      </button>`,
-                    )}
-                  </div>`}
+      <${PopUp}
+        show=${showTicketModal}
+        onClose=${() => {
+          setShowTicketModal(false);
+          navigate("/");
+        }}
+        title="Support Center"
+      >
+        ${!isSignedIn
+          ? html`<section className="card">
+              <p className="muted">Sign in to create and manage support tickets.</p>
+              <button className="button primary" type="button" onClick=${() => openSignIn && openSignIn({})}>
+                Sign in
+              </button>
+            </section>`
+          : html`<section className="card admin-tools support-modal-layout">
+              <form className="admin-panel" onSubmit=${submitTicket}>
+                <div className="section-title">Create Support Ticket</div>
+                <input
+                  placeholder="Subject"
+                  value=${newSubject}
+                  onInput=${(event) => setNewSubject(event.target.value)}
+                  required
+                />
+                <label className="settings-row">
+                  <span>Category</span>
+                  <select value=${newCategory} onChange=${(event) => setNewCategory(event.target.value)}>
+                    <option value="support">Support</option>
+                    <option value="appeal">Ban Appeal</option>
+                    <option value="warning">Warning Appeal</option>
+                    <option value="general">General</option>
+                  </select>
+                </label>
+                <textarea
+                  placeholder="Describe your issue..."
+                  value=${newBody}
+                  onInput=${(event) => setNewBody(event.target.value)}
+                  required
+                ></textarea>
+                <button className="button primary" type="submit">Create Ticket</button>
+                ${status ? html`<div className="muted">${status}</div>` : html``}
+              </form>
 
-              ${selectedTicket
-                ? html`<div className="card">
-                    <div className="section-title">${selectedTicket.subject}</div>
-                    <div className="muted">
-                      ${selectedTicket.category.toUpperCase()} - ${selectedTicket.status.toUpperCase()}
-                    </div>
-                    ${isAdmin
-                      ? html`<div className="comment-actions right">
-                          <select value=${nextStatus} onChange=${(event) => setNextStatus(event.target.value)}>
-                            <option value="pending">Pending</option>
-                            <option value="resolved">Resolved</option>
-                            <option value="closed">Closed</option>
-                            <option value="open">Open</option>
-                          </select>
-                          <button className="button ghost-btn" type="button" onClick=${updateTicketStatus}>
-                            Update Status
-                          </button>
-                        </div>`
-                      : html``}
-                    <div className="changelog-list">
-                      ${(selectedTicket.messages || []).map(
-                        (message) => html`<div key=${message.id} className="changelog-entry">
-                          <div className="changelog-header">
-                            <div className="changelog-version">${message.authorName}</div>
-                            <div className="changelog-date">${formatTimestamp(message.createdAt)}</div>
-                          </div>
-                          <div className="muted">${message.role.toUpperCase()}</div>
-                          <p>${message.body}</p>
-                        </div>`,
+              <div className="admin-panel">
+                <div className="section-title">Ticket Inbox</div>
+                ${loading
+                  ? html`<p className="muted">Loading tickets...</p>`
+                  : tickets.length === 0
+                  ? html`<p className="muted">No tickets yet.</p>`
+                  : html`<div className="news-list">
+                      ${tickets.map(
+                        (ticket) => html`<button
+                          key=${ticket.id}
+                          className="drawer-link"
+                          type="button"
+                          onClick=${() => setSelectedTicketId(ticket.id)}
+                        >
+                          ${ticket.subject} - ${ticket.status.toUpperCase()}
+                        </button>`,
                       )}
-                    </div>
-                    <div className="comment-reply-form">
-                      <textarea
-                        rows="3"
-                        placeholder="Write a reply..."
-                        value=${chatDraft}
-                        onInput=${(event) => setChatDraft(event.target.value)}
-                      ></textarea>
-                      <div className="comment-actions right">
-                        <button className="button primary" type="button" onClick=${sendMessage}>
-                          Send Message
-                        </button>
+                    </div>`}
+
+                ${selectedTicket
+                  ? html`<div className="card">
+                      <div className="section-title">${selectedTicket.subject}</div>
+                      <div className="muted">
+                        ${selectedTicket.category.toUpperCase()} - ${selectedTicket.status.toUpperCase()}
                       </div>
-                    </div>
-                  </div>`
-                : html``}
+                      ${isAdmin
+                        ? html`<div className="comment-actions right">
+                            <select value=${nextStatus} onChange=${(event) => setNextStatus(event.target.value)}>
+                              <option value="pending">Pending</option>
+                              <option value="resolved">Resolved</option>
+                              <option value="closed">Closed</option>
+                              <option value="open">Open</option>
+                            </select>
+                            <button className="button ghost-btn" type="button" onClick=${updateTicketStatus}>
+                              Update Status
+                            </button>
+                          </div>`
+                        : html``}
+                      <div className="changelog-list">
+                        ${(selectedTicket.messages || []).map(
+                          (message) => html`<div key=${message.id} className="changelog-entry">
+                            <div className="changelog-header">
+                              <div className="changelog-version">${message.authorName}</div>
+                              <div className="changelog-date">${formatTimestamp(message.createdAt)}</div>
+                            </div>
+                            <div className="muted">${message.role.toUpperCase()}</div>
+                            <p>${message.body}</p>
+                          </div>`,
+                        )}
+                      </div>
+                      <div className="comment-reply-form">
+                        <textarea
+                          rows="3"
+                          placeholder="Write a reply..."
+                          value=${chatDraft}
+                          onInput=${(event) => setChatDraft(event.target.value)}
+                        ></textarea>
+                        <div className="comment-actions right">
+                          <button className="button primary" type="button" onClick=${sendMessage}>
+                            Send Message
+                          </button>
+                        </div>
+                      </div>
+                    </div>`
+                  : html``}
+              </div>
+            </section>`}
+      <//>
+    </section>
+  `;
+}
+
+function ForumPage() {
+  const navigate = useNavigate();
+  const sections = [
+    {
+      id: "updates",
+      title: "Updates",
+      description: "Official announcements, patch notes, and release updates from the Hardtale team.",
+      stat: "Official",
+    },
+    {
+      id: "bug-reports",
+      title: "Bug Reports",
+      description: "Report reproducible bugs and track status from acknowledgement to fix.",
+      stat: "QA",
+    },
+    {
+      id: "help-feedback",
+      title: "Help and Feedback",
+      description: "Ask questions about gameplay, launcher, account, and share platform feedback.",
+      stat: "Support",
+    },
+    {
+      id: "suggestions",
+      title: "Suggestions",
+      description: "Share server ideas and vote on community concepts before roadmap review.",
+      stat: "Community",
+    },
+    {
+      id: "feature-requests",
+      title: "Feature Requests",
+      description: "Propose larger systems and mechanics with use-cases and expected impact.",
+      stat: "Planning",
+    },
+    {
+      id: "forum-help",
+      title: "Forum Help",
+      description: "Need help with forum tools, trust levels, moderation, or posting permissions.",
+      stat: "Meta",
+    },
+  ];
+  return html`
+    <section className="news-page fade-in forum-hub">
+      <div className="news-hero">
+        <div>
+          <div className="news-eyebrow">Forum</div>
+          <h1 className="news-title">Community Sections</h1>
+          <p className="news-copy">
+            Devforum-inspired structure with focused sections for updates, reports, and player feedback.
+          </p>
+        </div>
+        <div className="news-callout">
+          <div className="news-callout-label">Need Private Help?</div>
+          <div className="news-callout-title">Use Support Tickets</div>
+          <div className="news-callout-copy">
+            Appeals and account-specific issues should be opened in Support, not public posts.
+          </div>
+          <button className="button primary" type="button" onClick=${() => navigate("/support")}>
+            Open Support
+          </button>
+        </div>
+      </div>
+
+      <section className="card forum-section-list">
+        ${sections.map(
+          (section) => html`<article key=${section.id} className="forum-section-card">
+            <div className="forum-section-stat">${section.stat}</div>
+            <div className="forum-section-body">
+              <div className="forum-section-title">${section.title}</div>
+              <p className="muted">${section.description}</p>
             </div>
-          </section>`}
+            <button
+              type="button"
+              className="button ghost-btn"
+              onClick=${() => navigate(`/forum?section=${section.id}`)}
+            >
+              View Section
+            </button>
+          </article>`,
+        )}
+      </section>
     </section>
   `;
 }
@@ -3231,7 +3339,7 @@ function NotFoundPage({
     const next = (value || command).trim();
     if (!next) return;
     if (next === "/support") {
-      navigate("/store#ticket");
+      navigate("/support");
       return;
     }
     if (next === "/warp spawn") {
@@ -4058,6 +4166,8 @@ function Layout() {
       setActive("vote");
     } else if (location.pathname === "/forum") {
       setActive("forum");
+    } else if (location.pathname === "/support") {
+      setActive("support");
     } else if (location.pathname === "/link") {
       setActive("link");
     }
@@ -4325,6 +4435,16 @@ function Layout() {
             Forum
           </button>
           <button
+            className=${`nav-link ${navActive === "support" ? "active" : ""} ${lockedNavHover && hoveredNav === "support" ? "hover-locked" : ""}`}
+            onClick=${() => navigate("/support")}
+            onMouseEnter=${() => handleDesktopNavEnter("support")}
+            onMouseLeave=${() => {
+              if (!lockedNavHover) setHoveredNav("");
+            }}
+          >
+            Support
+          </button>
+          <button
             className=${`nav-link ${navActive === "play" ? "active" : ""} ${lockedNavHover && hoveredNav === "play" ? "hover-locked" : ""}`}
             onClick=${openHowModal}
             onMouseEnter=${() => handleDesktopNavEnter("play")}
@@ -4528,7 +4648,11 @@ function Layout() {
           />
           <${Route}
             path="/forum"
-            element=${html`<${ForumPage} isAdmin=${isAdmin} />`}
+            element=${html`<${ForumPage} />`}
+          />
+          <${Route}
+            path="/support"
+            element=${html`<${SupportPage} isAdmin=${isAdmin} />`}
           />
           <${Route}
             path="/subscriptions"
@@ -4562,7 +4686,7 @@ function Layout() {
             <${Link} className="footer-link" to="/news">News</${Link}>
             <${Link} className="footer-link" to="/store">Store</${Link}>
             <${Link} className="footer-link" to="/vote">Vote</${Link}>
-            <${Link} className="footer-link" to="/forum">Forum</${Link}>
+            <${Link} className="footer-link" to="/support">Support</${Link}>
             <${Link} className="footer-link" to="/subscriptions">Subscriptions</${Link}>
           </div>
         </footer>
@@ -4685,6 +4809,12 @@ function Layout() {
               setShowMobileNav(false);
             }}>
               Forum
+            </button>
+            <button className="drawer-link" onClick=${() => {
+              navigate("/support");
+              setShowMobileNav(false);
+            }}>
+              Support
             </button>
             <button className="drawer-link" onClick=${() => {
               navigate("/subscriptions");
