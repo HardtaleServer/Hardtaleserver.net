@@ -1150,6 +1150,9 @@ app.post("/api/comments/:id/replies", async (req, res) => {
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const body = normalizeText(req.body?.text, 276);
+    const repliedToReplyId = normalizeText(req.body?.repliedToReplyId, 128);
+    const repliedToCommentId = normalizeText(req.body?.repliedToCommentId, 128);
+    const repliedToName = normalizeText(req.body?.repliedToName, 80);
     if (!body) {
       return res.status(400).json({ error: "Invalid reply" });
     }
@@ -1173,6 +1176,9 @@ app.post("/api/comments/:id/replies", async (req, res) => {
       authorImage: user?.imageUrl || "",
       authorEmail: email,
       authorRank: rank,
+      repliedToReplyId,
+      repliedToCommentId,
+      repliedToName,
     };
 
     const comment = await commentsCollection.findOne({

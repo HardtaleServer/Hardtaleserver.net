@@ -1083,6 +1083,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
   const [profileUser, setProfileUser] = useState(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState([]);
+  const [replyTargets, setReplyTargets] = useState({});
   const focusAppliedRef = useRef(false);
 
   async function loadComments() {
@@ -1231,6 +1232,49 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
       ...prev,
       [commentId]: !prev[commentId],
     }));
+  }
+
+  function setReplyTarget(commentId, target) {
+    setOpenResponses((prev) => ({ ...prev, [commentId]: true }));
+    setReplyTargets((prev) => ({
+      ...prev,
+      [commentId]: target,
+    }));
+  }
+
+  function clearReplyTarget(commentId) {
+    setReplyTargets((prev) => {
+      const next = { ...prev };
+      delete next[commentId];
+      return next;
+    });
+  }
+
+  async function submitReply(comment, text, textarea) {
+    if (!text.trim()) return;
+    const target = replyTargets[comment.id] || null;
+    const payload = { text };
+    if (target?.type === "reply") {
+      payload.repliedToReplyId = target.id;
+      payload.repliedToName = target.name;
+    } else if (target?.type === "comment") {
+      payload.repliedToCommentId = target.id;
+      payload.repliedToName = target.name;
+    }
+    const response = await apiFetchWithToken(getToken, true, `/api/comments/${comment.id}/replies`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    if (data?.comment) {
+      setComments((prev) =>
+        prev.map((entry) => (entry.id === data.comment.id ? data.comment : entry)),
+      );
+      clearReplyTarget(comment.id);
+      if (textarea) textarea.value = "";
+    }
   }
 
   async function saveReplyEdit(commentId, replyId) {
@@ -1456,6 +1500,22 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                             </button>
                           </div>`
                         : html``}
+                      ${isSignedIn
+                        ? html`<div className="comment-controls right">
+                            <button
+                              className="ghost-btn"
+                              type="button"
+                              onClick=${() =>
+                                setReplyTarget(comment.id, {
+                                  type: "comment",
+                                  id: comment.id,
+                                  name: comment.authorName,
+                                })}
+                            >
+                              Reply
+                            </button>
+                          </div>`
+                        : html``}
                     </div>
                     <div className="comment-responses-section">
                       ${(() => {
@@ -1549,9 +1609,16 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                                               </button>
                                             </div>
                                           </div>`
-                                        : html`<p className=${`comment-text ${resolveRank(reply).staff ? "staff" : ""}`}>
-                                            ${reply.body}
-                                          </p>`}
+                                        : html`<div>
+                                            ${reply.repliedToName
+                                              ? html`<div className="comment-replied-to">
+                                                  Replying to ${reply.repliedToName}
+                                                </div>`
+                                              : html``}
+                                            <p className=${`comment-text ${resolveRank(reply).staff ? "staff" : ""}`}>
+                                              ${reply.body}
+                                            </p>
+                                          </div>`}
                                       ${reply.userId === userId && editingReplyKey !== `${comment.id}:${reply.id}`
                                         ? html`<div className="comment-controls right">
                                             <button
@@ -1573,14 +1640,44 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                                             </button>
                                           </div>`
                                         : html``}
+                                      ${isSignedIn
+                                        ? html`<div className="comment-controls right">
+                                            <button
+                                              className="ghost-btn"
+                                              type="button"
+                                              onClick=${() =>
+                                                setReplyTarget(comment.id, {
+                                                  type: "reply",
+                                                  id: reply.id,
+                                                  name: reply.authorName,
+                                                })}
+                                            >
+                                              Reply
+                                            </button>
+                                          </div>`
+                                        : html``}
                                     </div>
                                   </div>`,
                                 )}
                                 ${isSignedIn
                                   ? html`<div className="comment-reply-form">
+                                      ${replyTargets[comment.id]
+                                        ? html`<div className="comment-reply-target">
+                                            Replying to ${replyTargets[comment.id].name}
+                                            <button
+                                              className="ghost-btn"
+                                              type="button"
+                                              onClick=${() => clearReplyTarget(comment.id)}
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>`
+                                        : html``}
                                       <textarea
                                         rows="2"
-                                        placeholder="Reply..."
+                                        placeholder=${replyTargets[comment.id]
+                                          ? `Reply to ${replyTargets[comment.id].name}...`
+                                          : "Reply..."}
                                         onInput=${(event) => {
                                           const value = event.target.value;
                                           event.target.dataset.value = value;
@@ -1595,23 +1692,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                                               .closest(".comment-reply-form")
                                               .querySelector("textarea");
                                             const text = textarea?.value || "";
-                                            if (!text.trim()) return;
-                                            apiFetchWithToken(getToken, true, `/api/comments/${comment.id}/replies`, {
-                                              method: "POST",
-                                              headers: { "Content-Type": "application/json" },
-                                              body: JSON.stringify({ text }),
-                                            }).then(async (response) => {
-                                              if (!response.ok) return;
-                                              const data = await response.json();
-                                              if (data?.comment) {
-                                                setComments((prev) =>
-                                                  prev.map((entry) =>
-                                                    entry.id === data.comment.id ? data.comment : entry,
-                                                  ),
-                                                );
-                                                if (textarea) textarea.value = "";
-                                              }
-                                            });
+                                            submitReply(comment, text, textarea);
                                           }}
                                         >
                                           Reply

@@ -1756,15 +1756,31 @@ emoji-picker.reaction-picker-panel {
   border-radius: 10px;
   border: 1px solid var(--stroke);
   background: var(--bg-soft);
+  text-align: center;
 }
 
 .comment-reply .comment-right {
   gap: 8px;
+  justify-items: center;
 }
 
 .comment-reply .comment-text {
   margin-top: 0;
   padding-top: 10px;
+  text-align: center;
+}
+
+.comment-reply .comment-meta {
+  justify-content: center;
+}
+
+.comment-reply .comment-meta-right {
+  justify-items: center;
+  text-align: center;
+}
+
+.comment-reply .comment-controls.right {
+  justify-content: center;
 }
 
 .comment-left.comment-left-main {
@@ -1774,8 +1790,28 @@ emoji-picker.reaction-picker-panel {
 .comment-left.comment-left-reply {
   min-width: 120px;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 4px;
+  text-align: center;
+}
+
+.comment-left.comment-left-reply .comment-identity {
+  justify-items: center;
+}
+
+.comment-replied-to {
+  font-size: 11px;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.comment-reply-target {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--muted);
 }
 
 .comment-responses-section {
@@ -3883,7 +3919,7 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 
   .comment-left.comment-left-reply {
     min-width: 0;
-    flex-direction: row;
+    flex-direction: column;
     align-items: center;
     width: 100%;
   }
