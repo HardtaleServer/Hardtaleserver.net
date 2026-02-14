@@ -1,0 +1,86 @@
+import React from "react";
+import htm from "htm";
+
+const html = htm.bind(React.createElement);
+
+export default function AppRoutes({
+  Routes,
+  Route,
+  HomePage,
+  NewsPage,
+  StorePage,
+  VotePage,
+  ForumPage,
+  SupportPage,
+  SubscriptionsPage,
+  LinkPage,
+  NotFoundPage,
+  sortedNews,
+  loading,
+  error,
+  playRef,
+  openHowModal,
+  navigate,
+  isAdmin,
+  sortedNotifications,
+  setNews,
+  setNotifications,
+  addToCart,
+}) {
+  return html`
+    <${Routes}>
+      <${Route}
+        path="/"
+        element=${html`<${HomePage}
+          news=${sortedNews}
+          loading=${loading}
+          error=${error}
+          playRef=${playRef}
+          onPlayClick=${openHowModal}
+          onNewsClick=${() => navigate("/news")}
+          onHowClick=${() => openHowModal()}
+        />`}
+      />
+      <${Route}
+        path="/home"
+        element=${html`<${HomePage}
+          news=${sortedNews}
+          loading=${loading}
+          error=${error}
+          playRef=${playRef}
+          onPlayClick=${openHowModal}
+          onNewsClick=${() => navigate("/news")}
+          onHowClick=${() => openHowModal()}
+        />`}
+      />
+      <${Route}
+        path="/news"
+        element=${html`<${NewsPage}
+          news=${sortedNews}
+          loading=${loading}
+          error=${error}
+          isAdmin=${isAdmin}
+          notifications=${sortedNotifications}
+          onNewsUpdate=${setNews}
+          onNotificationsUpdate=${setNotifications}
+        />`}
+      />
+      <${Route} path="/store" element=${html`<${StorePage} onAdd=${addToCart} />`} />
+      <${Route} path="/vote" element=${html`<${VotePage} />`} />
+      <${Route} path="/forum" element=${html`<${ForumPage} />`} />
+      <${Route} path="/support" element=${html`<${SupportPage} isAdmin=${isAdmin} />`} />
+      <${Route} path="/subscriptions" element=${html`<${SubscriptionsPage} />`} />
+      <${Route} path="/link" element=${html`<${LinkPage} />`} />
+      <${Route}
+        path="*"
+        element=${html`<${NotFoundPage}
+          isAdmin=${isAdmin}
+          news=${sortedNews}
+          notifications=${sortedNotifications}
+          onNewsUpdate=${setNews}
+          onNotificationsUpdate=${setNotifications}
+        />`}
+      />
+    <//>
+  `;
+}

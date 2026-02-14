@@ -7,6 +7,15 @@ import AuthorName from "./components/AuthorName.js";
 import TimestampText from "./components/TimestampText.js";
 import CommentIdentity from "./components/CommentIdentity.js";
 import CommentMeta from "./components/CommentMeta.js";
+import ForumSectionList from "./components/ForumSectionList.js";
+import MobileDrawerLinks from "./components/MobileDrawerLinks.js";
+import DesktopNavLinkButton from "./components/DesktopNavLinkButton.js";
+import TicketInboxList from "./components/TicketInboxList.js";
+import DesktopAuthButtons from "./components/DesktopAuthButtons.js";
+import PageHero from "./components/PageHero.js";
+import SupportTicketForm from "./components/SupportTicketForm.js";
+import SupportTicketThread from "./components/SupportTicketThread.js";
+import AppRoutes from "./components/AppRoutes.js";
 import {
   BrowserRouter,
   Routes,
@@ -2952,24 +2961,19 @@ function SupportPage({ isAdmin }) {
 
   return html`
     <section className="news-page fade-in">
-      <div className="news-hero">
-        <div>
-          <div className="news-eyebrow">Support</div>
-          <h1 className="news-title">Player Support</h1>
-          <p className="news-copy">
-            Open a private ticket to contact staff for account issues, appeals, bug help, or warnings.
-          </p>
-        </div>
-        <div className="news-callout">
-          <div className="news-callout-label">Status</div>
-          <div className="news-callout-title">Live Ticket Inbox</div>
-          <div className="news-callout-copy">1:1 staff messaging with status updates and full history.</div>
-          <div className="news-callout-title">Forum Sections</div>
-          <div className="news-callout-copy">
-            Public categories are now in Forum. Use Support for private help cases.
-          </div>
-        </div>
-      </div>
+      <${PageHero}
+        eyebrow="Support"
+        title="Player Support"
+        copy="Open a private ticket to contact staff for account issues, appeals, bug help, or warnings."
+        calloutLabel="Status"
+        calloutItems=${[
+          { title: "Live Ticket Inbox", copy: "1:1 staff messaging with status updates and full history." },
+          {
+            title: "Forum Sections",
+            copy: "Public categories are now in Forum. Use Support for private help cases.",
+          },
+        ]}
+      />
 
       <section className="card support-page-launch">
         <div className="support-page-launch-row">
@@ -2999,98 +3003,36 @@ function SupportPage({ isAdmin }) {
               </button>
             </section>`
           : html`<section className="card admin-tools support-modal-layout">
-              <form className="admin-panel" onSubmit=${submitTicket}>
-                <div className="section-title">Create Support Ticket</div>
-                <input
-                  placeholder="Subject"
-                  value=${newSubject}
-                  onInput=${(event) => setNewSubject(event.target.value)}
-                  required
-                />
-                <label className="settings-row">
-                  <span>Category</span>
-                  <select value=${newCategory} onChange=${(event) => setNewCategory(event.target.value)}>
-                    <option value="support">Support</option>
-                    <option value="appeal">Ban Appeal</option>
-                    <option value="warning">Warning Appeal</option>
-                    <option value="general">General</option>
-                  </select>
-                </label>
-                <textarea
-                  placeholder="Describe your issue..."
-                  value=${newBody}
-                  onInput=${(event) => setNewBody(event.target.value)}
-                  required
-                ></textarea>
-                <button className="button primary" type="submit">Create Ticket</button>
-                ${status ? html`<div className="muted">${status}</div>` : html``}
-              </form>
+              <${SupportTicketForm}
+                submitTicket=${submitTicket}
+                newSubject=${newSubject}
+                setNewSubject=${setNewSubject}
+                newCategory=${newCategory}
+                setNewCategory=${setNewCategory}
+                newBody=${newBody}
+                setNewBody=${setNewBody}
+                status=${status}
+              />
 
               <div className="admin-panel">
                 <div className="section-title">Ticket Inbox</div>
-                ${loading
-                  ? html`<p className="muted">Loading tickets...</p>`
-                  : tickets.length === 0
-                  ? html`<p className="muted">No tickets yet.</p>`
-                  : html`<div className="news-list">
-                      ${tickets.map(
-                        (ticket) => html`<button
-                          key=${ticket.id}
-                          className="drawer-link"
-                          type="button"
-                          onClick=${() => setSelectedTicketId(ticket.id)}
-                        >
-                          ${ticket.subject} - ${ticket.status.toUpperCase()}
-                        </button>`,
-                      )}
-                    </div>`}
+                <${TicketInboxList}
+                  loading=${loading}
+                  tickets=${tickets}
+                  onSelectTicket=${(ticketId) => setSelectedTicketId(ticketId)}
+                />
 
-                ${selectedTicket
-                  ? html`<div className="card">
-                      <div className="section-title">${selectedTicket.subject}</div>
-                      <div className="muted">
-                        ${selectedTicket.category.toUpperCase()} - ${selectedTicket.status.toUpperCase()}
-                      </div>
-                      ${isAdmin
-                        ? html`<div className="comment-actions right">
-                            <select value=${nextStatus} onChange=${(event) => setNextStatus(event.target.value)}>
-                              <option value="pending">Pending</option>
-                              <option value="resolved">Resolved</option>
-                              <option value="closed">Closed</option>
-                              <option value="open">Open</option>
-                            </select>
-                            <button className="button ghost-btn" type="button" onClick=${updateTicketStatus}>
-                              Update Status
-                            </button>
-                          </div>`
-                        : html``}
-                      <div className="changelog-list">
-                        ${(selectedTicket.messages || []).map(
-                          (message) => html`<div key=${message.id} className="changelog-entry">
-                            <div className="changelog-header">
-                              <div className="changelog-version">${message.authorName}</div>
-                              <div className="changelog-date">${formatTimestamp(message.createdAt)}</div>
-                            </div>
-                            <div className="muted">${message.role.toUpperCase()}</div>
-                            <p>${message.body}</p>
-                          </div>`,
-                        )}
-                      </div>
-                      <div className="comment-reply-form">
-                        <textarea
-                          rows="3"
-                          placeholder="Write a reply..."
-                          value=${chatDraft}
-                          onInput=${(event) => setChatDraft(event.target.value)}
-                        ></textarea>
-                        <div className="comment-actions right">
-                          <button className="button primary" type="button" onClick=${sendMessage}>
-                            Send Message
-                          </button>
-                        </div>
-                      </div>
-                    </div>`
-                  : html``}
+                <${SupportTicketThread}
+                  selectedTicket=${selectedTicket}
+                  isAdmin=${isAdmin}
+                  nextStatus=${nextStatus}
+                  setNextStatus=${setNextStatus}
+                  updateTicketStatus=${updateTicketStatus}
+                  formatTimestamp=${formatTimestamp}
+                  chatDraft=${chatDraft}
+                  setChatDraft=${setChatDraft}
+                  sendMessage=${sendMessage}
+                />
               </div>
             </section>`}
       <//>
@@ -3140,44 +3082,25 @@ function ForumPage() {
   ];
   return html`
     <section className="news-page fade-in forum-hub">
-      <div className="news-hero">
-        <div>
-          <div className="news-eyebrow">Forum</div>
-          <h1 className="news-title">Community Sections</h1>
-          <p className="news-copy">
-            Devforum-inspired structure with focused sections for updates, reports, and player feedback.
-          </p>
-        </div>
-        <div className="news-callout">
-          <div className="news-callout-label">Need Private Help?</div>
-          <div className="news-callout-title">Use Support Tickets</div>
-          <div className="news-callout-copy">
-            Appeals and account-specific issues should be opened in Support, not public posts.
-          </div>
-          <button className="button primary" type="button" onClick=${() => navigate("/support")}>
-            Open Support
-          </button>
-        </div>
-      </div>
+      <${PageHero}
+        eyebrow="Forum"
+        title="Community Sections"
+        copy="Devforum-inspired structure with focused sections for updates, reports, and player feedback."
+        calloutLabel="Need Private Help?"
+        calloutItems=${[
+          {
+            title: "Use Support Tickets",
+            copy: "Appeals and account-specific issues should be opened in Support, not public posts.",
+          },
+        ]}
+        actionLabel="Open Support"
+        onAction=${() => navigate("/support")}
+      />
 
-      <section className="card forum-section-list">
-        ${sections.map(
-          (section) => html`<article key=${section.id} className="forum-section-card">
-            <div className="forum-section-stat">${section.stat}</div>
-            <div className="forum-section-body">
-              <div className="forum-section-title">${section.title}</div>
-              <p className="muted">${section.description}</p>
-            </div>
-            <button
-              type="button"
-              className="button ghost-btn"
-              onClick=${() => navigate(`/forum?section=${section.id}`)}
-            >
-              View Section
-            </button>
-          </article>`,
-        )}
-      </section>
+      <${ForumSectionList}
+        sections=${sections}
+        onNavigateSection=${(sectionId) => navigate(`/forum?section=${sectionId}`)}
+      />
     </section>
   `;
 }
@@ -4389,135 +4312,81 @@ function Layout() {
   }
 
   function DesktopNavShell() {
+    const navItems = [
+      { id: "home", label: "Home", onClick: () => navigate("/") },
+      { id: "news", label: "News & Updates", onClick: () => navigate("/news") },
+      { id: "store", label: "Store", onClick: () => navigate("/store") },
+      { id: "vote", label: "Vote", onClick: () => navigate("/vote") },
+      { id: "forum", label: "Forum", onClick: () => navigate("/forum") },
+      { id: "support", label: "Support", onClick: () => navigate("/support") },
+      { id: "play", label: "Play", onClick: openHowModal },
+    ];
     return html`
       <div className=${`nav-shell ${placement === "left" ? "left" : placement === "right" ? "right" : ""}`}>
         <nav className="nav">
-          <button
-            className=${`nav-link ${navActive === "home" ? "active" : ""} ${lockedNavHover && hoveredNav === "home" ? "hover-locked" : ""}`}
-            onClick=${() => navigate("/")}
-            onMouseEnter=${() => handleDesktopNavEnter("home")}
-            onMouseLeave=${() => {
-              if (!lockedNavHover) setHoveredNav("");
-            }}
-          >
-            Home
-          </button>
-          <button
-            className=${`nav-link ${navActive === "news" ? "active" : ""} ${lockedNavHover && hoveredNav === "news" ? "hover-locked" : ""}`}
-            onClick=${() => navigate("/news")}
-            onMouseEnter=${() => handleDesktopNavEnter("news")}
-            onMouseLeave=${() => {
-              if (!lockedNavHover) setHoveredNav("");
-            }}
-          >
-            News & Updates
-          </button>
-          <button
-            className=${`nav-link ${navActive === "store" ? "active" : ""} ${lockedNavHover && hoveredNav === "store" ? "hover-locked" : ""}`}
-            onClick=${() => navigate("/store")}
-            onMouseEnter=${() => handleDesktopNavEnter("store")}
-            onMouseLeave=${() => {
-              if (!lockedNavHover) setHoveredNav("");
-            }}
-          >
-            Store
-          </button>
-          <button
-            className=${`nav-link ${navActive === "vote" ? "active" : ""} ${lockedNavHover && hoveredNav === "vote" ? "hover-locked" : ""}`}
-            onClick=${() => navigate("/vote")}
-            onMouseEnter=${() => handleDesktopNavEnter("vote")}
-            onMouseLeave=${() => {
-              if (!lockedNavHover) setHoveredNav("");
-            }}
-          >
-            Vote
-          </button>
-          <button
-            className=${`nav-link ${navActive === "forum" ? "active" : ""} ${lockedNavHover && hoveredNav === "forum" ? "hover-locked" : ""}`}
-            onClick=${() => navigate("/forum")}
-            onMouseEnter=${() => handleDesktopNavEnter("forum")}
-            onMouseLeave=${() => {
-              if (!lockedNavHover) setHoveredNav("");
-            }}
-          >
-            Forum
-          </button>
-          <button
-            className=${`nav-link ${navActive === "support" ? "active" : ""} ${lockedNavHover && hoveredNav === "support" ? "hover-locked" : ""}`}
-            onClick=${() => navigate("/support")}
-            onMouseEnter=${() => handleDesktopNavEnter("support")}
-            onMouseLeave=${() => {
-              if (!lockedNavHover) setHoveredNav("");
-            }}
-          >
-            Support
-          </button>
-          <button
-            className=${`nav-link ${navActive === "play" ? "active" : ""} ${lockedNavHover && hoveredNav === "play" ? "hover-locked" : ""}`}
-            onClick=${openHowModal}
-            onMouseEnter=${() => handleDesktopNavEnter("play")}
-            onMouseLeave=${() => {
-              if (!lockedNavHover) setHoveredNav("");
-            }}
-          >
-            Play
-          </button>
+          ${navItems.map(
+            (item) => html`<${DesktopNavLinkButton}
+              key=${item.id}
+              id=${item.id}
+              label=${item.label}
+              navActive=${navActive}
+              lockedNavHover=${lockedNavHover}
+              hoveredNav=${hoveredNav}
+              onClick=${item.onClick}
+              onEnter=${() => handleDesktopNavEnter(item.id)}
+              onLeave=${() => {
+                if (!lockedNavHover) setHoveredNav("");
+              }}
+            />`,
+          )}
         </nav>
       </div>
     `;
   }
 
-  function DesktopAuthButtons() {
+  function DesktopAuthButtonsBlock() {
     return html`
-      <div className="auth-buttons">
-        <${SettingsMenu}
-          theme=${theme}
-          setTheme=${setTheme}
-          toggleLightDark=${toggleLightDark}
-          placement=${placement}
-          setPlacement=${setPlacement}
-          menuSide=${menuSide}
-          setMenuSide=${setMenuSide}
-          mobileNavStyle=${mobileNavStyle}
-          setMobileNavStyle=${setMobileNavStyle}
-          logoSide=${logoSide}
-          setLogoSide=${setLogoSide}
-          mobileLogoStyle=${mobileLogoStyle}
-          setMobileLogoStyle=${setMobileLogoStyle}
-          showMobileIsland=${showMobileIsland}
-          setShowMobileIsland=${setShowMobileIsland}
-          desktopStickyStyle=${desktopStickyStyle}
-          setDesktopStickyStyle=${setDesktopStickyStyle}
-          desktopStickyWide=${desktopStickyWide}
-          setDesktopStickyWide=${setDesktopStickyWide}
-          desktopStickyLogoStyle=${desktopStickyLogoStyle}
-          setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
-          uiFlashEnabled=${uiFlashEnabled}
-          setUiFlashEnabled=${setUiFlashEnabled}
-          onOpenChange=${setSettingsOpen}
-          isMobile=${isMobile}
-        />
-        <${ClerkLoading}>
-          <button className="button" disabled>Loading auth...</button>
-        <//>
-        <${ClerkLoaded}>
-          <${SignedOut}>
-            <${SignUpButton} mode="modal">
-              <button className="button primary">Sign up</button>
-            <//>
-            <${SignInButton} mode="modal">
-              <button className="button">Sign in</button>
-            <//>
-          <//>
-          <${SignedIn}>
-            <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
-            ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
-            <span className="user-button">
-              <${UserButton} />
-            </span>
-          <//>
-        <//>
-      </div>
+      <${DesktopAuthButtons}
+        SettingsMenu=${SettingsMenu}
+        NotificationsButton=${NotificationsButton}
+        CartButton=${CartButton}
+        ClerkLoading=${ClerkLoading}
+        ClerkLoaded=${ClerkLoaded}
+        SignedOut=${SignedOut}
+        SignedIn=${SignedIn}
+        SignUpButton=${SignUpButton}
+        SignInButton=${SignInButton}
+        UserButton=${UserButton}
+        theme=${theme}
+        setTheme=${setTheme}
+        toggleLightDark=${toggleLightDark}
+        placement=${placement}
+        setPlacement=${setPlacement}
+        menuSide=${menuSide}
+        setMenuSide=${setMenuSide}
+        mobileNavStyle=${mobileNavStyle}
+        setMobileNavStyle=${setMobileNavStyle}
+        logoSide=${logoSide}
+        setLogoSide=${setLogoSide}
+        mobileLogoStyle=${mobileLogoStyle}
+        setMobileLogoStyle=${setMobileLogoStyle}
+        showMobileIsland=${showMobileIsland}
+        setShowMobileIsland=${setShowMobileIsland}
+        desktopStickyStyle=${desktopStickyStyle}
+        setDesktopStickyStyle=${setDesktopStickyStyle}
+        desktopStickyWide=${desktopStickyWide}
+        setDesktopStickyWide=${setDesktopStickyWide}
+        desktopStickyLogoStyle=${desktopStickyLogoStyle}
+        setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
+        uiFlashEnabled=${uiFlashEnabled}
+        setUiFlashEnabled=${setUiFlashEnabled}
+        setSettingsOpen=${setSettingsOpen}
+        isMobile=${isMobile}
+        notificationCount=${notificationCount}
+        openNotifications=${openNotifications}
+        cartCount=${cartCount}
+        openCart=${openCart}
+      />
     `;
   }
 
@@ -4536,7 +4405,7 @@ function Layout() {
               />`
             : html``}
           <${DesktopNavShell} />
-          <${DesktopAuthButtons} />
+          <${DesktopAuthButtonsBlock} />
         </div>
       </div>
     `;
@@ -4605,82 +4474,34 @@ function Layout() {
                 />
               <//>
               <${DesktopNavShell} />
-              <${DesktopAuthButtons} />
+              <${DesktopAuthButtonsBlock} />
             </header>`
           : html`<div className="topbar-spacer" style=${{ height: `${topbarHeight}px` }} aria-hidden="true"></div>`}
 
-        <${Routes}>
-          <${Route}
-            path="/"
-            element=${html`<${HomePage}
-              news=${sortedNews}
-              loading=${loading}
-              error=${error}
-              playRef=${playRef}
-              onPlayClick=${openHowModal}
-              onNewsClick=${() => navigate("/news")}
-              onHowClick=${() => setShowConnectHelp(true)}
-            />`}
-          />
-          <${Route}
-            path="/home"
-            element=${html`<${HomePage}
-              news=${sortedNews}
-              loading=${loading}
-              error=${error}
-              playRef=${playRef}
-              onPlayClick=${openHowModal}
-              onNewsClick=${() => navigate("/news")}
-              onHowClick=${() => setShowConnectHelp(true)}
-            />`}
-          />
-          <${Route}
-            path="/news"
-            element=${html`<${NewsPage}
-              news=${sortedNews}
-              loading=${loading}
-              error=${error}
-              isAdmin=${isAdmin}
-              notifications=${sortedNotifications}
-              onNewsUpdate=${setNews}
-              onNotificationsUpdate=${setNotifications}
-            />`}
-          />
-          <${Route}
-            path="/store"
-            element=${html`<${StorePage} onAdd=${addToCart} />`}
-          />
-          <${Route}
-            path="/vote"
-            element=${html`<${VotePage} />`}
-          />
-          <${Route}
-            path="/forum"
-            element=${html`<${ForumPage} />`}
-          />
-          <${Route}
-            path="/support"
-            element=${html`<${SupportPage} isAdmin=${isAdmin} />`}
-          />
-          <${Route}
-            path="/subscriptions"
-            element=${html`<${SubscriptionsPage} />`}
-          />
-          <${Route}
-            path="/link"
-            element=${html`<${LinkPage} />`}
-          />
-          <${Route}
-            path="*"
-            element=${html`<${NotFoundPage}
-              isAdmin=${isAdmin}
-              news=${sortedNews}
-              notifications=${sortedNotifications}
-              onNewsUpdate=${setNews}
-              onNotificationsUpdate=${setNotifications}
-            />`}
-          />
-        <//>
+        <${AppRoutes}
+          Routes=${Routes}
+          Route=${Route}
+          HomePage=${HomePage}
+          NewsPage=${NewsPage}
+          StorePage=${StorePage}
+          VotePage=${VotePage}
+          ForumPage=${ForumPage}
+          SupportPage=${SupportPage}
+          SubscriptionsPage=${SubscriptionsPage}
+          LinkPage=${LinkPage}
+          NotFoundPage=${NotFoundPage}
+          sortedNews=${sortedNews}
+          loading=${loading}
+          error=${error}
+          playRef=${playRef}
+          openHowModal=${openHowModal}
+          navigate=${navigate}
+          isAdmin=${isAdmin}
+          sortedNotifications=${sortedNotifications}
+          setNews=${setNews}
+          setNotifications=${setNotifications}
+          addToCart=${addToCart}
+        />
 
         <footer className="footer">
           <div className="footer-top">
@@ -4787,56 +4608,11 @@ function Layout() {
                   `}
             </div>
           </div>
-          <div className="mobile-drawer-links">
-            <button className="drawer-link" onClick=${() => {
-              navigate("/");
-              setShowMobileNav(false);
-            }}>
-              Home
-            </button>
-            <button className="drawer-link" onClick=${() => {
-              navigate("/news");
-              setShowMobileNav(false);
-            }}>
-              News & Updates
-            </button>
-            <button className="drawer-link" onClick=${() => {
-              navigate("/store");
-              setShowMobileNav(false);
-            }}>
-              Store
-            </button>
-            <button className="drawer-link" onClick=${() => {
-              navigate("/vote");
-              setShowMobileNav(false);
-            }}>
-              Vote
-            </button>
-            <button className="drawer-link" onClick=${() => {
-              navigate("/forum");
-              setShowMobileNav(false);
-            }}>
-              Forum
-            </button>
-            <button className="drawer-link" onClick=${() => {
-              navigate("/support");
-              setShowMobileNav(false);
-            }}>
-              Support
-            </button>
-            <button className="drawer-link" onClick=${() => {
-              navigate("/subscriptions");
-              setShowMobileNav(false);
-            }}>
-              Subscriptions
-            </button>
-            <button className="drawer-link" onClick=${() => {
-              setShowConnectHelp(true);
-              setShowMobileNav(false);
-            }}>
-              Play
-            </button>
-          </div>
+          <${MobileDrawerLinks}
+            navigate=${navigate}
+            closeMenu=${() => setShowMobileNav(false)}
+            openPlayHelp=${() => setShowConnectHelp(true)}
+          />
           <div className="mobile-drawer-footer">
             <${SignedOut}>
               <div className="drawer-auth">
