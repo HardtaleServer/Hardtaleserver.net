@@ -3087,12 +3087,17 @@ function ForumPage() {
   ];
   const sectionMap = Object.fromEntries(sections.map((section) => [section.id, section]));
   const selectedSectionId = String(new URLSearchParams(location.search).get("section") || "").trim();
+  const selectedPostId = String(new URLSearchParams(location.search).get("post") || "").trim();
   const selectedSection = sectionMap[selectedSectionId] || null;
   const [posts, setPosts] = useState([]);
   const [postsLoading, setPostsLoading] = useState(false);
   const [postsStatus, setPostsStatus] = useState("");
+  const [createStatus, setCreateStatus] = useState("");
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [newPostTitle, setNewPostTitle] = useState("");
   const [newPostBody, setNewPostBody] = useState("");
+  const [selectedPost, setSelectedPost] = useState(null);
+  const [selectedPostLoading, setSelectedPostLoading] = useState(false);
 
   async function loadSectionPosts(sectionId) {
     if (!sectionId || !sectionMap[sectionId]) {
@@ -3118,11 +3123,52 @@ function ForumPage() {
     loadSectionPosts(selectedSectionId);
   }, [selectedSectionId]);
 
+  useEffect(() => {
+    if (!selectedSectionId || !selectedPostId) {
+      setSelectedPost(null);
+      setSelectedPostLoading(false);
+      return;
+    }
+    const fromList = posts.find((entry) => String(entry?.id || "") === selectedPostId) || null;
+    if (fromList) {
+      setSelectedPost(fromList);
+      setSelectedPostLoading(false);
+      return;
+    }
+    let alive = true;
+    setSelectedPostLoading(true);
+    fetch(`/api/forum/posts/${encodeURIComponent(selectedPostId)}`)
+      .then((response) => {
+        if (!response.ok) throw new Error("Failed");
+        return response.json();
+      })
+      .then((data) => {
+        if (!alive) return;
+        const post = data?.post || null;
+        if (post && post.section === selectedSectionId) {
+          setSelectedPost(post);
+        } else {
+          setSelectedPost(null);
+        }
+      })
+      .catch(() => {
+        if (!alive) return;
+        setSelectedPost(null);
+      })
+      .finally(() => {
+        if (!alive) return;
+        setSelectedPostLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [selectedSectionId, selectedPostId, posts]);
+
   async function submitPost(event) {
     event.preventDefault();
     if (!selectedSectionId || !isSignedIn) return;
     if (!newPostTitle.trim() || !newPostBody.trim()) return;
-    setPostsStatus("Posting...");
+    setCreateStatus("Posting...");
     try {
       const response = await apiFetchWithToken(getToken, true, "/api/forum/posts", {
         method: "POST",
@@ -3143,13 +3189,53 @@ function ForumPage() {
       }
       setNewPostTitle("");
       setNewPostBody("");
-      setPostsStatus("");
+      setCreateStatus("");
+      setShowCreateModal(false);
     } catch {
-      setPostsStatus("Failed to post.");
+      setCreateStatus("Failed to post.");
     }
   }
 
   if (selectedSection) {
+    if (selectedPostId) {
+      return html`
+        <section className="news-page fade-in forum-hub">
+          <${PageHero}
+            eyebrow=${selectedSection.title}
+            title="Forum Post"
+            copy=${selectedSection.description}
+            calloutLabel="Navigation"
+            calloutItems=${[
+              { title: "Section", copy: selectedSection.title },
+            ]}
+            actionLabel="Back to Section"
+            onAction=${() => navigate(`/forum?section=${selectedSectionId}`)}
+          />
+
+          <section className="card forum-post-feed">
+            ${selectedPostLoading
+              ? html`<p className="muted">Loading post...</p>`
+              : !selectedPost
+              ? html`<p className="muted">Post not found in this section.</p>`
+              : html`<article className="news-card forum-post-card">
+                  <div className="news-header">
+                    <div className="news-title-row">
+                      <h3>${selectedPost.title}</h3>
+                    </div>
+                  </div>
+                  <div className="news-meta">
+                    <span className="muted">By</span>
+                    <${AuthorName} value=${selectedPost.authorName || "User"} isStaffLabel=${isStaffLabel} />
+                    <${TimestampText} value=${selectedPost.createdAt} formatTimestamp=${formatTimestamp} />
+                  </div>
+                  <p className="news-body-paragraph">${selectedPost.body}</p>
+                  <${CommentThread} newsId=${`forum:${selectedPost.id}`} autoOpen=${true} />
+                </article>`}
+          </section>
+        </section>
+      `;
+    }
+
     return html`
       <section className="news-page fade-in forum-hub">
         <${PageHero}
@@ -3169,29 +3255,15 @@ function ForumPage() {
 
         ${isSignedIn
           ? html`<section className="card">
-              <form className="forum-create-form" onSubmit=${submitPost}>
-                <div className="section-title">Create Post</div>
-                <input
-                  placeholder="Post title"
-                  value=${newPostTitle}
-                  onInput=${(event) => setNewPostTitle(event.target.value)}
-                  maxLength="140"
-                  required
-                />
-                <textarea
-                  rows="4"
-                  placeholder="Write your post..."
-                  value=${newPostBody}
-                  onInput=${(event) => setNewPostBody(event.target.value)}
-                  maxLength="4000"
-                  required
-                ></textarea>
-                <div className="comment-actions right">
-                  <span className="muted">Posting as ${getUserDisplayName(user)}</span>
-                  <button className="button primary" type="submit">Post to ${selectedSection.title}</button>
+              <div className="forum-create-inline">
+                <div>
+                  <div className="section-title">Create Post</div>
+                  <p className="muted">Posting as ${getUserDisplayName(user)}</p>
                 </div>
-                ${postsStatus ? html`<div className="muted">${postsStatus}</div>` : html``}
-              </form>
+                <button className="button primary" type="button" onClick=${() => setShowCreateModal(true)}>
+                  New Post
+                </button>
+              </div>
             </section>`
           : html`<section className="card">
               <p className="muted">Sign in to create forum posts, comments, and replies.</p>
@@ -3209,21 +3281,56 @@ function ForumPage() {
             : html`<div className="news-list">
                 ${posts.map(
                   (post) => html`<article key=${post.id} className="news-card forum-post-card">
-                    <div className="news-header">
-                      <div className="news-title-row">
-                        <h3>${post.title}</h3>
+                    <${Link}
+                      className="forum-post-link"
+                      to=${`/forum?section=${encodeURIComponent(selectedSectionId)}&post=${encodeURIComponent(post.id)}`}
+                    >
+                      <div className="news-header">
+                        <div className="news-title-row">
+                          <h3>${post.title}</h3>
+                        </div>
                       </div>
-                    </div>
-                    <div className="news-meta">
-                      <${AuthorName} value=${post.authorName || "User"} isStaffLabel=${isStaffLabel} />
-                      <${TimestampText} value=${post.createdAt} formatTimestamp=${formatTimestamp} />
-                    </div>
-                    <p className="news-body-paragraph">${post.body}</p>
-                    <${CommentThread} newsId=${`forum:${post.id}`} />
+                      <div className="news-meta">
+                        <span className="muted">By</span>
+                        <${AuthorName} value=${post.authorName || "User"} isStaffLabel=${isStaffLabel} />
+                        <${TimestampText} value=${post.createdAt} formatTimestamp=${formatTimestamp} />
+                      </div>
+                    </${Link}>
                   </article>`,
                 )}
               </div>`}
+          ${postsStatus ? html`<div className="muted">${postsStatus}</div>` : html``}
         </section>
+
+        <${PopUp}
+          show=${showCreateModal}
+          onClose=${() => setShowCreateModal(false)}
+          title=${`Create Post - ${selectedSection.title}`}
+          className="forum-create-overlay"
+        >
+          <form className="forum-create-form" onSubmit=${submitPost}>
+            <input
+              placeholder="Post title"
+              value=${newPostTitle}
+              onInput=${(event) => setNewPostTitle(event.target.value)}
+              maxLength="140"
+              required
+            />
+            <textarea
+              rows="5"
+              placeholder="Write your post..."
+              value=${newPostBody}
+              onInput=${(event) => setNewPostBody(event.target.value)}
+              maxLength="4000"
+              required
+            ></textarea>
+            <div className="comment-actions right">
+              <span className="muted">Posting as ${getUserDisplayName(user)}</span>
+              <button className="button primary" type="submit">Post</button>
+            </div>
+            ${createStatus ? html`<div className="muted">${createStatus}</div>` : html``}
+          </form>
+        <//>
       </section>
     `;
   }

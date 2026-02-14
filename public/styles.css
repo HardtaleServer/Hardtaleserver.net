@@ -733,6 +733,13 @@ body[data-theme="light"] .settings-icon {
   gap: 10px;
 }
 
+.forum-create-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .forum-create-form input,
 .forum-create-form textarea {
   width: 100%;
@@ -758,7 +765,27 @@ body[data-theme="light"] .settings-icon {
   gap: 8px;
 }
 
+.forum-post-link {
+  text-decoration: none;
+  color: inherit;
+  display: grid;
+  gap: 6px;
+}
+
+.forum-post-link:hover .news-title-row h3 {
+  color: var(--accent);
+}
+
+.forum-create-overlay .popup {
+  width: min(760px, 92vw);
+}
+
 @media (max-width: 860px) {
+  .forum-create-inline {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .support-page-launch-row {
     align-items: stretch;
     flex-direction: column;

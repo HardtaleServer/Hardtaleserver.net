@@ -1988,6 +1988,25 @@ app.get("/api/forum/posts", async (req, res) => {
   }
 });
 
+app.get("/api/forum/posts/:id", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const postId = normalizeText(req.params.id, 128);
+    if (!postId) {
+      return res.status(400).json({ error: "Invalid forum post id" });
+    }
+    const docRaw = await forumPostsCollection.findOne({ id: postId, isDeleted: false });
+    if (!docRaw) {
+      return res.status(404).json({ error: "Forum post not found" });
+    }
+    const [refreshed] = await refreshForumPostAuthorFields([docRaw]);
+    return res.json({ post: normalizeForumPost(refreshed) });
+  } catch (error) {
+    console.error("Failed to load forum post", error);
+    return res.status(500).json({ error: "Failed to load forum post" });
+  }
+});
+
 app.post("/api/forum/posts", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
