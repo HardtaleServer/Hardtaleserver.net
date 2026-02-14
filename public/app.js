@@ -3,6 +3,10 @@ import ReactDOM from "react-dom/client";
 import { createPortal } from "react-dom";
 import htm from "htm";
 import HardtaleLoader from "./components/HardtaleLoader.js";
+import AuthorName from "./components/AuthorName.js";
+import TimestampText from "./components/TimestampText.js";
+import CommentIdentity from "./components/CommentIdentity.js";
+import CommentMeta from "./components/CommentMeta.js";
 import {
   BrowserRouter,
   Routes,
@@ -750,9 +754,9 @@ function NewsCard({ item, focusCommentId, focusReplyId, autoOpenComments }) {
         : html``}
       <div className="news-meta">
         <span>
-          By <span className=${`author-name ${isStaffLabel(item.author) ? "staff" : ""}`}>${item.author}</span>
+          By <${AuthorName} value=${item.author} isStaffLabel=${isStaffLabel} />
         </span>
-        <span className="notification-timestamp">${formatTimestamp(item.createdAt)}</span>
+        <${TimestampText} value=${item.createdAt} formatTimestamp=${formatTimestamp} />
         <div className="news-meta-actions">
           ${item.imageUrl
             ? html`<button
@@ -1412,70 +1416,34 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                           alt=${comment.authorName}
                         />
                       </button>
-                      <div className="comment-identity">
-                        <div
-                          className=${`comment-author ${authorSizeClass(comment.authorName)} ${
-                            resolveRank(comment).staff ? "staff" : ""
-                          }`}
-                        >
-                          ${comment.authorName}
-                        </div>
-                        ${(() => {
-                          const rank = resolveRank(comment);
-                          return html`<div className=${`comment-rank ${rank.staff ? "staff" : ""}`}>
-                            ${rank.label}
-                          </div>`;
-                        })()}
-                      </div>
-                      <div className="comment-meta-mobile">
-                        <div className="comment-meta-right">
-                          <span className="comment-time">${formatTimestamp(comment.createdAt)}</span>
-                          ${comment.editCount > 0
-                            ? html`<span className="comment-edited">
-                                Edited ${formatTimestamp(comment.updatedAt)}
-                              </span>`
-                            : html``}
-                        </div>
-                      </div>
+                      <${CommentIdentity}
+                        entry=${comment}
+                        rank=${resolveRank(comment)}
+                        authorSizeClass=${authorSizeClass}
+                      />
+                      <${CommentMeta}
+                        entry=${comment}
+                        formatTimestamp=${formatTimestamp}
+                        variant="mobile"
+                      />
                     </div>
                     <div className="comment-right">
                       <div className="comment-header-desktop">
-                        <div
-                          className=${`comment-author ${authorSizeClass(comment.authorName)} ${
-                            resolveRank(comment).staff ? "staff" : ""
-                          }`}
-                        >
-                          ${comment.authorName}
-                        </div>
-                        ${(() => {
-                          const rank = resolveRank(comment);
-                          return html`<div className=${`comment-rank ${rank.staff ? "staff" : ""}`}>
-                            ${rank.label}
-                          </div>`;
-                        })()}
+                        <${CommentIdentity}
+                          entry=${comment}
+                          rank=${resolveRank(comment)}
+                          authorSizeClass=${authorSizeClass}
+                        />
                       </div>
-                      <div className="comment-meta comment-meta-desktop">
-                        <div className="comment-meta-right">
-                          <span className="comment-time">${formatTimestamp(comment.createdAt)}</span>
-                          ${comment.editCount > 0
-                            ? html`<span className="comment-edited">
-                                Edited ${formatTimestamp(comment.updatedAt)}
-                              </span>`
-                            : html``}
-                          ${comment.editCount > 0
-                            ? html`<button
-                                className="comment-history-btn"
-                                type="button"
-                                onMouseDown=${(event) => triggerFlash(event.currentTarget)}
-                                onClick=${() => openHistory(comment.id)}
-                                title="View edits"
-                              >
-                                <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
-                                <span>${comment.editCount}</span>
-                              </button>`
-                            : html``}
-                        </div>
-                      </div>
+                      <${CommentMeta}
+                        entry=${comment}
+                        formatTimestamp=${formatTimestamp}
+                        variant="desktop"
+                        showHistoryButton=${true}
+                        historyIcon=${INK_PEN_ICON}
+                        onHistoryMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                        onHistoryClick=${() => openHistory(comment.id)}
+                      />
                       ${editingId === comment.id
                         ? html`<div className="comment-editor">
                             <textarea
@@ -1584,58 +1552,30 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                                           alt=${reply.authorName}
                                         />
                                       </button>
-                                      <div className="comment-identity">
-                                        <div
-                                          className=${`comment-author ${authorSizeClass(reply.authorName)} ${
-                                            resolveRank(reply).staff ? "staff" : ""
-                                          }`}
-                                        >
-                                          ${reply.authorName}
-                                        </div>
-                                        ${(() => {
-                                          const rank = resolveRank(reply);
-                                          return html`<div className=${`comment-rank ${rank.staff ? "staff" : ""}`}>
-                                            ${rank.label}
-                                          </div>`;
-                                        })()}
-                                      </div>
-                                      <div className="comment-meta-mobile">
-                                        <div className="comment-meta-right">
-                                          <span className="comment-time">${formatTimestamp(reply.createdAt)}</span>
-                                          ${reply.editCount > 0
-                                            ? html`<span className="comment-edited">
-                                                Edited ${formatTimestamp(reply.updatedAt)}
-                                              </span>`
-                                            : html``}
-                                        </div>
-                                      </div>
+                                      <${CommentIdentity}
+                                        entry=${reply}
+                                        rank=${resolveRank(reply)}
+                                        authorSizeClass=${authorSizeClass}
+                                      />
+                                      <${CommentMeta}
+                                        entry=${reply}
+                                        formatTimestamp=${formatTimestamp}
+                                        variant="mobile"
+                                      />
                                     </div>
                                     <div className="comment-right">
                                       <div className="comment-header-desktop">
-                                        <div
-                                          className=${`comment-author ${authorSizeClass(reply.authorName)} ${
-                                            resolveRank(reply).staff ? "staff" : ""
-                                          }`}
-                                        >
-                                          ${reply.authorName}
-                                        </div>
-                                        ${(() => {
-                                          const rank = resolveRank(reply);
-                                          return html`<div className=${`comment-rank ${rank.staff ? "staff" : ""}`}>
-                                            ${rank.label}
-                                          </div>`;
-                                        })()}
+                                        <${CommentIdentity}
+                                          entry=${reply}
+                                          rank=${resolveRank(reply)}
+                                          authorSizeClass=${authorSizeClass}
+                                        />
                                       </div>
-                                      <div className="comment-meta comment-meta-desktop">
-                                        <div className="comment-meta-right">
-                                          <span className="comment-time">${formatTimestamp(reply.createdAt)}</span>
-                                          ${reply.editCount > 0
-                                            ? html`<span className="comment-edited">
-                                                Edited ${formatTimestamp(reply.updatedAt)}
-                                              </span>`
-                                            : html``}
-                                        </div>
-                                      </div>
+                                      <${CommentMeta}
+                                        entry=${reply}
+                                        formatTimestamp=${formatTimestamp}
+                                        variant="desktop"
+                                      />
                                       ${editingReplyKey === `${comment.id}:${reply.id}`
                                         ? html`<div className="comment-editor">
                                             <textarea
@@ -2189,9 +2129,9 @@ function AdminPanel({
                 <p>${item.description}</p>
                 <div className="news-meta">
                   <span>
-                    By <span className=${`author-name ${isStaffLabel(item.author) ? "staff" : ""}`}>${item.author}</span>
+                    By <${AuthorName} value=${item.author} isStaffLabel=${isStaffLabel} />
                   </span>
-                  <span className="notification-timestamp">${formatTimestamp(item.createdAt)}</span>
+                  <${TimestampText} value=${item.createdAt} formatTimestamp=${formatTimestamp} />
                 </div>
                 <button
                   className="ghost-btn news-toggle"
@@ -2253,11 +2193,9 @@ function AdminPanel({
                 <p>${item.message}</p>
                 <div className="news-meta">
                   <span>
-                    By <span className=${`author-name ${isStaffLabel(item.author) ? "staff" : ""}`}>${item.author}</span>
+                    By <${AuthorName} value=${item.author} isStaffLabel=${isStaffLabel} />
                   </span>
-                  <span className="notification-timestamp">
-                    ${formatTimestamp(item.createdAt)}
-                  </span>
+                  <${TimestampText} value=${item.createdAt} formatTimestamp=${formatTimestamp} />
                 </div>
                 <button
                   className="ghost-btn news-toggle"
@@ -3484,9 +3422,9 @@ function NotificationsPanel({ notifications, onView }) {
           </div>
           <div className="notif-body">${item.message}</div>
           <div className="notif-author">
-            <span className="notification-timestamp">${formatTimestamp(item.createdAt)}</span>
+            <${TimestampText} value=${item.createdAt} formatTimestamp=${formatTimestamp} />
             <span>
-              Sent by <span className=${`author-name ${isStaffLabel(item.author) ? "staff" : ""}`}>${item.author}</span>
+              Sent by <${AuthorName} value=${item.author} isStaffLabel=${isStaffLabel} />
             </span>
           </div>
           ${item.readMoreUrl
@@ -4445,7 +4383,7 @@ function Layout() {
           <//>
           <${SignedIn}>
             <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
-            <${CartButton} onClick=${openCart} count=${cartCount} />
+            ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
             <span className="user-button">
               <${UserButton} />
             </span>
