@@ -410,6 +410,15 @@ function getUserEmail(user) {
   );
 }
 
+function getUserDisplayName(user) {
+  return (
+    normalizeText(user?.username, 80) ||
+    normalizeText(getUserEmail(user), 80) ||
+    normalizeText(user?.fullName, 80) ||
+    "User"
+  );
+}
+
 function normalizePoll(payload) {
   const question = normalizeText(payload?.question, 140);
   const multiple = Boolean(payload?.multiple);
@@ -858,12 +867,14 @@ app.post("/api/comments", async (req, res) => {
     const user = await clerkClient.users.getUser(auth.userId);
     const email = getUserEmail(user);
     const rank = String(user?.publicMetadata?.rank || "Registered");
+    const authorUsername = normalizeText(user?.username, 80);
     await commentsCollection.insertOne({
       newsId,
       userId: auth.userId,
       body,
       editCount: 0,
-      authorName: user?.fullName || user?.username || "User",
+      authorName: getUserDisplayName(user),
+      authorUsername,
       authorImage: user?.imageUrl || "",
       authorEmail: email,
       authorRank: rank,
@@ -902,7 +913,7 @@ app.patch("/api/comments/:id", async (req, res) => {
     }
 
     const user = await clerkClient.users.getUser(auth.userId);
-    const editorName = user?.fullName || user?.username || "User";
+    const editorName = getUserDisplayName(user);
     const editorImage = user?.imageUrl || "";
 
     const comment = await commentsCollection.findOne({
@@ -958,6 +969,7 @@ app.post("/api/comments/:id/replies", async (req, res) => {
     const user = await clerkClient.users.getUser(auth.userId);
     const email = getUserEmail(user);
     const rank = String(user?.publicMetadata?.rank || "Registered");
+    const authorUsername = normalizeText(user?.username, 80);
     const reply = {
       id: crypto.randomUUID(),
       userId: auth.userId,
@@ -965,7 +977,8 @@ app.post("/api/comments/:id/replies", async (req, res) => {
       createdAt: new Date(),
       updatedAt: new Date(),
       editCount: 0,
-      authorName: user?.fullName || user?.username || "User",
+      authorName: getUserDisplayName(user),
+      authorUsername,
       authorImage: user?.imageUrl || "",
       authorEmail: email,
       authorRank: rank,
@@ -1010,7 +1023,7 @@ app.patch("/api/comments/:id/replies/:replyId", async (req, res) => {
     }
 
     const user = await clerkClient.users.getUser(auth.userId);
-    const editorName = user?.fullName || user?.username || "User";
+    const editorName = getUserDisplayName(user);
     const editorImage = user?.imageUrl || "";
 
     const comment = await commentsCollection.findOne({

@@ -1716,6 +1716,10 @@ emoji-picker.reaction-picker-panel {
   resize: none;
 }
 
+.comment-reply-submit {
+  min-width: 96px;
+}
+
 .comment-history-btn {
   background: transparent;
   border: 1px solid var(--stroke);

@@ -46,7 +46,16 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const VERSION = "1.3.17";
-const STAFF_EMAILS = new Set(["chashsmurfis@gmail.com", "hytaleserver@gmail.com"]);
+const STAFF_EMAILS = new Set([
+  "chashsmurfis@gmail.com",
+  "hardtaleserver@gmail.com",
+  "hytaleserver@gmail.com",
+]);
+const STAFF_USERNAME_KEYS = new Set([
+  "smurfis",
+  "hardtaleteam",
+  "system",
+]);
 const LOADER_VARIANTS = ["fiery", "golden", "greyscale", "icey"];
 const INITIAL_LOADER_MIN_MS = 3200;
 const AUTH_TRANSITION_LOADER_MS = 850;
@@ -618,7 +627,7 @@ function getUserEmail(user) {
 }
 
 function getUserDisplayName(user) {
-  return user?.fullName || getUserEmail(user) || "User";
+  return user?.username || getUserEmail(user) || user?.fullName || "User";
 }
 
 function formatTimestamp(value) {
@@ -635,8 +644,11 @@ function formatTimestamp(value) {
 }
 
 function isStaffLabel(label = "") {
-  const text = String(label || "").toLowerCase();
-  return text.includes("smurfis") || text.includes("hardtale");
+  const text = String(label || "").trim().toLowerCase();
+  if (!text) return false;
+  if (STAFF_EMAILS.has(text)) return true;
+  const key = text.replace(/[\s_-]+/g, "");
+  return STAFF_USERNAME_KEYS.has(key);
 }
 
 function renderNewsRichText(text) {
@@ -1062,7 +1074,9 @@ function CommentThread({ newsId }) {
 
   function resolveRank(comment) {
     const email = String(comment.authorEmail || "").toLowerCase();
-    if (STAFF_EMAILS.has(email)) {
+    const username = String(comment.authorUsername || "").toLowerCase();
+    const authorName = String(comment.authorName || "").toLowerCase();
+    if (STAFF_EMAILS.has(email) || isStaffLabel(username) || isStaffLabel(authorName)) {
       return { label: "STAFF", staff: true };
     }
     const rank = comment.authorRank || "Registered";
@@ -1410,7 +1424,7 @@ function CommentThread({ newsId }) {
                               ></textarea>
                               <div className="comment-actions right">
                                 <button
-                                  className="button ghost-btn"
+                                  className="button primary comment-reply-submit"
                                   type="button"
                                   onClick=${(event) => {
                                     const textarea = event.currentTarget
