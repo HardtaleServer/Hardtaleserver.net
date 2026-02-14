@@ -569,6 +569,20 @@ body[data-theme="light"] .settings-icon {
   place-items: center;
   padding: 0 4px;
   border: 1px solid var(--stroke);
+  overflow: hidden;
+}
+
+.cart-badge::after {
+  content: "";
+  position: absolute;
+  top: -80%;
+  left: -140%;
+  width: 60%;
+  height: 260%;
+  background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.45) 50%, transparent 100%);
+  transform: skewX(-18deg);
+  animation: badgeShine 2.8s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .notif-badge {
@@ -644,6 +658,18 @@ body[data-theme="light"] .settings-icon {
   gap: 12px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
   z-index: 50;
+}
+
+@keyframes badgeShine {
+  0% {
+    left: -140%;
+  }
+  35% {
+    left: 170%;
+  }
+  100% {
+    left: 170%;
+  }
 }
 
 .settings-menu.menu-right {
@@ -977,7 +1003,9 @@ body[data-theme="light"] .button.primary {
 .hero h1 span {
   display: inline-block;
   margin-top: 6px;
-  background: linear-gradient(120deg, var(--accent), var(--accent-2));
+  background: linear-gradient(270deg, var(--accent-2), var(--accent));
+  background-size: 220% 100%;
+  animation: staffReflect 2.4s ease-in-out infinite reverse;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -1004,6 +1032,13 @@ body[data-theme="light"] .button.primary {
   gap: 12px;
   flex-wrap: wrap;
   margin-top: 10px;
+}
+
+.hero-action-btn {
+  background: linear-gradient(140deg, var(--accent), var(--accent-2));
+  background-size: 180% 100%;
+  animation: staffReflect 2.8s ease-in-out infinite reverse;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.24);
 }
 
 .home-intro {

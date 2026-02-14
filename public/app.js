@@ -3747,7 +3747,7 @@ function HomePage({
             community-first adventures.
           </p>
           <div className="hero-actions">
-            <button className="button primary" onClick=${onPlayClick}>
+            <button className="button primary hero-action-btn" onClick=${onPlayClick}>
               Play now
             </button>
             <button className="button" onClick=${onNewsClick}>
@@ -3767,7 +3767,7 @@ function HomePage({
               How?
             </button>
             <button
-              className="button primary copy-ip-btn"
+              className="button primary copy-ip-btn hero-action-btn"
               onClick=${() => navigator.clipboard.writeText(SERVER_IP)}
             >
               Copy IP
@@ -3780,7 +3780,7 @@ function HomePage({
           <div className="discord-pill">
             <span className="discord-text">Discord online: -/-</span>
             <div className="discord-actions">
-              <a className="button primary" href="#" role="button">Join Discord</a>
+              <a className="button primary hero-action-btn" href="#" role="button">Join Discord</a>
               <div className="discord-icon">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M20 5.2c-1.3-1-2.8-1.7-4.4-2l-.2.4c1 .3 2 .8 2.9 1.4-1.7-.8-3.7-1.2-5.7-1.2s-4 .4-5.7 1.2c.9-.6 1.9-1.1 2.9-1.4l-.2-.4C7.9 3.5 6.4 4.2 5.1 5.2 2.9 8.3 2.2 11.5 2.4 14.6c1.3 1 2.8 1.8 4.4 2.4.5-.7 1-1.4 1.3-2.2-.7-.3-1.4-.6-2-.9.2-.2.4-.3.6-.4 1.2.6 2.6.9 4 .9s2.8-.3 4-.9c.2.1.4.3.6.4-.6.3-1.3.6-2 .9.4.8.8 1.5 1.3 2.2 1.6-.6 3.1-1.4 4.4-2.4.4-3.4-.8-6.6-3-9.4zM9.3 12.9c-.6 0-1.1-.6-1.1-1.3s.5-1.3 1.1-1.3 1.1.6 1.1 1.3-.5 1.3-1.1 1.3zm5.4 0c-.6 0-1.1-.6-1.1-1.3s.5-1.3 1.1-1.3 1.1.6 1.1 1.3-.5 1.3-1.1 1.3z" />
