@@ -79,6 +79,7 @@ let newsCollection = null;
 let notificationsCollection = null;
 let cartsCollection = null;
 let purchasesCollection = null;
+let supportTicketsCollection = null;
 let mongoConnectInFlight = null;
 let mongoReconnectTimer = null;
 let mongoReconnectDelayMs = 1000;
@@ -94,6 +95,7 @@ function resetMongoState() {
   notificationsCollection = null;
   cartsCollection = null;
   purchasesCollection = null;
+  supportTicketsCollection = null;
   mongoConnectInFlight = null;
 }
 
@@ -123,7 +125,8 @@ async function connectMongo() {
     newsCollection &&
     notificationsCollection &&
     cartsCollection &&
-    purchasesCollection
+    purchasesCollection &&
+    supportTicketsCollection
   ) {
     return;
   }
@@ -152,6 +155,7 @@ async function connectMongo() {
       notificationsCollection = mongoDb.collection("notifications");
       cartsCollection = mongoDb.collection("carts");
       purchasesCollection = mongoDb.collection("purchases");
+      supportTicketsCollection = mongoDb.collection("support_tickets");
       await commentsCollection.createIndex({ newsId: 1, createdAt: 1 });
       await commentsCollection.createIndex({ userId: 1 });
       await commentRevisionsCollection.createIndex({ commentId: 1, createdAt: 1 });
@@ -164,6 +168,9 @@ async function connectMongo() {
       await notificationsCollection.createIndex({ isDeleted: 1, createdAt: -1 });
       await cartsCollection.createIndex({ userId: 1 }, { unique: true });
       await purchasesCollection.createIndex({ userId: 1, createdAt: -1 });
+      await supportTicketsCollection.createIndex({ id: 1 }, { unique: true });
+      await supportTicketsCollection.createIndex({ createdBy: 1, createdAt: -1 });
+      await supportTicketsCollection.createIndex({ status: 1, updatedAt: -1 });
       mongoReconnectDelayMs = 1000;
       console.log("Connected to MongoDB");
     } catch (error) {
@@ -236,7 +243,8 @@ async function requireMongoReady(res) {
     !newsCollection ||
     !notificationsCollection ||
     !cartsCollection ||
-    !purchasesCollection
+    !purchasesCollection ||
+    !supportTicketsCollection
   ) {
     try {
       await connectMongo();
@@ -252,7 +260,8 @@ async function requireMongoReady(res) {
     !newsCollection ||
     !notificationsCollection ||
     !cartsCollection ||
-    !purchasesCollection
+    !purchasesCollection ||
+    !supportTicketsCollection
   ) {
     res.status(503).json({
       error: "Database not connected",
@@ -688,6 +697,74 @@ function normalizeNotificationItem(item) {
     commentId,
     replyId,
     createdAt: new Date().toISOString(),
+  };
+}
+
+function normalizeTicketSubject(value) {
+  return normalizeText(value, 140);
+}
+
+function normalizeTicketBody(value) {
+  return normalizeText(value, 2000);
+}
+
+function normalizeTicketCategory(value) {
+  const category = normalizeText(value, 40).toLowerCase();
+  const allowed = new Set(["support", "appeal", "warning", "general"]);
+  return allowed.has(category) ? category : "support";
+}
+
+function normalizeTicketStatus(value) {
+  const status = normalizeText(value, 24).toLowerCase();
+  const allowed = new Set(["open", "pending", "resolved", "closed"]);
+  return allowed.has(status) ? status : "open";
+}
+
+function normalizeTicketMessage(message) {
+  if (!message) return null;
+  return {
+    ...message,
+    id: normalizeText(message.id, 128),
+    body: normalizeTicketBody(message.body),
+    authorId: normalizeText(message.authorId, 128),
+    authorName: normalizeText(message.authorName, 80),
+    role: normalizeText(message.role, 24),
+    createdAt: message.createdAt || new Date().toISOString(),
+  };
+}
+
+function normalizeTicketDoc(doc) {
+  if (!doc) return null;
+  const stripped = stripMongoId(doc);
+  return {
+    ...stripped,
+    id: normalizeText(stripped.id, 128),
+    subject: normalizeTicketSubject(stripped.subject),
+    body: normalizeTicketBody(stripped.body),
+    category: normalizeTicketCategory(stripped.category),
+    status: normalizeTicketStatus(stripped.status),
+    createdBy: normalizeText(stripped.createdBy, 128),
+    createdByName: normalizeText(stripped.createdByName, 80),
+    assigneeId: normalizeText(stripped.assigneeId, 128),
+    messages: Array.isArray(stripped.messages)
+      ? stripped.messages.map(normalizeTicketMessage).filter(Boolean)
+      : [],
+  };
+}
+
+function toTicketSummary(ticket) {
+  if (!ticket) return null;
+  return {
+    id: ticket.id,
+    subject: ticket.subject,
+    category: ticket.category,
+    status: ticket.status,
+    createdBy: ticket.createdBy,
+    createdByName: ticket.createdByName,
+    assigneeId: ticket.assigneeId || "",
+    createdAt: ticket.createdAt,
+    updatedAt: ticket.updatedAt,
+    messageCount: Array.isArray(ticket.messages) ? ticket.messages.length : 0,
   };
 }
 
@@ -1758,6 +1835,197 @@ app.post("/api/cart/checkout", async (req, res) => {
   } catch (error) {
     console.error("Failed to checkout cart", error);
     return res.status(500).json({ error: "Failed to checkout cart" });
+  }
+});
+
+app.get("/api/forum/tickets", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const user = await clerkClient.users.getUser(auth.userId);
+    const isAdmin = isAdminUser(user);
+    const status = normalizeTicketStatus(req.query.status);
+    const filter = { isDeleted: false };
+    if (!isAdmin) {
+      filter.createdBy = auth.userId;
+    }
+    if (req.query.status) {
+      filter.status = status;
+    }
+    const docs = await supportTicketsCollection
+      .find(filter)
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .toArray();
+    const tickets = docs.map(normalizeTicketDoc).filter(Boolean).map(toTicketSummary).filter(Boolean);
+    return res.json({ tickets, isAdmin });
+  } catch (error) {
+    console.error("Failed to load support tickets", error);
+    return res.status(500).json({ error: "Failed to load support tickets" });
+  }
+});
+
+app.post("/api/forum/tickets", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const subject = normalizeTicketSubject(req.body?.subject);
+    const body = normalizeTicketBody(req.body?.body);
+    const category = normalizeTicketCategory(req.body?.category);
+    if (!subject || !body) {
+      return res.status(400).json({ error: "Missing subject or message" });
+    }
+    const user = await clerkClient.users.getUser(auth.userId);
+    const ticketId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const authorName = getUserDisplayName(user);
+    const firstMessage = {
+      id: crypto.randomUUID(),
+      body,
+      authorId: auth.userId,
+      authorName,
+      role: "user",
+      createdAt: now,
+    };
+    await supportTicketsCollection.insertOne({
+      id: ticketId,
+      subject,
+      category,
+      status: "open",
+      createdBy: auth.userId,
+      createdByName: authorName,
+      assigneeId: "",
+      body,
+      messages: [firstMessage],
+      isDeleted: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    const created = await supportTicketsCollection.findOne({ id: ticketId, isDeleted: false });
+    return res.json({ ticket: normalizeTicketDoc(created) });
+  } catch (error) {
+    console.error("Failed to create support ticket", error);
+    return res.status(500).json({ error: "Failed to create support ticket" });
+  }
+});
+
+app.get("/api/forum/tickets/:id", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const user = await clerkClient.users.getUser(auth.userId);
+    const isAdmin = isAdminUser(user);
+    const ticketId = normalizeText(req.params.id, 128);
+    if (!ticketId) {
+      return res.status(400).json({ error: "Invalid ticket id" });
+    }
+    const doc = await supportTicketsCollection.findOne({ id: ticketId, isDeleted: false });
+    if (!doc) {
+      return res.status(404).json({ error: "Ticket not found" });
+    }
+    if (!isAdmin && doc.createdBy !== auth.userId) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+    return res.json({ ticket: normalizeTicketDoc(doc), isAdmin });
+  } catch (error) {
+    console.error("Failed to load support ticket", error);
+    return res.status(500).json({ error: "Failed to load support ticket" });
+  }
+});
+
+app.post("/api/forum/tickets/:id/messages", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const body = normalizeTicketBody(req.body?.body);
+    if (!body) {
+      return res.status(400).json({ error: "Invalid message" });
+    }
+    const ticketId = normalizeText(req.params.id, 128);
+    const user = await clerkClient.users.getUser(auth.userId);
+    const isAdmin = isAdminUser(user);
+    const doc = await supportTicketsCollection.findOne({ id: ticketId, isDeleted: false });
+    if (!doc) {
+      return res.status(404).json({ error: "Ticket not found" });
+    }
+    if (!isAdmin && doc.createdBy !== auth.userId) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    const message = {
+      id: crypto.randomUUID(),
+      body,
+      authorId: auth.userId,
+      authorName: getUserDisplayName(user),
+      role: isAdmin ? "admin" : "user",
+      createdAt: new Date().toISOString(),
+    };
+    const nextStatus = isAdmin ? "pending" : "open";
+    await supportTicketsCollection.updateOne(
+      { id: ticketId, isDeleted: false },
+      {
+        $push: { messages: message },
+        $set: {
+          status: nextStatus,
+          assigneeId: isAdmin ? auth.userId : normalizeText(doc.assigneeId, 128),
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    );
+    const updated = await supportTicketsCollection.findOne({ id: ticketId, isDeleted: false });
+    return res.json({ ticket: normalizeTicketDoc(updated) });
+  } catch (error) {
+    console.error("Failed to post ticket message", error);
+    return res.status(500).json({ error: "Failed to post ticket message" });
+  }
+});
+
+app.patch("/api/forum/tickets/:id", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const user = await clerkClient.users.getUser(auth.userId);
+    if (!isAdminUser(user)) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+    const ticketId = normalizeText(req.params.id, 128);
+    const status = normalizeTicketStatus(req.body?.status);
+    const assigneeId = normalizeText(req.body?.assigneeId, 128);
+    if (!ticketId) {
+      return res.status(400).json({ error: "Invalid ticket id" });
+    }
+    await supportTicketsCollection.updateOne(
+      { id: ticketId, isDeleted: false },
+      {
+        $set: {
+          status,
+          assigneeId: assigneeId || auth.userId,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    );
+    const updated = await supportTicketsCollection.findOne({ id: ticketId, isDeleted: false });
+    if (!updated) {
+      return res.status(404).json({ error: "Ticket not found" });
+    }
+    return res.json({ ticket: normalizeTicketDoc(updated) });
+  } catch (error) {
+    console.error("Failed to update support ticket", error);
+    return res.status(500).json({ error: "Failed to update support ticket" });
   }
 });
 

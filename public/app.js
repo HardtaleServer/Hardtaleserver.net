@@ -2865,7 +2865,275 @@ function capitalizePerk(text) {
   value = value.replace(/\bpassive\b/gi, "Passive");
   value = value.replace(/\bxp\b/gi, "XP");
   value = value.replace(/\bXP\s+([a-z])/g, (_, first) => `XP ${String(first).toUpperCase()}`);
+  value = value.replace(/\bextra\b/gi, "Extra");
+  value = value.replace(/\bmonthly\b/gi, "Monthly");
   return value;
+}
+
+function ForumPage({ isAdmin }) {
+  const { getToken, isSignedIn } = useAuth();
+  const { openSignIn } = useClerk();
+  const [tickets, setTickets] = useState([]);
+  const [selectedTicketId, setSelectedTicketId] = useState("");
+  const [selectedTicket, setSelectedTicket] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState("");
+  const [newSubject, setNewSubject] = useState("");
+  const [newCategory, setNewCategory] = useState("support");
+  const [newBody, setNewBody] = useState("");
+  const [chatDraft, setChatDraft] = useState("");
+  const [nextStatus, setNextStatus] = useState("pending");
+
+  async function loadTickets() {
+    if (!isSignedIn) {
+      setTickets([]);
+      setSelectedTicketId("");
+      setSelectedTicket(null);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/forum/tickets");
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      const next = Array.isArray(data.tickets) ? data.tickets : [];
+      setTickets(next);
+      if (!selectedTicketId && next.length > 0) {
+        setSelectedTicketId(next[0].id);
+      }
+    } catch {
+      setStatus("Failed to load tickets.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadTicketDetail(ticketId) {
+    if (!ticketId || !isSignedIn) {
+      setSelectedTicket(null);
+      return;
+    }
+    try {
+      const response = await apiFetchWithToken(getToken, true, `/api/forum/tickets/${ticketId}`);
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      setSelectedTicket(data.ticket || null);
+      setNextStatus((data.ticket?.status || "pending") === "resolved" ? "resolved" : "pending");
+    } catch {
+      setSelectedTicket(null);
+    }
+  }
+
+  useEffect(() => {
+    loadTickets();
+  }, [isSignedIn]);
+
+  useEffect(() => {
+    loadTicketDetail(selectedTicketId);
+  }, [selectedTicketId, isSignedIn]);
+
+  async function submitTicket(event) {
+    event.preventDefault();
+    if (!isSignedIn) return;
+    if (!newSubject.trim() || !newBody.trim()) return;
+    setStatus("Creating ticket...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/forum/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: newSubject,
+          category: newCategory,
+          body: newBody,
+        }),
+      });
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      const created = data.ticket;
+      setNewSubject("");
+      setNewCategory("support");
+      setNewBody("");
+      setStatus("Ticket created.");
+      await loadTickets();
+      if (created?.id) {
+        setSelectedTicketId(created.id);
+        setSelectedTicket(created);
+      }
+    } catch {
+      setStatus("Failed to create ticket.");
+    }
+  }
+
+  async function sendMessage() {
+    if (!selectedTicketId || !chatDraft.trim()) return;
+    setStatus("Sending message...");
+    try {
+      const response = await apiFetchWithToken(
+        getToken,
+        true,
+        `/api/forum/tickets/${selectedTicketId}/messages`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ body: chatDraft }),
+        },
+      );
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      setSelectedTicket(data.ticket || null);
+      setChatDraft("");
+      setStatus("");
+      await loadTickets();
+    } catch {
+      setStatus("Failed to send message.");
+    }
+  }
+
+  async function updateTicketStatus() {
+    if (!isAdmin || !selectedTicketId) return;
+    setStatus("Updating ticket...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, `/api/forum/tickets/${selectedTicketId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      setSelectedTicket(data.ticket || null);
+      setStatus("");
+      await loadTickets();
+    } catch {
+      setStatus("Failed to update ticket.");
+    }
+  }
+
+  return html`
+    <section className="news-page fade-in">
+      <div className="news-hero">
+        <div>
+          <div className="news-eyebrow">Forum</div>
+          <h1 className="news-title">Community Hub</h1>
+          <p className="news-copy">
+            Support tickets are live now. General posts and suggestions are scaffolded for next phase.
+          </p>
+        </div>
+        <div className="news-callout">
+          <div className="news-callout-label">Sections</div>
+          <div className="news-callout-title">Support</div>
+          <div className="news-callout-copy">Live: 1:1 ticket messaging between players and admins.</div>
+          <div className="news-callout-title">General Posts</div>
+          <div className="news-callout-copy">Coming next: public community discussions.</div>
+          <div className="news-callout-title">Suggestions</div>
+          <div className="news-callout-copy">Coming next: structured feedback and voting.</div>
+        </div>
+      </div>
+
+      ${!isSignedIn
+        ? html`<section className="card">
+            <p className="muted">Sign in to create and manage support tickets.</p>
+            <button className="button primary" type="button" onClick=${() => openSignIn && openSignIn({})}>
+              Sign in
+            </button>
+          </section>`
+        : html`<section className="card admin-tools">
+            <form className="admin-panel" onSubmit=${submitTicket}>
+              <div className="section-title">Create Support Ticket</div>
+              <input
+                placeholder="Subject"
+                value=${newSubject}
+                onInput=${(event) => setNewSubject(event.target.value)}
+                required
+              />
+              <label className="settings-row">
+                <span>Category</span>
+                <select value=${newCategory} onChange=${(event) => setNewCategory(event.target.value)}>
+                  <option value="support">Support</option>
+                  <option value="appeal">Ban Appeal</option>
+                  <option value="warning">Warning Appeal</option>
+                  <option value="general">General</option>
+                </select>
+              </label>
+              <textarea
+                placeholder="Describe your issue..."
+                value=${newBody}
+                onInput=${(event) => setNewBody(event.target.value)}
+                required
+              ></textarea>
+              <button className="button primary" type="submit">Create Ticket</button>
+              ${status ? html`<div className="muted">${status}</div>` : html``}
+            </form>
+
+            <div className="admin-panel">
+              <div className="section-title">Ticket Inbox</div>
+              ${loading
+                ? html`<p className="muted">Loading tickets...</p>`
+                : tickets.length === 0
+                ? html`<p className="muted">No tickets yet.</p>`
+                : html`<div className="news-list">
+                    ${tickets.map(
+                      (ticket) => html`<button
+                        key=${ticket.id}
+                        className="drawer-link"
+                        type="button"
+                        onClick=${() => setSelectedTicketId(ticket.id)}
+                      >
+                        ${ticket.subject} - ${ticket.status.toUpperCase()}
+                      </button>`,
+                    )}
+                  </div>`}
+
+              ${selectedTicket
+                ? html`<div className="card">
+                    <div className="section-title">${selectedTicket.subject}</div>
+                    <div className="muted">
+                      ${selectedTicket.category.toUpperCase()} - ${selectedTicket.status.toUpperCase()}
+                    </div>
+                    ${isAdmin
+                      ? html`<div className="comment-actions right">
+                          <select value=${nextStatus} onChange=${(event) => setNextStatus(event.target.value)}>
+                            <option value="pending">Pending</option>
+                            <option value="resolved">Resolved</option>
+                            <option value="closed">Closed</option>
+                            <option value="open">Open</option>
+                          </select>
+                          <button className="button ghost-btn" type="button" onClick=${updateTicketStatus}>
+                            Update Status
+                          </button>
+                        </div>`
+                      : html``}
+                    <div className="changelog-list">
+                      ${(selectedTicket.messages || []).map(
+                        (message) => html`<div key=${message.id} className="changelog-entry">
+                          <div className="changelog-header">
+                            <div className="changelog-version">${message.authorName}</div>
+                            <div className="changelog-date">${formatTimestamp(message.createdAt)}</div>
+                          </div>
+                          <div className="muted">${message.role.toUpperCase()}</div>
+                          <p>${message.body}</p>
+                        </div>`,
+                      )}
+                    </div>
+                    <div className="comment-reply-form">
+                      <textarea
+                        rows="3"
+                        placeholder="Write a reply..."
+                        value=${chatDraft}
+                        onInput=${(event) => setChatDraft(event.target.value)}
+                      ></textarea>
+                      <div className="comment-actions right">
+                        <button className="button primary" type="button" onClick=${sendMessage}>
+                          Send Message
+                        </button>
+                      </div>
+                    </div>
+                  </div>`
+                : html``}
+            </div>
+          </section>`}
+    </section>
+  `;
 }
 
 function ChangelogPanel() {
@@ -3850,6 +4118,8 @@ function Layout() {
       setActive("news");
     } else if (location.pathname === "/vote") {
       setActive("vote");
+    } else if (location.pathname === "/forum") {
+      setActive("forum");
     } else if (location.pathname === "/link") {
       setActive("link");
     }
@@ -4107,6 +4377,16 @@ function Layout() {
             Vote
           </button>
           <button
+            className=${`nav-link ${navActive === "forum" ? "active" : ""} ${lockedNavHover && hoveredNav === "forum" ? "hover-locked" : ""}`}
+            onClick=${() => navigate("/forum")}
+            onMouseEnter=${() => handleDesktopNavEnter("forum")}
+            onMouseLeave=${() => {
+              if (!lockedNavHover) setHoveredNav("");
+            }}
+          >
+            Forum
+          </button>
+          <button
             className=${`nav-link ${navActive === "play" ? "active" : ""} ${lockedNavHover && hoveredNav === "play" ? "hover-locked" : ""}`}
             onClick=${openHowModal}
             onMouseEnter=${() => handleDesktopNavEnter("play")}
@@ -4309,6 +4589,10 @@ function Layout() {
             element=${html`<${VotePage} />`}
           />
           <${Route}
+            path="/forum"
+            element=${html`<${ForumPage} isAdmin=${isAdmin} />`}
+          />
+          <${Route}
             path="/subscriptions"
             element=${html`<${SubscriptionsPage} />`}
           />
@@ -4340,6 +4624,7 @@ function Layout() {
             <${Link} className="footer-link" to="/news">News</${Link}>
             <${Link} className="footer-link" to="/store">Store</${Link}>
             <${Link} className="footer-link" to="/vote">Vote</${Link}>
+            <${Link} className="footer-link" to="/forum">Forum</${Link}>
             <${Link} className="footer-link" to="/subscriptions">Subscriptions</${Link}>
           </div>
         </footer>
@@ -4456,6 +4741,12 @@ function Layout() {
               setShowMobileNav(false);
             }}>
               Vote
+            </button>
+            <button className="drawer-link" onClick=${() => {
+              navigate("/forum");
+              setShowMobileNav(false);
+            }}>
+              Forum
             </button>
             <button className="drawer-link" onClick=${() => {
               navigate("/subscriptions");

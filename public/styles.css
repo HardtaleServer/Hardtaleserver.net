@@ -4037,7 +4037,7 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   }
 
   .comment-text {
-    margin: 2px 0 0;
+    margin: 0;
   }
 
   .comment-meta.comment-meta-desktop {
@@ -4076,8 +4076,8 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 
   .comment-reply .comment-text {
     text-align: left;
-    margin: 2px 0 0;
-    padding-top: 2px;
+    margin: 0;
+    padding-top: 0;
   }
 
   .comment-reply .comment-meta {
