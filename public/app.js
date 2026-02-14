@@ -4375,6 +4375,14 @@ function Layout() {
       : "logo"
     : "island";
 
+  useEffect(() => {
+    if (lockedNavHover) {
+      setHoveredNav(navActive);
+      return;
+    }
+    setHoveredNav("");
+  }, [lockedNavHover, navActive]);
+
   function handleDesktopNavEnter(id) {
     if (lockedNavHover) return;
     setHoveredNav(id);
@@ -4866,8 +4874,8 @@ function Layout() {
                           ${perkBullets(item.blurb).map(
                             (perk) => html`<li>
                               ${perk.toLowerCase().includes("bold badge")
-                                ? html`<strong>${perk}</strong>`
-                                : perk}
+                                ? html`<strong>${capitalizePerk(perk)}</strong>`
+                                : capitalizePerk(perk)}
                             </li>`,
                           )}
                         </ul>`

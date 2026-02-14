@@ -3198,13 +3198,21 @@ body[data-theme="dark"] .store-cta {
 
 .cart-name {
   font-weight: 600;
+  color: var(--muted);
+  font-size: 14px;
 }
 
 .cart-rank {
   font-weight: 800;
   font-size: 14px;
   letter-spacing: 0.02em;
-  color: var(--accent);
+  background-image: linear-gradient(270deg, var(--accent-2), var(--accent));
+  background-size: 220% 100%;
+  animation: staffReflect 2.4s ease-in-out infinite reverse;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
 .cart-info {
@@ -3218,7 +3226,13 @@ body[data-theme="dark"] .store-cta {
   padding-left: 16px;
   display: grid;
   gap: 2px;
-  color: var(--muted);
+  background-image: linear-gradient(270deg, var(--accent-2), var(--accent));
+  background-size: 220% 100%;
+  animation: staffReflect 2.4s ease-in-out infinite reverse;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
   font-size: 12px;
 }
 
