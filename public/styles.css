@@ -723,6 +723,36 @@ body[data-theme="light"] .settings-icon {
   font-weight: 700;
 }
 
+.forum-create-form {
+  display: grid;
+  gap: 10px;
+}
+
+.forum-create-form input,
+.forum-create-form textarea {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--stroke);
+  background: var(--bg);
+  color: var(--text);
+  padding: 10px 12px;
+}
+
+.forum-create-form textarea {
+  resize: vertical;
+  min-height: 110px;
+}
+
+.forum-post-feed {
+  display: grid;
+  gap: 12px;
+}
+
+.forum-post-card {
+  display: grid;
+  gap: 8px;
+}
+
 @media (max-width: 860px) {
   .support-page-launch-row {
     align-items: stretch;
@@ -2352,6 +2382,12 @@ emoji-picker.reaction-picker-panel {
 
 .comment-history-overlay .popup {
   max-height: 78vh;
+  overflow-y: auto;
+}
+
+.support-center-overlay .popup {
+  width: min(1080px, 94vw);
+  max-height: 86vh;
   overflow-y: auto;
 }
 

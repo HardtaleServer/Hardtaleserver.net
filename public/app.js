@@ -2994,6 +2994,7 @@ function SupportPage({ isAdmin }) {
           navigate("/");
         }}
         title="Support Center"
+        className="support-center-overlay"
       >
         ${!isSignedIn
           ? html`<section className="card">
@@ -3041,7 +3042,11 @@ function SupportPage({ isAdmin }) {
 }
 
 function ForumPage() {
+  const location = useLocation();
   const navigate = useNavigate();
+  const { isSignedIn, getToken } = useAuth();
+  const { openSignIn } = useClerk();
+  const { user } = useUser();
   const sections = [
     {
       id: "updates",
@@ -3080,6 +3085,149 @@ function ForumPage() {
       stat: "Meta",
     },
   ];
+  const sectionMap = Object.fromEntries(sections.map((section) => [section.id, section]));
+  const selectedSectionId = String(new URLSearchParams(location.search).get("section") || "").trim();
+  const selectedSection = sectionMap[selectedSectionId] || null;
+  const [posts, setPosts] = useState([]);
+  const [postsLoading, setPostsLoading] = useState(false);
+  const [postsStatus, setPostsStatus] = useState("");
+  const [newPostTitle, setNewPostTitle] = useState("");
+  const [newPostBody, setNewPostBody] = useState("");
+
+  async function loadSectionPosts(sectionId) {
+    if (!sectionId || !sectionMap[sectionId]) {
+      setPosts([]);
+      return;
+    }
+    setPostsLoading(true);
+    setPostsStatus("");
+    try {
+      const response = await fetch(`/api/forum/posts?section=${encodeURIComponent(sectionId)}`);
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      setPosts(Array.isArray(data.posts) ? data.posts : []);
+    } catch {
+      setPostsStatus("Failed to load posts.");
+      setPosts([]);
+    } finally {
+      setPostsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadSectionPosts(selectedSectionId);
+  }, [selectedSectionId]);
+
+  async function submitPost(event) {
+    event.preventDefault();
+    if (!selectedSectionId || !isSignedIn) return;
+    if (!newPostTitle.trim() || !newPostBody.trim()) return;
+    setPostsStatus("Posting...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/forum/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          section: selectedSectionId,
+          title: newPostTitle,
+          body: newPostBody,
+        }),
+      });
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      const created = data?.post;
+      if (created) {
+        setPosts((prev) => [created, ...prev]);
+      } else {
+        await loadSectionPosts(selectedSectionId);
+      }
+      setNewPostTitle("");
+      setNewPostBody("");
+      setPostsStatus("");
+    } catch {
+      setPostsStatus("Failed to post.");
+    }
+  }
+
+  if (selectedSection) {
+    return html`
+      <section className="news-page fade-in forum-hub">
+        <${PageHero}
+          eyebrow="Forum Section"
+          title=${selectedSection.title}
+          copy=${selectedSection.description}
+          calloutLabel=${selectedSection.stat}
+          calloutItems=${[
+            {
+              title: "Community Posting",
+              copy: "Create a post, then use comments and replies to discuss it.",
+            },
+          ]}
+          actionLabel="Back to Sections"
+          onAction=${() => navigate("/forum")}
+        />
+
+        ${isSignedIn
+          ? html`<section className="card">
+              <form className="forum-create-form" onSubmit=${submitPost}>
+                <div className="section-title">Create Post</div>
+                <input
+                  placeholder="Post title"
+                  value=${newPostTitle}
+                  onInput=${(event) => setNewPostTitle(event.target.value)}
+                  maxLength="140"
+                  required
+                />
+                <textarea
+                  rows="4"
+                  placeholder="Write your post..."
+                  value=${newPostBody}
+                  onInput=${(event) => setNewPostBody(event.target.value)}
+                  maxLength="4000"
+                  required
+                ></textarea>
+                <div className="comment-actions right">
+                  <span className="muted">Posting as ${getUserDisplayName(user)}</span>
+                  <button className="button primary" type="submit">Post to ${selectedSection.title}</button>
+                </div>
+                ${postsStatus ? html`<div className="muted">${postsStatus}</div>` : html``}
+              </form>
+            </section>`
+          : html`<section className="card">
+              <p className="muted">Sign in to create forum posts, comments, and replies.</p>
+              <button className="button primary" type="button" onClick=${() => openSignIn && openSignIn({})}>
+                Sign in
+              </button>
+            </section>`}
+
+        <section className="card forum-post-feed">
+          <div className="section-title">Posts in ${selectedSection.title}</div>
+          ${postsLoading
+            ? html`<p className="muted">Loading posts...</p>`
+            : posts.length === 0
+            ? html`<p className="muted">No posts yet. Be the first to start this section.</p>`
+            : html`<div className="news-list">
+                ${posts.map(
+                  (post) => html`<article key=${post.id} className="news-card forum-post-card">
+                    <div className="news-header">
+                      <div className="news-title-row">
+                        <h3>${post.title}</h3>
+                      </div>
+                    </div>
+                    <div className="news-meta">
+                      <${AuthorName} value=${post.authorName || "User"} isStaffLabel=${isStaffLabel} />
+                      <${TimestampText} value=${post.createdAt} formatTimestamp=${formatTimestamp} />
+                    </div>
+                    <p className="news-body-paragraph">${post.body}</p>
+                    <${CommentThread} newsId=${`forum:${post.id}`} />
+                  </article>`,
+                )}
+              </div>`}
+        </section>
+      </section>
+    `;
+  }
+
   return html`
     <section className="news-page fade-in forum-hub">
       <${PageHero}

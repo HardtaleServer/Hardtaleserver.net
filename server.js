@@ -27,6 +27,28 @@ const configuredAdminEmails = (
   .filter(Boolean);
 const ADMIN_EMAILS = [...new Set([...DEFAULT_ADMIN_EMAILS, ...configuredAdminEmails])];
 const ADMIN_EMAIL_SET = new Set(ADMIN_EMAILS);
+const DEFAULT_ADMIN_USERNAMES = ["support", "smurfis", "hardtale"];
+const configuredAdminUsernames = (
+  process.env.ADMIN_USERNAMES ||
+  process.env.ADMIN_USERNAME ||
+  ""
+)
+  .split(",")
+  .map((name) => name.trim().toLowerCase())
+  .filter(Boolean);
+const ADMIN_USERNAME_SET = new Set([
+  ...DEFAULT_ADMIN_USERNAMES.map((name) => name.toLowerCase()),
+  ...configuredAdminUsernames,
+]);
+const configuredAdminUserIds = (
+  process.env.ADMIN_USER_IDS ||
+  process.env.ADMIN_USER_ID ||
+  ""
+)
+  .split(",")
+  .map((id) => id.trim())
+  .filter(Boolean);
+const ADMIN_USER_ID_SET = new Set(configuredAdminUserIds);
 const ADMIN_NEWS_OWNER_EMAIL =
   (process.env.ADMIN_NEWS_OWNER_EMAIL || ADMIN_EMAILS[0] || "").toLowerCase();
 const CLERK_PUBLISHABLE_KEY =
@@ -80,6 +102,7 @@ let notificationsCollection = null;
 let cartsCollection = null;
 let purchasesCollection = null;
 let supportTicketsCollection = null;
+let forumPostsCollection = null;
 let mongoConnectInFlight = null;
 let mongoReconnectTimer = null;
 let mongoReconnectDelayMs = 1000;
@@ -96,6 +119,7 @@ function resetMongoState() {
   cartsCollection = null;
   purchasesCollection = null;
   supportTicketsCollection = null;
+  forumPostsCollection = null;
   mongoConnectInFlight = null;
 }
 
@@ -126,7 +150,8 @@ async function connectMongo() {
     notificationsCollection &&
     cartsCollection &&
     purchasesCollection &&
-    supportTicketsCollection
+    supportTicketsCollection &&
+    forumPostsCollection
   ) {
     return;
   }
@@ -156,6 +181,7 @@ async function connectMongo() {
       cartsCollection = mongoDb.collection("carts");
       purchasesCollection = mongoDb.collection("purchases");
       supportTicketsCollection = mongoDb.collection("support_tickets");
+      forumPostsCollection = mongoDb.collection("forum_posts");
       await commentsCollection.createIndex({ newsId: 1, createdAt: 1 });
       await commentsCollection.createIndex({ userId: 1 });
       await commentRevisionsCollection.createIndex({ commentId: 1, createdAt: 1 });
@@ -171,6 +197,9 @@ async function connectMongo() {
       await supportTicketsCollection.createIndex({ id: 1 }, { unique: true });
       await supportTicketsCollection.createIndex({ createdBy: 1, createdAt: -1 });
       await supportTicketsCollection.createIndex({ status: 1, updatedAt: -1 });
+      await forumPostsCollection.createIndex({ id: 1 }, { unique: true });
+      await forumPostsCollection.createIndex({ section: 1, createdAt: -1 });
+      await forumPostsCollection.createIndex({ createdBy: 1, createdAt: -1 });
       mongoReconnectDelayMs = 1000;
       console.log("Connected to MongoDB");
     } catch (error) {
@@ -768,6 +797,98 @@ function toTicketSummary(ticket) {
   };
 }
 
+const FORUM_SECTION_SET = new Set([
+  "updates",
+  "bug-reports",
+  "help-feedback",
+  "suggestions",
+  "feature-requests",
+  "forum-help",
+]);
+
+function normalizeForumSection(value) {
+  const section = normalizeText(value, 60).toLowerCase();
+  return FORUM_SECTION_SET.has(section) ? section : "";
+}
+
+function normalizeForumTitle(value) {
+  return normalizeText(value, 140);
+}
+
+function normalizeForumBody(value) {
+  return normalizeText(value, 4000);
+}
+
+function normalizeForumPost(doc) {
+  if (!doc) return null;
+  const stripped = stripMongoId(doc);
+  return {
+    ...stripped,
+    id: normalizeText(stripped.id, 128),
+    section: normalizeForumSection(stripped.section),
+    title: normalizeForumTitle(stripped.title),
+    body: normalizeForumBody(stripped.body),
+    createdBy: normalizeText(stripped.createdBy, 128),
+    authorName: normalizeText(stripped.authorName, 80),
+    authorUserId: normalizeText(stripped.authorUserId, 128),
+    authorUsername: normalizeText(stripped.authorUsername, 80),
+    authorImage: String(stripped.authorImage || ""),
+    createdAt: stripped.createdAt || new Date().toISOString(),
+    updatedAt: stripped.updatedAt || stripped.createdAt || new Date().toISOString(),
+  };
+}
+
+async function refreshForumPostAuthorFields(posts = []) {
+  if (!Array.isArray(posts) || posts.length === 0) return posts;
+  const cache = new Map();
+  const ops = [];
+  const nextPosts = [];
+
+  for (const item of posts) {
+    if (!item) continue;
+    let nextItem = item;
+    const authorUserId = normalizeText(item.authorUserId, 128);
+    if (authorUserId) {
+      const snapshot = await getFreshAuthorSnapshot(authorUserId, cache);
+      if (snapshot) {
+        const authorChanged =
+          normalizeText(item.authorName, 80) !== snapshot.authorName ||
+          normalizeText(item.authorUsername, 80) !== snapshot.authorUsername ||
+          String(item.authorImage || "") !== String(snapshot.authorImage || "");
+        if (authorChanged) {
+          nextItem = {
+            ...nextItem,
+            authorName: snapshot.authorName,
+            authorUsername: snapshot.authorUsername,
+            authorImage: snapshot.authorImage,
+          };
+          if (item._id) {
+            ops.push({
+              updateOne: {
+                filter: { _id: item._id },
+                update: {
+                  $set: {
+                    authorName: nextItem.authorName,
+                    authorUsername: nextItem.authorUsername,
+                    authorImage: nextItem.authorImage,
+                    updatedAt: new Date().toISOString(),
+                  },
+                },
+              },
+            });
+          }
+        }
+      }
+    }
+    nextPosts.push(nextItem);
+  }
+
+  if (ops.length > 0 && forumPostsCollection) {
+    await forumPostsCollection.bulkWrite(ops, { ordered: false });
+  }
+  return nextPosts;
+}
+
 async function getAdminUser() {
   if (!ADMIN_NEWS_OWNER_EMAIL) return null;
   const { data } = await clerkClient.users.getUserList({
@@ -777,7 +898,15 @@ async function getAdminUser() {
 }
 
 function isAdminUser(user) {
-  if (!user || ADMIN_EMAIL_SET.size === 0) return false;
+  if (!user) return false;
+  if (ADMIN_USER_ID_SET.has(String(user.id || ""))) {
+    return true;
+  }
+  const username = String(user.username || "").trim().toLowerCase();
+  if (username && ADMIN_USERNAME_SET.has(username)) {
+    return true;
+  }
+  if (ADMIN_EMAIL_SET.size === 0) return false;
   return user.emailAddresses?.some(
     (entry) => ADMIN_EMAIL_SET.has(entry.emailAddress?.toLowerCase()),
   );
@@ -1835,6 +1964,67 @@ app.post("/api/cart/checkout", async (req, res) => {
   } catch (error) {
     console.error("Failed to checkout cart", error);
     return res.status(500).json({ error: "Failed to checkout cart" });
+  }
+});
+
+app.get("/api/forum/posts", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const section = normalizeForumSection(req.query.section);
+    if (!section) {
+      return res.status(400).json({ error: "Invalid forum section" });
+    }
+    const docsRaw = await forumPostsCollection
+      .find({ section, isDeleted: false })
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .limit(120)
+      .toArray();
+    const docs = await refreshForumPostAuthorFields(docsRaw);
+    const posts = docs.map(normalizeForumPost).filter(Boolean);
+    return res.json({ posts, section });
+  } catch (error) {
+    console.error("Failed to load forum posts", error);
+    return res.status(500).json({ error: "Failed to load forum posts" });
+  }
+});
+
+app.post("/api/forum/posts", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const section = normalizeForumSection(req.body?.section);
+    const title = normalizeForumTitle(req.body?.title);
+    const body = normalizeForumBody(req.body?.body);
+    if (!section || !title || !body) {
+      return res.status(400).json({ error: "Missing or invalid forum post fields" });
+    }
+
+    const user = await clerkClient.users.getUser(auth.userId);
+    const now = new Date().toISOString();
+    const post = {
+      id: crypto.randomUUID(),
+      section,
+      title,
+      body,
+      createdBy: auth.userId,
+      authorName: getUserDisplayName(user),
+      authorUserId: auth.userId,
+      authorUsername: normalizeText(user?.username, 80),
+      authorImage: user?.imageUrl || "",
+      isDeleted: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await forumPostsCollection.insertOne(post);
+    const created = await forumPostsCollection.findOne({ id: post.id, isDeleted: false });
+    return res.json({ post: normalizeForumPost(created) });
+  } catch (error) {
+    console.error("Failed to create forum post", error);
+    return res.status(500).json({ error: "Failed to create forum post" });
   }
 });
 
