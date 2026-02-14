@@ -296,6 +296,11 @@ body[data-theme="dark"] {
   z-index: 1;
 }
 
+.desktop-sticky.transparent .cart-button,
+.desktop-sticky.transparent .cart-button .cart-badge {
+  opacity: 1;
+}
+
 .desktop-sticky.transparent .cl-userButtonAvatarImage {
   position: relative;
   z-index: 2;
