@@ -2409,7 +2409,6 @@ emoji-picker.reaction-picker-panel {
 .store-icon svg {
   width: 28px;
   height: 28px;
-  fill: var(--accent);
 }
 
 .store-name {
@@ -2425,6 +2424,13 @@ emoji-picker.reaction-picker-panel {
   margin: 0;
   display: grid;
   gap: 4px;
+  background-image: linear-gradient(270deg, var(--accent-2), var(--accent));
+  background-size: 220% 100%;
+  animation: staffReflect 2.4s ease-in-out infinite reverse;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
 .store-perks div {

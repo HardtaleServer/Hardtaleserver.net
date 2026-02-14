@@ -54,6 +54,8 @@ const STAFF_EMAILS = new Set([
   "hytaleserver@gmail.com",
 ]);
 const STAFF_USERNAME_KEYS = new Set([
+  "hardtale",
+  "hardtaleserver",
   "smurfis",
   "hardtaleteam",
   "system",
@@ -2859,7 +2861,11 @@ function perkBullets(text) {
 
 function capitalizePerk(text) {
   if (!text) return "";
-  return text.charAt(0).toUpperCase() + text.slice(1);
+  let value = text.charAt(0).toUpperCase() + text.slice(1);
+  value = value.replace(/\bpassive\b/gi, "Passive");
+  value = value.replace(/\bxp\b/gi, "XP");
+  value = value.replace(/\bXP\s+([a-z])/g, (_, first) => `XP ${String(first).toUpperCase()}`);
+  return value;
 }
 
 function ChangelogPanel() {
@@ -3165,19 +3171,32 @@ function NotFoundPage({
 }
 
 function renderStoreIcon(type) {
+  const gradientId = `store-icon-gradient-${type}`;
+  const gradient = html`<defs>
+    <linearGradient id=${gradientId} x1="100%" y1="50%" x2="0%" y2="50%">
+      <stop offset="0%" stop-color="var(--accent-2)" />
+      <stop offset="100%" stop-color="var(--accent)" />
+    </linearGradient>
+  </defs>`;
   switch (type) {
     case "crown":
       return html`<svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M3 7l4 3 5-6 5 6 4-3-2 12H5L3 7zm4 12h10l.3-2H6.7l.3 2z" />
+        ${gradient}
+        <path fill=${`url(#${gradientId})`} d="M3 7l4 3 5-6 5 6 4-3-2 12H5L3 7zm4 12h10l.3-2H6.7l.3 2z" />
       </svg>`;
     case "shield":
       return html`<svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3zm0 4.1L7 7.8V11c0 3.6 2.2 6.8 5 8 2.8-1.2 5-4.4 5-8V7.8l-5-1.7z" />
+        ${gradient}
+        <path
+          fill=${`url(#${gradientId})`}
+          d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3zm0 4.1L7 7.8V11c0 3.6 2.2 6.8 5 8 2.8-1.2 5-4.4 5-8V7.8l-5-1.7z"
+        />
       </svg>`;
     case "star":
     default:
       return html`<svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 2l2.5 6.2 6.7.6-5.1 4.3 1.6 6.5-5.7-3.6-5.7 3.6 1.6-6.5-5.1-4.3 6.7-.6L12 2z" />
+        ${gradient}
+        <path fill=${`url(#${gradientId})`} d="M12 2l2.5 6.2 6.7.6-5.1 4.3 1.6 6.5-5.7-3.6-5.7 3.6 1.6-6.5-5.1-4.3 6.7-.6L12 2z" />
       </svg>`;
   }
 }
