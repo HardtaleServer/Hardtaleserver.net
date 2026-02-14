@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
+import { createPortal } from "react-dom";
 import htm from "htm";
 import HardtaleLoader from "./components/HardtaleLoader.js";
 import {
@@ -46,6 +47,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const VERSION = "1.3.17";
+const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_EMAILS = new Set([
   "chashsmurfis@gmail.com",
   "hardtaleserver@gmail.com",
@@ -1050,6 +1052,7 @@ function CommentThread({ newsId }) {
   const [editingText, setEditingText] = useState("");
   const [editingReplyKey, setEditingReplyKey] = useState(null);
   const [editingReplyText, setEditingReplyText] = useState("");
+  const [openResponses, setOpenResponses] = useState({});
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState([]);
 
@@ -1156,6 +1159,13 @@ function CommentThread({ newsId }) {
     setEditingReplyText("");
   }
 
+  function toggleResponses(commentId) {
+    setOpenResponses((prev) => ({
+      ...prev,
+      [commentId]: !prev[commentId],
+    }));
+  }
+
   async function saveReplyEdit(commentId, replyId) {
     if (!editingReplyText.trim()) return;
     setStatus("Saving reply...");
@@ -1257,7 +1267,7 @@ function CommentThread({ newsId }) {
               ? html``
               : comments.map(
                   (comment) => html`<div key=${comment.id} className="comment-item">
-                    <div className="comment-left">
+                    <div className="comment-left comment-left-main">
                       <img
                         className="comment-avatar"
                         src=${comment.authorImage || "/assets/HardTale_H_GreyScale.png"}
@@ -1284,7 +1294,8 @@ function CommentThread({ newsId }) {
                                 onClick=${() => openHistory(comment.id)}
                                 title="View edits"
                               >
-                                ? ${comment.editCount}
+                                <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
+                                <span>${comment.editCount}</span>
                               </button>`
                             : html``}
                           ${comment.editCount > 0
@@ -1327,6 +1338,7 @@ function CommentThread({ newsId }) {
                       ${comment.userId === userId && editingId !== comment.id
                         ? html`<div className="comment-controls right">
                             <button className="ghost-btn" type="button" onClick=${() => startEdit(comment)}>
+                              <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
                               Edit
                             </button>
                             <button className="ghost-btn" type="button" onClick=${() => deleteComment(comment.id)}>
@@ -1334,128 +1346,148 @@ function CommentThread({ newsId }) {
                             </button>
                           </div>`
                         : html``}
-                      ${isSignedIn
-                        ? html`<div className="comment-replies">
-                            ${(Array.isArray(comment.replies) ? comment.replies : []).map(
-                              (reply) => html`<div key=${reply.id} className="comment-reply">
-                                <div className="comment-left">
-                                  <img
-                                    className="comment-avatar small"
-                                    src=${reply.authorImage || "/assets/HardTale_H_GreyScale.png"}
-                                    alt=${reply.authorName}
-                                  />
-                                  <div className="comment-identity">
-                                    <div className="comment-author">${reply.authorName}</div>
-                                    ${(() => {
-                                      const rank = resolveRank(reply);
-                                      return html`<div className=${`comment-rank ${rank.staff ? "staff" : ""}`}>
-                                        ${rank.label}
-                                      </div>`;
-                                    })()}
-                                  </div>
-                                </div>
-                                <div className="comment-right">
-                                  <div className="comment-meta">
-                                    <div className="comment-meta-right">
-                                      <span className="comment-time">${formatTimestamp(reply.createdAt)}</span>
-                                      ${reply.editCount > 0
-                                        ? html`<span className="comment-edited">
-                                            Edited ${formatTimestamp(reply.updatedAt)}
-                                          </span>`
+                    </div>
+                    <div className="comment-responses-section">
+                      ${(() => {
+                        const replies = Array.isArray(comment.replies) ? comment.replies : [];
+                        const responsesOpen = Boolean(openResponses[comment.id]);
+                        return html`
+                          <button
+                            className="comment-responses-toggle"
+                            type="button"
+                            onClick=${() => toggleResponses(comment.id)}
+                          >
+                            Responses (${replies.length})
+                            <span className="comment-toggle-arrow">${responsesOpen ? "v" : ">"}</span>
+                          </button>
+                          <div className="comment-responses-divider"></div>
+                          ${responsesOpen
+                            ? html`<div className="comment-replies">
+                                ${replies.map(
+                                  (reply) => html`<div key=${reply.id} className="comment-reply">
+                                    <div className="comment-left comment-left-reply">
+                                      <img
+                                        className="comment-avatar small"
+                                        src=${reply.authorImage || "/assets/HardTale_H_GreyScale.png"}
+                                        alt=${reply.authorName}
+                                      />
+                                      <div className="comment-identity">
+                                        <div className="comment-author">${reply.authorName}</div>
+                                        ${(() => {
+                                          const rank = resolveRank(reply);
+                                          return html`<div className=${`comment-rank ${rank.staff ? "staff" : ""}`}>
+                                            ${rank.label}
+                                          </div>`;
+                                        })()}
+                                      </div>
+                                    </div>
+                                    <div className="comment-right">
+                                      <div className="comment-meta">
+                                        <div className="comment-meta-right">
+                                          <span className="comment-time">${formatTimestamp(reply.createdAt)}</span>
+                                          ${reply.editCount > 0
+                                            ? html`<span className="comment-edited">
+                                                Edited ${formatTimestamp(reply.updatedAt)}
+                                              </span>`
+                                            : html``}
+                                        </div>
+                                      </div>
+                                      ${editingReplyKey === `${comment.id}:${reply.id}`
+                                        ? html`<div className="comment-editor">
+                                            <textarea
+                                              rows="2"
+                                              value=${editingReplyText}
+                                              onInput=${(event) => setEditingReplyText(event.target.value)}
+                                            ></textarea>
+                                            <div className="comment-actions right">
+                                              <button
+                                                className="button primary"
+                                                type="button"
+                                                onClick=${() => saveReplyEdit(comment.id, reply.id)}
+                                              >
+                                                Save
+                                              </button>
+                                              <button
+                                                className="button ghost-btn"
+                                                type="button"
+                                                onClick=${cancelReplyEdit}
+                                              >
+                                                Cancel
+                                              </button>
+                                            </div>
+                                          </div>`
+                                        : html`<p className=${`comment-text ${resolveRank(reply).staff ? "staff" : ""}`}>
+                                            ${reply.body}
+                                          </p>`}
+                                      ${reply.userId === userId && editingReplyKey !== `${comment.id}:${reply.id}`
+                                        ? html`<div className="comment-controls right">
+                                            <button
+                                              className="ghost-btn"
+                                              type="button"
+                                              onClick=${() => startReplyEdit(comment.id, reply)}
+                                            >
+                                              <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
+                                              Edit
+                                            </button>
+                                            <button
+                                              className="ghost-btn"
+                                              type="button"
+                                              onClick=${() => deleteReply(comment.id, reply.id)}
+                                            >
+                                              Delete
+                                            </button>
+                                          </div>`
                                         : html``}
                                     </div>
-                                  </div>
-                                  ${editingReplyKey === `${comment.id}:${reply.id}`
-                                    ? html`<div className="comment-editor">
-                                        <textarea
-                                          rows="2"
-                                          value=${editingReplyText}
-                                          onInput=${(event) => setEditingReplyText(event.target.value)}
-                                        ></textarea>
-                                        <div className="comment-actions right">
-                                          <button
-                                            className="button primary"
-                                            type="button"
-                                            onClick=${() => saveReplyEdit(comment.id, reply.id)}
-                                          >
-                                            Save
-                                          </button>
-                                          <button
-                                            className="button ghost-btn"
-                                            type="button"
-                                            onClick=${cancelReplyEdit}
-                                          >
-                                            Cancel
-                                          </button>
-                                        </div>
-                                      </div>`
-                                    : html`<p className=${`comment-text ${resolveRank(reply).staff ? "staff" : ""}`}>
-                                        ${reply.body}
-                                      </p>`}
-                                  ${reply.userId === userId && editingReplyKey !== `${comment.id}:${reply.id}`
-                                    ? html`<div className="comment-controls right">
+                                  </div>`,
+                                )}
+                                ${isSignedIn
+                                  ? html`<div className="comment-reply-form">
+                                      <textarea
+                                        rows="2"
+                                        placeholder="Reply..."
+                                        onInput=${(event) => {
+                                          const value = event.target.value;
+                                          event.target.dataset.value = value;
+                                        }}
+                                      ></textarea>
+                                      <div className="comment-actions right">
                                         <button
-                                          className="ghost-btn"
+                                          className="button primary comment-reply-submit"
                                           type="button"
-                                          onClick=${() => startReplyEdit(comment.id, reply)}
+                                          onClick=${(event) => {
+                                            const textarea = event.currentTarget
+                                              .closest(".comment-reply-form")
+                                              .querySelector("textarea");
+                                            const text = textarea?.value || "";
+                                            if (!text.trim()) return;
+                                            apiFetchWithToken(getToken, true, `/api/comments/${comment.id}/replies`, {
+                                              method: "POST",
+                                              headers: { "Content-Type": "application/json" },
+                                              body: JSON.stringify({ text }),
+                                            }).then(async (response) => {
+                                              if (!response.ok) return;
+                                              const data = await response.json();
+                                              if (data?.comment) {
+                                                setComments((prev) =>
+                                                  prev.map((entry) =>
+                                                    entry.id === data.comment.id ? data.comment : entry,
+                                                  ),
+                                                );
+                                                if (textarea) textarea.value = "";
+                                              }
+                                            });
+                                          }}
                                         >
-                                          Edit
+                                          Reply
                                         </button>
-                                        <button
-                                          className="ghost-btn"
-                                          type="button"
-                                          onClick=${() => deleteReply(comment.id, reply.id)}
-                                        >
-                                          Delete
-                                        </button>
-                                      </div>`
-                                    : html``}
-                                </div>
-                              </div>`,
-                            )}
-                            <div className="comment-reply-form">
-                              <textarea
-                                rows="2"
-                                placeholder="Reply..."
-                                onInput=${(event) => {
-                                  const value = event.target.value;
-                                  event.target.dataset.value = value;
-                                }}
-                              ></textarea>
-                              <div className="comment-actions right">
-                                <button
-                                  className="button primary comment-reply-submit"
-                                  type="button"
-                                  onClick=${(event) => {
-                                    const textarea = event.currentTarget
-                                      .closest(".comment-reply-form")
-                                      .querySelector("textarea");
-                                    const text = textarea?.value || "";
-                                    if (!text.trim()) return;
-                                    apiFetchWithToken(getToken, true, `/api/comments/${comment.id}/replies`, {
-                                      method: "POST",
-                                      headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({ text }),
-                                    }).then(async (response) => {
-                                      if (!response.ok) return;
-                                      const data = await response.json();
-                                      if (data?.comment) {
-                                        setComments((prev) =>
-                                          prev.map((entry) =>
-                                            entry.id === data.comment.id ? data.comment : entry,
-                                          ),
-                                        );
-                                        if (textarea) textarea.value = "";
-                                      }
-                                    });
-                                  }}
-                                >
-                                  Reply
-                                </button>
-                              </div>
-                            </div>
-                          </div>`
-                        : html``}
+                                      </div>
+                                    </div>`
+                                  : html``}
+                              </div>`
+                            : html``}
+                        `;
+                      })()}
                     </div>
                   </div>`,
                 )}
@@ -1465,6 +1497,7 @@ function CommentThread({ newsId }) {
         show=${historyOpen}
         onClose=${() => setHistoryOpen(false)}
         title="Edit History"
+        className="comment-history-overlay"
       >
         ${historyItems.length === 0
           ? html`<p className="muted">No revisions yet.</p>`
@@ -2258,7 +2291,7 @@ function NotificationsButton({ count, onClick, flashEnabled }) {
 
 function PopUp({ show, onClose, title, children, className = "" }) {
   if (!show) return null;
-  return html`
+  return createPortal(html`
     <div className=${`popup-overlay ${className}`} onClick=${onClose}>
       <div className="popup" onClick=${(event) => event.stopPropagation()}>
         <div className="popup-header">
@@ -2270,7 +2303,7 @@ function PopUp({ show, onClose, title, children, className = "" }) {
         ${children}
       </div>
     </div>
-  `;
+  `, document.body);
 }
 
 function LoadingScreen({ show, variant }) {

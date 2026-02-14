@@ -1586,6 +1586,8 @@ emoji-picker.reaction-picker-panel {
 
 .comment-item {
   display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 16px;
   padding: 12px;
   border-radius: 12px;
@@ -1611,17 +1613,17 @@ emoji-picker.reaction-picker-panel {
 }
 
 .comment-left {
-  display: grid;
-  gap: 6px;
-  width: 140px;
-  justify-items: center;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
 }
 
 .comment-right {
   flex: 1;
   display: grid;
   gap: 6px;
+  min-width: 0;
 }
 
 .comment-meta {
@@ -1643,7 +1645,7 @@ emoji-picker.reaction-picker-panel {
 .comment-identity {
   display: grid;
   gap: 2px;
-  justify-items: center;
+  justify-items: start;
 }
 
 .comment-meta-right {
@@ -1696,14 +1698,49 @@ emoji-picker.reaction-picker-panel {
   margin-top: 10px;
   display: grid;
   gap: 10px;
-  padding-left: 16px;
-  border-left: 1px solid var(--stroke);
+  width: 100%;
 }
 
 .comment-reply {
   display: flex;
   gap: 12px;
   align-items: flex-start;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke);
+  background: var(--bg-soft);
+}
+
+.comment-left.comment-left-main {
+  min-width: 0;
+}
+
+.comment-left.comment-left-reply {
+  min-width: 160px;
+}
+
+.comment-responses-section {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.comment-responses-toggle {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+}
+
+.comment-responses-divider {
+  margin-top: 8px;
+  border-top: 1px solid var(--stroke);
 }
 
 .comment-reply-form textarea {
@@ -1728,6 +1765,22 @@ emoji-picker.reaction-picker-panel {
   font-size: 11px;
   color: var(--muted);
   cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.comment-action-icon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  display: inline-block;
+}
+
+.comment-controls .ghost-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .comment-history {
@@ -1978,6 +2031,11 @@ emoji-picker.reaction-picker-panel {
   max-height: 80vh;
 }
 
+.comment-history-overlay .popup {
+  max-height: 78vh;
+  overflow-y: auto;
+}
+
 .image-preview-modal {
   width: 100%;
   height: calc(80vh - 76px);
@@ -2004,6 +2062,16 @@ emoji-picker.reaction-picker-panel {
   .image-preview-modal {
     height: calc(82vh - 76px);
     min-height: 240px;
+  }
+
+  .comment-history-overlay {
+    place-items: start center;
+    padding-top: 10vh;
+  }
+
+  .comment-history-overlay .popup {
+    width: 92vw;
+    max-height: 84vh;
   }
 }
 
@@ -3592,14 +3660,11 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   }
 
   .comment-left {
-    width: 104px;
-    min-width: 104px;
-    gap: 4px;
+    gap: 8px;
   }
 
-  .comment-reply .comment-left {
-    width: 88px;
-    min-width: 88px;
+  .comment-left.comment-left-reply {
+    min-width: 120px;
   }
 
   .comment-right {
