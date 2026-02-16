@@ -163,6 +163,7 @@ const CHANGELOG_ENTRIES = [
       "Swapped rank icon mapping globally so Hero uses shield and Mythic uses star.",
       "Updated rank color tokens into centralized CSS variables and retuned Hero/Legend visuals with matching hover glow behavior.",
       "Updated Store tier locking so lower rank buttons disable when a higher tier is already in the cart.",
+      "Started moving permissions and staff-role handling to server-authoritative APIs, with planned live game-server permission sync.",
     ],
   },
   {
@@ -852,9 +853,45 @@ function isStaffLabel(label = "") {
   const text = String(label || "").trim().toLowerCase();
   if (!text) return false;
   if (text === "staff") return true;
+  if (text === "developer" || text === "dev") return true;
+  if (text === "admin" || text === "administrator") return true;
+  if (text === "moderator" || text === "mod") return true;
+  if (text === "helper") return true;
   if (STAFF_EMAILS.has(text)) return true;
   const key = text.replace(/[\s_-]+/g, "");
   return STAFF_USERNAME_KEYS.has(key);
+}
+
+function toStaffPillTitle(value = "") {
+  const key = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+  if (!key) return "";
+  if (key === "moderator" || key === "mod") return "Moderator [Mod]";
+  if (key === "developer" || key === "dev") return "Developer [Dev]";
+  if (key === "admin" || key === "administrator") return "Admin [Admin]";
+  if (key === "helper") return "Helper [Helper]";
+  if (key === "staff") return "Staff";
+  return "";
+}
+
+function resolveStaffPillTitle(entry) {
+  if (!entry) return "";
+  const candidates = [
+    entry?.authorRole,
+    entry?.authorStaffTitle,
+    entry?.role,
+    entry?.staffTitle,
+    entry?.authorRank,
+    entry?.rankLabel,
+  ];
+  for (const candidate of candidates) {
+    const title = toStaffPillTitle(candidate);
+    if (title) return title;
+  }
+  if (entry?.authorIsStaff) return "Staff";
+  return "";
 }
 
 function renderNewsRichText(text) {
@@ -1363,17 +1400,7 @@ function CommentThread({
 
   function showStaffNameBadge(entry) {
     if (!entry) return false;
-    const email = String(entry.authorEmail || "").toLowerCase();
-    const username = String(entry.authorUsername || "").toLowerCase();
-    const authorName = String(entry.authorName || "").toLowerCase();
-    return (
-      entry?.authorShowStaffBadge !== false &&
-      (Boolean(entry?.authorIsStaff) ||
-        STAFF_EMAILS.has(email) ||
-        isStaffLabel(username) ||
-        isStaffLabel(authorName) ||
-        isStaffLabel(entry?.authorRank || ""))
-    );
+    return entry?.authorShowStaffBadge !== false && Boolean(resolveStaffPillTitle(entry));
   }
 
   function rankClassSlug(value) {
@@ -2182,6 +2209,7 @@ function CommentThread({
                         rank=${resolveRank(comment)}
                         authorSizeClass=${authorSizeClass}
                         showStaffPill=${showStaffNameBadge(comment)}
+                        staffPillText=${resolveStaffPillTitle(comment)}
                       />
                       <${CommentMeta}
                         entry=${comment}
@@ -2197,6 +2225,7 @@ function CommentThread({
                             rank=${resolveRank(comment)}
                             authorSizeClass=${authorSizeClass}
                             showStaffPill=${showStaffNameBadge(comment)}
+                            staffPillText=${resolveStaffPillTitle(comment)}
                           />
                         </div>
                       </div>
@@ -2324,6 +2353,7 @@ function CommentThread({
                                         rank=${resolveRank(reply)}
                                         authorSizeClass=${authorSizeClass}
                                         showStaffPill=${showStaffNameBadge(reply)}
+                                        staffPillText=${resolveStaffPillTitle(reply)}
                                       />
                                       <${CommentMeta}
                                         entry=${reply}
@@ -2339,6 +2369,7 @@ function CommentThread({
                                             rank=${resolveRank(reply)}
                                             authorSizeClass=${authorSizeClass}
                                             showStaffPill=${showStaffNameBadge(reply)}
+                                            staffPillText=${resolveStaffPillTitle(reply)}
                                           />
                                         </div>
                                       </div>
@@ -3760,10 +3791,22 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
         )}
       </div>
       <p className="muted store-support-note">
-        Support the server and become a local <span className="store-support-rank rank-hero">Hero</span>,{" "}
-        <span className="store-support-rank rank-legend">Legend</span>, or{" "}
-        <span className="store-support-rank rank-mythic">Mythic</span> by giving global boosts to the entire
-        server.
+        Support the server and become a local
+        <span className="profile-owned-badge store-owned-badge rank-hero">
+          <span className="rank-icon">${renderRankIcon("shield")}</span>
+          <span>Hero</span>
+        </span>
+        ,
+        <span className="profile-owned-badge store-owned-badge rank-legend">
+          <span className="rank-icon">${renderRankIcon("crown")}</span>
+          <span>Legend</span>
+        </span>
+        , or
+        <span className="profile-owned-badge store-owned-badge rank-mythic">
+          <span className="rank-icon">${renderRankIcon("star")}</span>
+          <span>Mythic</span>
+        </span>
+        by giving global boosts to the entire server.
       </p>
     </section>
     <section className="card fade-in rank-philosophy">
@@ -4258,24 +4301,18 @@ function ForumPage({ isAdmin = false }) {
 
   function forumShowStaffPill(entry) {
     if (!entry) return false;
-    return (
-      entry?.authorShowStaffBadge !== false &&
-      (Boolean(entry?.authorIsStaff) ||
-        isStaffLabel(entry?.authorName || "") ||
-        isStaffLabel(entry?.authorUsername || "") ||
-        isStaffLabel(entry?.authorRank || ""))
-    );
+    return entry?.authorShowStaffBadge !== false && Boolean(resolveStaffPillTitle(entry));
   }
 
   function renderForumStaffPill(entry) {
     if (!forumShowStaffPill(entry)) return html``;
-    const showStaffBadgeIcon = entry?.authorShowStaffBadgeIcon !== false;
-    const staffPillClass = `forum-staff-pill ${showStaffBadgeIcon ? "with-icon" : "text-only"} ${
+    const useGradientPillText = entry?.authorShowStaffBadgeIcon !== false;
+    const staffPillClass = `forum-staff-pill ${useGradientPillText ? "gradient-text" : "text-only"} ${
       entry?.authorShowStaffGradient === false ? "staff-static" : ""
     }`.trim();
+    const staffPillText = resolveStaffPillTitle(entry) || "Staff";
     return html`<span className=${staffPillClass}>
-      ${showStaffBadgeIcon ? html`<img className="comment-staff-pill-icon" src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" />` : html``}
-      <span className="staff-pill-label">STAFF</span>
+      <span className=${useGradientPillText ? "staff-pill-label" : "staff-pill-text"}>${staffPillText}</span>
     </span>`;
   }
 

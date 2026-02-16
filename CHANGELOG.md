@@ -20,6 +20,7 @@ All notable changes to this project are documented here.
 - Swapped rank icon mapping globally so Hero uses `shield` and Mythic uses `star`.
 - Updated rank palette tokens to a centralized CSS source of truth and retuned Hero/Legend colors with matching hover glows.
 - Updated Store tier button locking so lower tiers are disabled/greyed out when a higher tier is already in cart.
+- Started migrating permissions and staff-role handling to server-authoritative APIs (foundation for live game-server synced permission updates).
 
 ## 2026-02-16 (v1.3.29)
 - Added forum post `PATCH`/`DELETE` APIs with owner-or-staff authorization checks.

@@ -61,6 +61,13 @@ const COMMUNITY_FILE = "community.json";
 const POLLS_FILE = "polls.json";
 const PERMISSIONS_FILE = "permissions.json";
 const RANK_PRIORITY = ["Mythic", "Legend", "Hero", "Registered", "Unregistered"];
+const STAFF_ROLE_ORDER = ["Developer", "Admin", "Moderator", "Helper"];
+const STAFF_ROLE_SET = new Set(STAFF_ROLE_ORDER);
+const TOP_STAFF_ROLE_SET = new Set(["Developer", "Admin"]);
+const DEFAULT_STAFF_ROLE_BY_USERNAME = new Map([
+  ["smurfis", "Developer"],
+  ["hardtale", "Admin"],
+]);
 const STORE_RANK_PRODUCTS = {
   "rank-hero": { id: "rank-hero", name: "Hero Rank", price: 6.99, rank: "Hero", tier: 1 },
   "rank-legend": { id: "rank-legend", name: "Legend Rank", price: 14.0, rank: "Legend", tier: 2 },
@@ -264,6 +271,7 @@ function normalizeComment(doc) {
     authorUsername: formatUsernameForDisplay(rest.authorUsername, 80),
     authorOwnedRank: normalizeOwnedRank(rest.authorOwnedRank) || "Unregistered",
     authorIsStaff: Boolean(rest.authorIsStaff),
+    authorStaffRole: normalizeStaffRole(rest.authorStaffRole),
     authorShowStaffBadge: rest.authorShowStaffBadge !== false,
     authorShowStaffBadgeIcon: rest.authorShowStaffBadgeIcon !== false,
     authorShowStaffGradient: rest.authorShowStaffGradient !== false,
@@ -286,6 +294,7 @@ function normalizeComment(doc) {
         authorUsername: replyUsername,
         authorOwnedRank: normalizeOwnedRank(reply.authorOwnedRank) || "Unregistered",
         authorIsStaff: Boolean(reply.authorIsStaff),
+        authorStaffRole: normalizeStaffRole(reply.authorStaffRole),
         authorShowStaffBadge: reply.authorShowStaffBadge !== false,
         authorShowStaffBadgeIcon: reply.authorShowStaffBadgeIcon !== false,
         authorShowStaffGradient: reply.authorShowStaffGradient !== false,
@@ -652,6 +661,43 @@ function getUserDisplayName(user) {
   );
 }
 
+function usernameKey(value) {
+  return normalizeText(value, 80)
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+}
+
+function normalizeStaffRole(value) {
+  const raw = normalizeText(value, 40).toLowerCase();
+  if (!raw) return "";
+  if (raw === "dev" || raw === "developer") return "Developer";
+  if (raw === "admin" || raw === "administrator") return "Admin";
+  if (raw === "mod" || raw === "moderator") return "Moderator";
+  if (raw === "helper") return "Helper";
+  return "";
+}
+
+function resolveStaffRoleForUser(user) {
+  const metadataRole = normalizeStaffRole(user?.publicMetadata?.staffRole);
+  if (metadataRole) return metadataRole;
+  const mapped = DEFAULT_STAFF_ROLE_BY_USERNAME.get(usernameKey(user?.username));
+  if (mapped) return mapped;
+  if (ADMIN_USER_ID_SET.has(String(user?.id || ""))) return "Admin";
+  const username = String(user?.username || "").trim().toLowerCase();
+  if (username && ADMIN_USERNAME_SET.has(username)) return "Admin";
+  if (
+    ADMIN_EMAIL_SET.size > 0 &&
+    user?.emailAddresses?.some((entry) => ADMIN_EMAIL_SET.has(entry.emailAddress?.toLowerCase()))
+  ) {
+    return "Admin";
+  }
+  return "";
+}
+
+function isStaffUser(user) {
+  return Boolean(resolveStaffRoleForUser(user));
+}
+
 function resolveStaffBadgeVisible(metadata = {}) {
   return metadata?.showStaffBadge !== false;
 }
@@ -678,11 +724,12 @@ async function getFreshAuthorSnapshot(userId, cache = new Map()) {
   if (cache.has(key)) return cache.get(key);
   try {
     const user = await clerkClient.users.getUser(key);
+    const staffRole = resolveStaffRoleForUser(user);
     const rankInfo = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
-      isAdminUser(user),
+      Boolean(staffRole),
     );
-    const isStaffUser = isAdminUser(user);
+    const staffUser = Boolean(staffRole);
     const snapshot = {
       authorName: getUserDisplayName(user),
       authorUsername: formatUsernameForDisplay(user?.username, 80),
@@ -690,7 +737,8 @@ async function getFreshAuthorSnapshot(userId, cache = new Map()) {
       authorImage: user?.imageUrl || "",
       authorRank: rankInfo.displayRank,
       authorOwnedRank: rankInfo.ownedRank,
-      authorIsStaff: isStaffUser,
+      authorIsStaff: staffUser,
+      authorStaffRole: staffRole,
       authorShowStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
       authorShowStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
       authorShowStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
@@ -716,6 +764,7 @@ function hasAuthorSnapshotChanged(entry, snapshot) {
     String(entry.authorOwnedRank || "Unregistered") !==
       String(snapshot.authorOwnedRank || "Unregistered") ||
     Boolean(entry.authorIsStaff) !== Boolean(snapshot.authorIsStaff) ||
+    normalizeStaffRole(entry.authorStaffRole) !== normalizeStaffRole(snapshot.authorStaffRole) ||
     Boolean(entry.authorShowStaffBadge) !== Boolean(snapshot.authorShowStaffBadge) ||
     Boolean(entry.authorShowStaffBadgeIcon) !== Boolean(snapshot.authorShowStaffBadgeIcon) ||
     Boolean(entry.authorShowStaffGradient) !== Boolean(snapshot.authorShowStaffGradient) ||
@@ -772,6 +821,7 @@ async function refreshCommentAuthorFields(comments = []) {
         setPayload.authorImage = nextComment.authorImage;
         setPayload.authorRank = nextComment.authorRank;
         setPayload.authorOwnedRank = nextComment.authorOwnedRank;
+        setPayload.authorStaffRole = nextComment.authorStaffRole;
         setPayload.authorShowStaffBadge = nextComment.authorShowStaffBadge;
         setPayload.authorShowStaffBadgeIcon = nextComment.authorShowStaffBadgeIcon;
         setPayload.authorShowStaffGradient = nextComment.authorShowStaffGradient;
@@ -1191,6 +1241,7 @@ function normalizeForumPost(doc) {
     authorRank: normalizeText(stripped.authorRank, 20) || "Unregistered",
     authorOwnedRank: normalizeOwnedRank(stripped.authorOwnedRank) || "Unregistered",
     authorIsStaff: Boolean(stripped.authorIsStaff),
+    authorStaffRole: normalizeStaffRole(stripped.authorStaffRole),
     authorUserId: normalizeText(stripped.authorUserId, 128),
     authorUsername,
     authorImage: String(stripped.authorImage || ""),
@@ -1230,6 +1281,7 @@ async function refreshForumPostAuthorFields(posts = []) {
           String(item.authorOwnedRank || "Unregistered") !==
             String(snapshot.authorOwnedRank || "Unregistered") ||
           Boolean(item.authorIsStaff) !== Boolean(snapshot.authorIsStaff) ||
+          normalizeStaffRole(item.authorStaffRole) !== normalizeStaffRole(snapshot.authorStaffRole) ||
           Boolean(item.authorShowStaffBadge) !== Boolean(snapshot.authorShowStaffBadge) ||
           Boolean(item.authorShowStaffBadgeIcon) !== Boolean(snapshot.authorShowStaffBadgeIcon) ||
           Boolean(item.authorShowStaffGradient) !== Boolean(snapshot.authorShowStaffGradient);
@@ -1242,6 +1294,7 @@ async function refreshForumPostAuthorFields(posts = []) {
             authorRank: snapshot.authorRank || "Unregistered",
             authorOwnedRank: snapshot.authorOwnedRank || "Unregistered",
             authorIsStaff: snapshot.authorIsStaff,
+            authorStaffRole: snapshot.authorStaffRole || "",
             authorShowStaffBadge: snapshot.authorShowStaffBadge,
             authorShowStaffBadgeIcon: snapshot.authorShowStaffBadgeIcon,
             authorShowStaffGradient: snapshot.authorShowStaffGradient,
@@ -1258,6 +1311,7 @@ async function refreshForumPostAuthorFields(posts = []) {
                     authorRank: nextItem.authorRank,
                     authorOwnedRank: nextItem.authorOwnedRank,
                     authorIsStaff: nextItem.authorIsStaff,
+                    authorStaffRole: nextItem.authorStaffRole || "",
                     authorShowStaffBadge: nextItem.authorShowStaffBadge,
                     authorShowStaffBadgeIcon: nextItem.authorShowStaffBadgeIcon,
                     authorShowStaffGradient: nextItem.authorShowStaffGradient,
@@ -1289,13 +1343,13 @@ async function getAdminUser() {
 
 function isAdminUser(user) {
   if (!user) return false;
-  if (ADMIN_USER_ID_SET.has(String(user.id || ""))) {
+  const staffRole = resolveStaffRoleForUser(user);
+  if (staffRole && TOP_STAFF_ROLE_SET.has(staffRole)) {
     return true;
   }
+  if (ADMIN_USER_ID_SET.has(String(user.id || ""))) return true;
   const username = String(user.username || "").trim().toLowerCase();
-  if (username && ADMIN_USERNAME_SET.has(username)) {
-    return true;
-  }
+  if (username && ADMIN_USERNAME_SET.has(username)) return true;
   if (ADMIN_EMAIL_SET.size === 0) return false;
   return user.emailAddresses?.some(
     (entry) => ADMIN_EMAIL_SET.has(entry.emailAddress?.toLowerCase()),
@@ -1306,13 +1360,161 @@ app.get("/api/me", async (req, res) => {
   try {
     const auth = getAuth(req);
     if (!auth?.userId) {
-      return res.json({ isAdmin: false });
+      return res.json({ isAdmin: false, isStaff: false, staffRole: "" });
     }
     const user = await clerkClient.users.getUser(auth.userId);
-    return res.json({ isAdmin: isAdminUser(user) });
+    const staffRole = resolveStaffRoleForUser(user);
+    return res.json({
+      isAdmin: isAdminUser(user),
+      isStaff: Boolean(staffRole),
+      staffRole,
+    });
   } catch (error) {
     console.error("Failed to load user role", error);
     return res.status(500).json({ error: "Failed to load user role" });
+  }
+});
+
+app.get("/api/admin/users", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const actingUser = await clerkClient.users.getUser(auth.userId);
+    if (!isAdminUser(actingUser)) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    const query = normalizeText(req.query?.query, 80);
+    const limitRaw = Number(req.query?.limit);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 50) : 20;
+    const listParams = { limit };
+    if (query) listParams.query = query;
+    const result = await clerkClient.users.getUserList(listParams);
+    const users = Array.isArray(result?.data) ? result.data : [];
+    const userIds = users.map((entry) => String(entry?.id || "")).filter(Boolean);
+    const linkedRows = userIds.length
+      ? await linkedAccountsCollection
+          .find({ webUserId: { $in: userIds } }, { projection: { webUserId: 1 } })
+          .toArray()
+      : [];
+    const linkedSet = new Set(linkedRows.map((row) => String(row.webUserId || "")));
+    const entries = users.map((entry) => {
+      const ownedRank = normalizeOwnedRank(entry?.publicMetadata?.rank) || "Unregistered";
+      const staffRole = resolveStaffRoleForUser(entry);
+      return {
+        userId: String(entry?.id || ""),
+        username: formatUsernameForDisplay(entry?.username, 80),
+        name: getUserDisplayName(entry),
+        email: normalizeText(getUserEmail(entry), 120),
+        image: String(entry?.imageUrl || ""),
+        ownedRank,
+        linked: linkedSet.has(String(entry?.id || "")),
+        staffRole,
+        isStaff: Boolean(staffRole),
+        isAdmin: isAdminUser(entry),
+      };
+    });
+    return res.json({ users: entries });
+  } catch (error) {
+    console.error("Failed to list admin users", error);
+    return res.status(500).json({ error: "Failed to list users" });
+  }
+});
+
+app.post("/api/admin/users/:userId/role", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const actingUser = await clerkClient.users.getUser(auth.userId);
+    if (!isAdminUser(actingUser)) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    const targetUserId = normalizeText(req.params.userId, 128);
+    if (!targetUserId) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+    const requestedRole = normalizeStaffRole(req.body?.staffRole);
+    const targetUser = await clerkClient.users.getUser(targetUserId);
+    const nextPublicMetadata = { ...(targetUser?.publicMetadata || {}) };
+    if (requestedRole) {
+      nextPublicMetadata.staffRole = requestedRole;
+      if (typeof nextPublicMetadata.showStaffBadge === "undefined") nextPublicMetadata.showStaffBadge = true;
+      if (typeof nextPublicMetadata.showStaffBadgeIcon === "undefined") nextPublicMetadata.showStaffBadgeIcon = true;
+      if (typeof nextPublicMetadata.showStaffGradient === "undefined") nextPublicMetadata.showStaffGradient = true;
+    } else {
+      delete nextPublicMetadata.staffRole;
+    }
+    await clerkClient.users.updateUserMetadata(targetUserId, {
+      publicMetadata: nextPublicMetadata,
+    });
+
+    const refreshedUser = await clerkClient.users.getUser(targetUserId);
+    const staffRole = resolveStaffRoleForUser(refreshedUser);
+    const isStaff = Boolean(staffRole);
+    const rankInfo = resolveDisplayRankFromMetadata(refreshedUser?.publicMetadata || {}, isStaff);
+    const showStaffBadge = resolveStaffBadgeVisible(refreshedUser?.publicMetadata || {});
+    const showStaffBadgeIcon = resolveStaffBadgeIconVisible(refreshedUser?.publicMetadata || {});
+    const showStaffGradient = resolveStaffGradientVisible(refreshedUser?.publicMetadata || {});
+    const showRankEffects = resolveRankEffectsVisible(refreshedUser?.publicMetadata || {});
+    const showAvatarVfx = resolveAvatarVfxVisible(refreshedUser?.publicMetadata || {});
+
+    await commentsCollection.updateMany(
+      { userId: targetUserId, isDeleted: false },
+      {
+        $set: {
+          authorIsStaff: isStaff,
+          authorStaffRole: staffRole,
+          authorRank: rankInfo.displayRank,
+          authorOwnedRank: rankInfo.ownedRank,
+          authorShowStaffBadge: showStaffBadge,
+          authorShowStaffBadgeIcon: showStaffBadgeIcon,
+          authorShowStaffGradient: showStaffGradient,
+          authorShowRankEffects: showRankEffects,
+          authorShowAvatarVfx: showAvatarVfx,
+          updatedAt: new Date(),
+        },
+      },
+    );
+    await forumPostsCollection.updateMany(
+      { authorUserId: targetUserId, isDeleted: false },
+      {
+        $set: {
+          authorIsStaff: isStaff,
+          authorStaffRole: staffRole,
+          authorRank: rankInfo.displayRank,
+          authorOwnedRank: rankInfo.ownedRank,
+          authorShowStaffBadge: showStaffBadge,
+          authorShowStaffBadgeIcon: showStaffBadgeIcon,
+          authorShowStaffGradient: showStaffGradient,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    );
+
+    const linked = await linkedAccountsCollection.findOne(
+      { webUserId: targetUserId },
+      { projection: { _id: 1 } },
+    );
+    return res.json({
+      user: {
+        userId: targetUserId,
+        username: formatUsernameForDisplay(refreshedUser?.username, 80),
+        name: getUserDisplayName(refreshedUser),
+        email: normalizeText(getUserEmail(refreshedUser), 120),
+        image: String(refreshedUser?.imageUrl || ""),
+        ownedRank: rankInfo.ownedRank,
+        linked: Boolean(linked),
+        staffRole,
+        isStaff,
+        isAdmin: isAdminUser(refreshedUser),
+      },
+    });
+  } catch (error) {
+    console.error("Failed to update admin user role", error);
+    return res.status(500).json({ error: "Failed to update user role" });
   }
 });
 
@@ -1321,7 +1523,8 @@ app.get("/api/profile/title", async (req, res) => {
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const user = await clerkClient.users.getUser(auth.userId);
-    const isStaff = isAdminUser(user);
+    const staffRole = resolveStaffRoleForUser(user);
+    const isStaff = Boolean(staffRole);
     const { ownedRank, displayRank, availableTitles } = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
       isStaff,
@@ -1330,6 +1533,7 @@ app.get("/api/profile/title", async (req, res) => {
       ownedRank,
       selectedTitle: displayRank,
       availableTitles,
+      staffRole,
       canToggleStaffBadge: isStaff,
       showStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
       showStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
@@ -1352,7 +1556,7 @@ app.post("/api/profile/staff-badge", async (req, res) => {
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const user = await clerkClient.users.getUser(auth.userId);
-    if (!isAdminUser(user)) {
+    if (!isStaffUser(user)) {
       return res.status(403).json({ error: "Not authorized" });
     }
     const showStaffBadge = req.body?.showStaffBadge !== false;
@@ -1383,7 +1587,7 @@ app.post("/api/profile/staff-gradient", async (req, res) => {
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const user = await clerkClient.users.getUser(auth.userId);
-    if (!isAdminUser(user)) {
+    if (!isStaffUser(user)) {
       return res.status(403).json({ error: "Not authorized" });
     }
     const showStaffGradient = req.body?.showStaffGradient !== false;
@@ -1424,7 +1628,7 @@ app.post("/api/profile/staff-badge-icon", async (req, res) => {
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const user = await clerkClient.users.getUser(auth.userId);
-    if (!isAdminUser(user)) {
+    if (!isStaffUser(user)) {
       return res.status(403).json({ error: "Not authorized" });
     }
     const showStaffBadgeIcon = req.body?.showStaffBadgeIcon !== false;
@@ -1465,7 +1669,7 @@ app.post("/api/profile/rank-effects", async (req, res) => {
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const user = await clerkClient.users.getUser(auth.userId);
-    const isStaff = isAdminUser(user);
+    const isStaff = isStaffUser(user);
     const rankInfo = resolveDisplayRankFromMetadata(user?.publicMetadata || {}, isStaff);
     if (!isStaff && rankInfo.ownedRank === "Unregistered") {
       return res.status(400).json({ error: "Rank effects unavailable for Unregistered" });
@@ -1494,7 +1698,7 @@ app.post("/api/profile/avatar-vfx", async (req, res) => {
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const user = await clerkClient.users.getUser(auth.userId);
-    const isStaff = isAdminUser(user);
+    const isStaff = isStaffUser(user);
     const rankInfo = resolveDisplayRankFromMetadata(user?.publicMetadata || {}, isStaff);
     if (!isStaff && rankInfo.ownedRank === "Unregistered") {
       return res.status(400).json({ error: "Avatar VFX unavailable for Unregistered" });
@@ -1531,7 +1735,7 @@ app.post("/api/profile/title", async (req, res) => {
     const user = await clerkClient.users.getUser(auth.userId);
     const rankInfo = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
-      isAdminUser(user),
+      isStaffUser(user),
     );
     if (!rankInfo.availableTitles.includes(requestedTitle)) {
       return res.status(400).json({ error: "Title not unlocked" });
@@ -1924,15 +2128,16 @@ app.post("/api/comments", async (req, res) => {
 
     const user = await clerkClient.users.getUser(auth.userId);
     const email = getUserEmail(user);
+    const staffRole = resolveStaffRoleForUser(user);
     const showStaffBadge = resolveStaffBadgeVisible(user?.publicMetadata || {});
     const showStaffBadgeIcon = resolveStaffBadgeIconVisible(user?.publicMetadata || {});
     const showStaffGradient = resolveStaffGradientVisible(user?.publicMetadata || {});
-    const authorIsStaff = isAdminUser(user);
+    const authorIsStaff = Boolean(staffRole);
     const showRankEffects = resolveRankEffectsVisible(user?.publicMetadata || {});
     const showAvatarVfx = resolveAvatarVfxVisible(user?.publicMetadata || {});
     const rankInfo = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
-      isAdminUser(user),
+      authorIsStaff,
     );
     const rank = rankInfo.displayRank;
     const authorUsername = formatUsernameForDisplay(user?.username, 80);
@@ -1950,6 +2155,7 @@ app.post("/api/comments", async (req, res) => {
       authorShowStaffBadge: showStaffBadge,
       authorShowStaffBadgeIcon: showStaffBadgeIcon,
       authorShowStaffGradient: showStaffGradient,
+      authorStaffRole: staffRole,
       authorShowRankEffects: showRankEffects,
       authorShowAvatarVfx: showAvatarVfx,
       replies: [],
@@ -2068,6 +2274,8 @@ app.post("/api/comments/:id/replies", async (req, res) => {
 
     const user = await clerkClient.users.getUser(auth.userId);
     const email = getUserEmail(user);
+    const staffRole = resolveStaffRoleForUser(user);
+    const authorIsStaff = Boolean(staffRole);
     const showStaffBadge = resolveStaffBadgeVisible(user?.publicMetadata || {});
     const showStaffBadgeIcon = resolveStaffBadgeIconVisible(user?.publicMetadata || {});
     const showStaffGradient = resolveStaffGradientVisible(user?.publicMetadata || {});
@@ -2075,7 +2283,7 @@ app.post("/api/comments/:id/replies", async (req, res) => {
     const showAvatarVfx = resolveAvatarVfxVisible(user?.publicMetadata || {});
     const rankInfo = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
-      isAdminUser(user),
+      authorIsStaff,
     );
     const rank = rankInfo.displayRank;
     const authorUsername = formatUsernameForDisplay(user?.username, 80);
@@ -2092,6 +2300,8 @@ app.post("/api/comments/:id/replies", async (req, res) => {
       authorEmail: email,
       authorRank: rank,
       authorOwnedRank: rankInfo.ownedRank,
+      authorIsStaff,
+      authorStaffRole: staffRole,
       authorShowStaffBadge: showStaffBadge,
       authorShowStaffBadgeIcon: showStaffBadgeIcon,
       authorShowStaffGradient: showStaffGradient,
@@ -2141,6 +2351,8 @@ app.post("/api/comments/:id/replies", async (req, res) => {
         authorImage: user?.imageUrl || "",
         authorRank: rank,
         authorOwnedRank: rankInfo.ownedRank,
+        authorIsStaff,
+        authorStaffRole: staffRole,
         authorShowStaffBadge: showStaffBadge,
         authorShowStaffBadgeIcon: showStaffBadgeIcon,
         authorShowStaffGradient: showStaffGradient,
@@ -2840,6 +3052,43 @@ app.post("/api/link/redeem", async (req, res) => {
       { upsert: true },
     );
 
+    try {
+      const user = await clerkClient.users.getUser(auth.userId);
+      const currentRank = String(user?.publicMetadata?.rank || "Unregistered");
+      const nextRank = maxRankLabel(currentRank, "Registered");
+      const isStaff = isStaffUser(user);
+      const nextMetadata = {
+        ...user.publicMetadata,
+        rank: nextRank,
+      };
+      const nextDisplayRank = resolveDisplayRankFromMetadata(nextMetadata, isStaff).displayRank;
+      await clerkClient.users.updateUserMetadata(auth.userId, {
+        publicMetadata: nextMetadata,
+      });
+      await commentsCollection.updateMany(
+        { userId: auth.userId, isDeleted: false },
+        {
+          $set: {
+            authorRank: nextDisplayRank,
+            authorOwnedRank: nextRank,
+            updatedAt: new Date(),
+          },
+        },
+      );
+      await forumPostsCollection.updateMany(
+        { authorUserId: auth.userId, isDeleted: false },
+        {
+          $set: {
+            authorRank: nextDisplayRank,
+            authorOwnedRank: nextRank,
+            updatedAt: new Date().toISOString(),
+          },
+        },
+      );
+    } catch (metadataError) {
+      console.error("Failed to apply linked rank after /link redeem", metadataError);
+    }
+
     return res.json({
       success: true,
       linked: true,
@@ -2933,12 +3182,13 @@ app.post("/api/forum/posts", async (req, res) => {
     }
 
     const user = await clerkClient.users.getUser(auth.userId);
+    const staffRole = resolveStaffRoleForUser(user);
     const rankInfo = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
-      isAdminUser(user),
+      Boolean(staffRole),
     );
     const authorRank = rankInfo.displayRank;
-    const authorIsStaff = isAdminUser(user);
+    const authorIsStaff = Boolean(staffRole);
     const showStaffBadge = resolveStaffBadgeVisible(user?.publicMetadata || {});
     const showStaffBadgeIcon = resolveStaffBadgeIconVisible(user?.publicMetadata || {});
     const showStaffGradient = resolveStaffGradientVisible(user?.publicMetadata || {});
@@ -2953,6 +3203,7 @@ app.post("/api/forum/posts", async (req, res) => {
       authorRank,
       authorOwnedRank: rankInfo.ownedRank,
       authorIsStaff,
+      authorStaffRole: staffRole,
       authorUserId: auth.userId,
       authorUsername: formatUsernameForDisplay(user?.username, 80),
       authorImage: user?.imageUrl || "",
@@ -3057,6 +3308,7 @@ app.patch("/api/forum/posts/:id", async (req, res) => {
           user?.publicMetadata || {},
           isStaff,
         ).displayRank,
+        authorStaffRole: resolveStaffRoleForUser(user),
         authorShowStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
         authorShowStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
         authorShowStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
@@ -3136,6 +3388,7 @@ app.delete("/api/forum/posts/:id", async (req, res) => {
           user?.publicMetadata || {},
           isStaff,
         ).displayRank,
+        authorStaffRole: resolveStaffRoleForUser(user),
         authorShowStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
         authorShowStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
         authorShowStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),

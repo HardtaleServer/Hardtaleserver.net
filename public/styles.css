@@ -2149,7 +2149,6 @@ emoji-picker.reaction-picker-panel {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -2159,12 +2158,6 @@ emoji-picker.reaction-picker-panel {
   border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--stroke));
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   line-height: 1;
-}
-
-.comment-staff-pill-icon {
-  width: 16px;
-  height: 9px;
-  display: block;
 }
 
 .comment-staff-pill .staff-pill-label,
@@ -2182,6 +2175,11 @@ emoji-picker.reaction-picker-panel {
 .forum-staff-pill.staff-static .staff-pill-label {
   animation: none;
   background-position: 50% 0;
+}
+
+.comment-staff-pill .staff-pill-text,
+.forum-staff-pill .staff-pill-text {
+  color: var(--accent);
 }
 
 .comment-author.staff {
