@@ -1677,10 +1677,15 @@ body[data-theme="light"] .button.primary {
 }
 
 .news-read-more-btn {
+  display: block;
   margin-top: -2px;
+  margin-left: auto;
 }
 
 .news-manage-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin-top: 8px;
   border-color: rgba(255, 255, 255, 0.25);
   background: transparent;
@@ -1689,6 +1694,13 @@ body[data-theme="light"] .button.primary {
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+.news-manage-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.35));
 }
 
 .news-meta a {
@@ -2186,6 +2198,12 @@ emoji-picker.reaction-picker-panel {
 }
 
 .rank-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.rank-icon img {
   width: 100%;
   height: 100%;
   display: block;

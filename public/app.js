@@ -61,6 +61,8 @@ const UI_FLASH_KEY = "hardtale-ui-flash";
 const VERSION = "1.3.31";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
+const LINKED_STATUS_ICON_SVG = "/Images/SVGs/LINKED.svg";
+const UNLINKED_STATUS_ICON_SVG = "/Images/SVGs/UNLINKED.svg";
 const STORE_RANK_ICON_SVG = {
   star: "/Images/SVGs/RANK_HERO.svg",
   crown: "/Images/SVGs/RANK_LEGEND.svg",
@@ -478,6 +480,7 @@ const RANK_TIER_ORDER = {
 };
 const PROFILE_DISPLAY_TITLES = ["Staff", "Registered", "Hero", "Legend", "Mythic"];
 const OWNED_RANK_ORDER = ["Hero", "Legend", "Mythic"];
+const STORE_BADGE_ORDER = ["Registered", "Hero", "Legend", "Mythic"];
 const OWNED_RANK_TIER = {
   Unregistered: 0,
   Registered: 0,
@@ -3507,7 +3510,10 @@ function StorePage({ onAdd }) {
   function getStorePreviewBadges(item) {
     if (!item?.id) return [];
     const maxTier = RANK_TIER_ORDER[item.id] || 0;
-    return OWNED_RANK_ORDER.filter((label) => (OWNED_RANK_TIER[label] || 0) <= maxTier);
+    return STORE_BADGE_ORDER.filter((label) => {
+      if (label === "Registered") return true;
+      return (OWNED_RANK_TIER[label] || 0) <= maxTier;
+    });
   }
 
   return html`
@@ -3651,9 +3657,19 @@ function StorePage({ onAdd }) {
                   <span>${getStoreRankLabel(previewItem)}</span>`;
               })()}
             </div>
-            ${renderOwnedRankBadges({
-              ownedRank: getStoreRankLabel(previewItem),
-            })}
+            <div className="profile-card-badges-block">
+              <div className="profile-card-badges-title">Badges</div>
+              <div className="profile-card-badges-row">
+                ${getStorePreviewBadges(previewItem).map((label) => {
+                  const iconType = getRankIconType(label);
+                  const slug = String(label).trim().toLowerCase();
+                  return html`<span className=${`profile-owned-badge store-owned-badge rank-${slug}`.trim()}>
+                    ${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                    <span>${label}</span>
+                  </span>`;
+                })}
+              </div>
+            </div>
           </div>`
         : html``}
     <//>
@@ -5702,6 +5718,8 @@ function renderStoreIcon(type) {
 
 function getRankIconType(label) {
   const normalized = String(label || "").trim().toLowerCase();
+  if (normalized === "registered" || normalized === "linked") return "linked";
+  if (normalized === "unregistered" || normalized === "unlinked") return "unlinked";
   if (normalized === "hero") return "star";
   if (normalized === "legend") return "crown";
   if (normalized === "mythic") return "shield";
@@ -5725,6 +5743,10 @@ function renderRankIcon(type) {
       return html`<svg viewBox="0 0 24 24" aria-hidden="true">
         <path fill="currentColor" d="M12 2l2.5 6.2 6.7.6-5.1 4.3 1.6 6.5-5.7-3.6-5.7 3.6 1.6-6.5-5.1-4.3 6.7-.6L12 2z" />
       </svg>`;
+    case "linked":
+      return html`<img className="rank-icon-image" src=${LINKED_STATUS_ICON_SVG} alt="" aria-hidden="true" />`;
+    case "unlinked":
+      return html`<img className="rank-icon-image" src=${UNLINKED_STATUS_ICON_SVG} alt="" aria-hidden="true" />`;
     default:
       return html``;
   }
@@ -6109,7 +6131,13 @@ function NewsPage({
                 className="ghost-btn news-manage-btn"
                 onClick=${() => setShowManagePanel(true)}
               >
-                Manage
+                <img
+                  className="news-manage-icon"
+                  src="/Images/SVGs/Admin_Panel.svg"
+                  alt=""
+                  aria-hidden="true"
+                />
+                <span>Manage</span>
               </button>`
             : html``}
         </div>
@@ -6981,7 +7009,7 @@ function Layout() {
   function DesktopNavShell() {
     const navItems = [
       { id: "home", label: "Home", onClick: () => navigate("/") },
-      { id: "news", label: "News & Updates", onClick: () => navigate("/news") },
+      { id: "news", label: "News", onClick: () => navigate("/news") },
       { id: "store", label: "Store", onClick: () => navigate("/store") },
       { id: "vote", label: "Vote", onClick: () => navigate("/vote") },
       { id: "forum", label: "Forum", onClick: () => navigate("/forum") },
