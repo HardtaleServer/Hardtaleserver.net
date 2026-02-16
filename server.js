@@ -258,6 +258,7 @@ function normalizeComment(doc) {
     id: _id ? String(_id) : doc.id,
     authorUsername: formatUsernameForDisplay(rest.authorUsername, 80),
     authorShowStaffBadge: rest.authorShowStaffBadge !== false,
+    authorShowStaffBadgeIcon: rest.authorShowStaffBadgeIcon !== false,
     authorShowStaffGradient: rest.authorShowStaffGradient !== false,
     authorShowRankEffects: rest.authorShowRankEffects !== false,
     authorShowAvatarVfx: rest.authorShowAvatarVfx !== false,
@@ -277,6 +278,7 @@ function normalizeComment(doc) {
         ...reply,
         authorUsername: replyUsername,
         authorShowStaffBadge: reply.authorShowStaffBadge !== false,
+        authorShowStaffBadgeIcon: reply.authorShowStaffBadgeIcon !== false,
         authorShowStaffGradient: reply.authorShowStaffGradient !== false,
         authorShowRankEffects: reply.authorShowRankEffects !== false,
         authorShowAvatarVfx: reply.authorShowAvatarVfx !== false,
@@ -638,8 +640,11 @@ function getUserDisplayName(user) {
 }
 
 function resolveStaffBadgeVisible(metadata = {}) {
-  // Staff badge is controlled by the staff-gradient toggle.
-  return resolveStaffGradientVisible(metadata);
+  return metadata?.showStaffBadge !== false;
+}
+
+function resolveStaffBadgeIconVisible(metadata = {}) {
+  return metadata?.showStaffBadgeIcon !== false;
 }
 
 function resolveStaffGradientVisible(metadata = {}) {
@@ -671,6 +676,7 @@ async function getFreshAuthorSnapshot(userId, cache = new Map()) {
       authorImage: user?.imageUrl || "",
       authorRank: rankInfo.displayRank,
       authorShowStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
+      authorShowStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
       authorShowStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
       authorShowRankEffects: resolveRankEffectsVisible(user?.publicMetadata || {}),
       authorShowAvatarVfx: resolveAvatarVfxVisible(user?.publicMetadata || {}),
@@ -692,6 +698,7 @@ function hasAuthorSnapshotChanged(entry, snapshot) {
     String(entry.authorImage || "") !== String(snapshot.authorImage || "") ||
     String(entry.authorRank || "Unregistered") !== String(snapshot.authorRank || "Unregistered") ||
     Boolean(entry.authorShowStaffBadge) !== Boolean(snapshot.authorShowStaffBadge) ||
+    Boolean(entry.authorShowStaffBadgeIcon) !== Boolean(snapshot.authorShowStaffBadgeIcon) ||
     Boolean(entry.authorShowStaffGradient) !== Boolean(snapshot.authorShowStaffGradient) ||
     Boolean(entry.authorShowRankEffects) !== Boolean(snapshot.authorShowRankEffects) ||
     Boolean(entry.authorShowAvatarVfx) !== Boolean(snapshot.authorShowAvatarVfx)
@@ -746,6 +753,7 @@ async function refreshCommentAuthorFields(comments = []) {
         setPayload.authorImage = nextComment.authorImage;
         setPayload.authorRank = nextComment.authorRank;
         setPayload.authorShowStaffBadge = nextComment.authorShowStaffBadge;
+        setPayload.authorShowStaffBadgeIcon = nextComment.authorShowStaffBadgeIcon;
         setPayload.authorShowStaffGradient = nextComment.authorShowStaffGradient;
         setPayload.authorShowRankEffects = nextComment.authorShowRankEffects;
         setPayload.authorShowAvatarVfx = nextComment.authorShowAvatarVfx;
@@ -1164,6 +1172,9 @@ function normalizeForumPost(doc) {
     authorUserId: normalizeText(stripped.authorUserId, 128),
     authorUsername,
     authorImage: String(stripped.authorImage || ""),
+    authorShowStaffBadge: stripped.authorShowStaffBadge !== false,
+    authorShowStaffBadgeIcon: stripped.authorShowStaffBadgeIcon !== false,
+    authorShowStaffGradient: stripped.authorShowStaffGradient !== false,
     editCount: Number.isFinite(Number(stripped.editCount)) ? Number(stripped.editCount) : 0,
     editedAt: stripped.editedAt || "",
     editedByUserId: normalizeText(stripped.editedByUserId, 128),
@@ -1193,7 +1204,10 @@ async function refreshForumPostAuthorFields(posts = []) {
           normalizeText(item.authorName, 80) !== snapshot.authorName ||
           normalizeText(item.authorUsername, 80) !== snapshot.authorUsername ||
           String(item.authorImage || "") !== String(snapshot.authorImage || "") ||
-          String(item.authorRank || "Unregistered") !== String(snapshot.authorRank || "Unregistered");
+          String(item.authorRank || "Unregistered") !== String(snapshot.authorRank || "Unregistered") ||
+          Boolean(item.authorShowStaffBadge) !== Boolean(snapshot.authorShowStaffBadge) ||
+          Boolean(item.authorShowStaffBadgeIcon) !== Boolean(snapshot.authorShowStaffBadgeIcon) ||
+          Boolean(item.authorShowStaffGradient) !== Boolean(snapshot.authorShowStaffGradient);
         if (authorChanged) {
           nextItem = {
             ...nextItem,
@@ -1201,6 +1215,9 @@ async function refreshForumPostAuthorFields(posts = []) {
             authorUsername: snapshot.authorUsername,
             authorImage: snapshot.authorImage,
             authorRank: snapshot.authorRank || "Unregistered",
+            authorShowStaffBadge: snapshot.authorShowStaffBadge,
+            authorShowStaffBadgeIcon: snapshot.authorShowStaffBadgeIcon,
+            authorShowStaffGradient: snapshot.authorShowStaffGradient,
           };
           if (item._id) {
             ops.push({
@@ -1212,6 +1229,9 @@ async function refreshForumPostAuthorFields(posts = []) {
                     authorUsername: nextItem.authorUsername,
                     authorImage: nextItem.authorImage,
                     authorRank: nextItem.authorRank,
+                    authorShowStaffBadge: nextItem.authorShowStaffBadge,
+                    authorShowStaffBadgeIcon: nextItem.authorShowStaffBadgeIcon,
+                    authorShowStaffGradient: nextItem.authorShowStaffGradient,
                     updatedAt: new Date().toISOString(),
                   },
                 },
@@ -1281,7 +1301,9 @@ app.get("/api/profile/title", async (req, res) => {
       ownedRank,
       selectedTitle: displayRank,
       availableTitles,
+      canToggleStaffBadge: isStaff,
       showStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
+      showStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
       canToggleStaffGradient: isStaff,
       showStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
       canToggleRankEffects: isStaff || ownedRank !== "Unregistered",
@@ -1315,6 +1337,10 @@ app.post("/api/profile/staff-badge", async (req, res) => {
       { userId: auth.userId, isDeleted: false },
       { $set: { authorShowStaffBadge: showStaffBadge, updatedAt: new Date() } },
     );
+    await forumPostsCollection.updateMany(
+      { authorUserId: auth.userId, isDeleted: false },
+      { $set: { authorShowStaffBadge: showStaffBadge, updatedAt: new Date().toISOString() } },
+    );
     return res.json({ showStaffBadge });
   } catch (error) {
     console.error("Failed to update staff badge settings", error);
@@ -1336,7 +1362,6 @@ app.post("/api/profile/staff-gradient", async (req, res) => {
       publicMetadata: {
         ...user.publicMetadata,
         showStaffGradient,
-        showStaffBadge: showStaffGradient,
       },
     });
     await commentsCollection.updateMany(
@@ -1344,8 +1369,16 @@ app.post("/api/profile/staff-gradient", async (req, res) => {
       {
         $set: {
           authorShowStaffGradient: showStaffGradient,
-          authorShowStaffBadge: showStaffGradient,
           updatedAt: new Date(),
+        },
+      },
+    );
+    await forumPostsCollection.updateMany(
+      { authorUserId: auth.userId, isDeleted: false },
+      {
+        $set: {
+          authorShowStaffGradient: showStaffGradient,
+          updatedAt: new Date().toISOString(),
         },
       },
     );
@@ -1353,6 +1386,47 @@ app.post("/api/profile/staff-gradient", async (req, res) => {
   } catch (error) {
     console.error("Failed to update staff gradient settings", error);
     return res.status(500).json({ error: "Failed to update staff gradient settings" });
+  }
+});
+
+app.post("/api/profile/staff-badge-icon", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const user = await clerkClient.users.getUser(auth.userId);
+    if (!isAdminUser(user)) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+    const showStaffBadgeIcon = req.body?.showStaffBadgeIcon !== false;
+    await clerkClient.users.updateUserMetadata(auth.userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        showStaffBadgeIcon,
+      },
+    });
+    await commentsCollection.updateMany(
+      { userId: auth.userId, isDeleted: false },
+      {
+        $set: {
+          authorShowStaffBadgeIcon: showStaffBadgeIcon,
+          updatedAt: new Date(),
+        },
+      },
+    );
+    await forumPostsCollection.updateMany(
+      { authorUserId: auth.userId, isDeleted: false },
+      {
+        $set: {
+          authorShowStaffBadgeIcon: showStaffBadgeIcon,
+          updatedAt: new Date().toISOString(),
+        },
+      },
+    );
+    return res.json({ showStaffBadgeIcon });
+  } catch (error) {
+    console.error("Failed to update staff badge icon settings", error);
+    return res.status(500).json({ error: "Failed to update staff badge icon settings" });
   }
 });
 
@@ -1822,6 +1896,7 @@ app.post("/api/comments", async (req, res) => {
     const user = await clerkClient.users.getUser(auth.userId);
     const email = getUserEmail(user);
     const showStaffBadge = resolveStaffBadgeVisible(user?.publicMetadata || {});
+    const showStaffBadgeIcon = resolveStaffBadgeIconVisible(user?.publicMetadata || {});
     const showStaffGradient = resolveStaffGradientVisible(user?.publicMetadata || {});
     const showRankEffects = resolveRankEffectsVisible(user?.publicMetadata || {});
     const showAvatarVfx = resolveAvatarVfxVisible(user?.publicMetadata || {});
@@ -1841,6 +1916,7 @@ app.post("/api/comments", async (req, res) => {
       authorEmail: email,
       authorRank: rank,
       authorShowStaffBadge: showStaffBadge,
+      authorShowStaffBadgeIcon: showStaffBadgeIcon,
       authorShowStaffGradient: showStaffGradient,
       authorShowRankEffects: showRankEffects,
       authorShowAvatarVfx: showAvatarVfx,
@@ -1961,6 +2037,7 @@ app.post("/api/comments/:id/replies", async (req, res) => {
     const user = await clerkClient.users.getUser(auth.userId);
     const email = getUserEmail(user);
     const showStaffBadge = resolveStaffBadgeVisible(user?.publicMetadata || {});
+    const showStaffBadgeIcon = resolveStaffBadgeIconVisible(user?.publicMetadata || {});
     const showStaffGradient = resolveStaffGradientVisible(user?.publicMetadata || {});
     const showRankEffects = resolveRankEffectsVisible(user?.publicMetadata || {});
     const showAvatarVfx = resolveAvatarVfxVisible(user?.publicMetadata || {});
@@ -1982,6 +2059,7 @@ app.post("/api/comments/:id/replies", async (req, res) => {
       authorEmail: email,
       authorRank: rank,
       authorShowStaffBadge: showStaffBadge,
+      authorShowStaffBadgeIcon: showStaffBadgeIcon,
       authorShowStaffGradient: showStaffGradient,
       authorShowRankEffects: showRankEffects,
       authorShowAvatarVfx: showAvatarVfx,
@@ -2027,6 +2105,8 @@ app.post("/api/comments/:id/replies", async (req, res) => {
         authorUsername,
         authorImage: user?.imageUrl || "",
         authorRank: rank,
+        authorShowStaffBadge: showStaffBadge,
+        authorShowStaffBadgeIcon: showStaffBadgeIcon,
         authorShowStaffGradient: showStaffGradient,
         authorShowRankEffects: showRankEffects,
         authorShowAvatarVfx: showAvatarVfx,
@@ -2766,6 +2846,9 @@ app.post("/api/forum/posts", async (req, res) => {
       user?.publicMetadata || {},
       isAdminUser(user),
     ).displayRank;
+    const showStaffBadge = resolveStaffBadgeVisible(user?.publicMetadata || {});
+    const showStaffBadgeIcon = resolveStaffBadgeIconVisible(user?.publicMetadata || {});
+    const showStaffGradient = resolveStaffGradientVisible(user?.publicMetadata || {});
     const now = new Date().toISOString();
     const post = {
       id: crypto.randomUUID(),
@@ -2778,6 +2861,9 @@ app.post("/api/forum/posts", async (req, res) => {
       authorUserId: auth.userId,
       authorUsername: formatUsernameForDisplay(user?.username, 80),
       authorImage: user?.imageUrl || "",
+      authorShowStaffBadge: showStaffBadge,
+      authorShowStaffBadgeIcon: showStaffBadgeIcon,
+      authorShowStaffGradient: showStaffGradient,
       isDeleted: false,
       createdAt: now,
       updatedAt: now,
@@ -2858,6 +2944,9 @@ app.patch("/api/forum/posts/:id", async (req, res) => {
           user?.publicMetadata || {},
           isStaff,
         ).displayRank,
+        authorShowStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
+        authorShowStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
+        authorShowStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
         featured: false,
         type: "forum_post_staff_edit",
         targetUserId: doc.createdBy,
@@ -2934,6 +3023,9 @@ app.delete("/api/forum/posts/:id", async (req, res) => {
           user?.publicMetadata || {},
           isStaff,
         ).displayRank,
+        authorShowStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
+        authorShowStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
+        authorShowStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
         featured: false,
         type: "forum_post_staff_delete",
         targetUserId: doc.createdBy,

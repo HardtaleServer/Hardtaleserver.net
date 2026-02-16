@@ -5,6 +5,13 @@ All notable changes to this project are documented here.
 ## 2026-02-16 (v1.3.30)
 - Expanded forum profile cards for your own profile to include all rank controls: display title, rank effects toggle, avatar effects toggle, and staff-gradient toggle (staff-only).
 - Added per-rank hover glow effects to forum rank icons (Registered/Hero/Legend/Mythic/Staff) on forum author rows.
+- Fixed a recurring desktop sticky-navbar issue where hovering Home/Forum nav buttons could cause the Settings button to visually glitch.
+- Fixed staff/admin forum post rank labels so the STAFF gradient now renders correctly.
+- Updated staff/admin gradient setting to toggle animation only while keeping the STAFF gradient effect enabled by default.
+- Added reusable store-rank SVG assets (`RANK_HERO.svg`, `RANK_LEGEND.svg`, `RANK_MYTHIC.svg`) and switched Store rank icons to use them.
+- Added staff-only profile badge options to show/hide badge and choose `STAFF` or `ICON STAFF` (HT icon), with badge gradient following staff gradient animation settings.
+- Added `HardTale_H_HT.png` as a selectable logo icon option in mobile and desktop logo pickers.
+- Wired staff rank chips to use the `ht_staff` SVG icon asset for STAFF rank icon rendering.
 
 ## 2026-02-16 (v1.3.29)
 - Added forum post `PATCH`/`DELETE` APIs with owner-or-staff authorization checks.

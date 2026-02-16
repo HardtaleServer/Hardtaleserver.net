@@ -286,14 +286,19 @@ body[data-theme="dark"] {
   margin: 0 auto;
 }
 
-.desktop-sticky.transparent .nav-link,
-.desktop-sticky.transparent .settings-button,
-.desktop-sticky.transparent .button,
-.desktop-sticky.transparent .notif,
-.desktop-sticky.transparent .cart-button {
+.desktop-sticky.transparent .nav-link {
   opacity: 0.5;
   position: relative;
   z-index: 1;
+}
+
+.desktop-sticky.transparent .auth-buttons .settings-button,
+.desktop-sticky.transparent .auth-buttons .button,
+.desktop-sticky.transparent .auth-buttons .notif,
+.desktop-sticky.transparent .auth-buttons .cart-button {
+  opacity: 1;
+  position: relative;
+  z-index: 2;
 }
 
 .desktop-sticky.transparent .cart-button,
@@ -308,10 +313,10 @@ body[data-theme="dark"] {
 
 .desktop-sticky.transparent .nav-link:hover,
 .desktop-sticky.transparent .nav-link:focus,
-.desktop-sticky.transparent .settings-button:hover,
-.desktop-sticky.transparent .button:hover,
-.desktop-sticky.transparent .notif:hover,
-.desktop-sticky.transparent .cart-button:hover {
+.desktop-sticky.transparent .auth-buttons .settings-button:hover,
+.desktop-sticky.transparent .auth-buttons .button:hover,
+.desktop-sticky.transparent .auth-buttons .notif:hover,
+.desktop-sticky.transparent .auth-buttons .cart-button:hover {
   opacity: 1;
 }
 
@@ -2112,6 +2117,11 @@ emoji-picker.reaction-picker-panel {
   -webkit-text-fill-color: transparent;
 }
 
+.comment-author.staff.staff-static {
+  animation: none;
+  background-position: 50% 0;
+}
+
 .comment-text.staff {
   background-image: linear-gradient(270deg, var(--accent-2), var(--accent));
   background-size: 220% 100%;
@@ -2120,6 +2130,11 @@ emoji-picker.reaction-picker-panel {
   -webkit-background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
+}
+
+.comment-text.staff.staff-static {
+  animation: none;
+  background-position: 50% 0;
 }
 .comment-identity {
   display: grid;
@@ -2157,6 +2172,13 @@ emoji-picker.reaction-picker-panel {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+.rank-icon-image {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
 }
 
 .comment-rank.rank-unregistered {
@@ -2349,6 +2371,11 @@ emoji-picker.reaction-picker-panel {
   -webkit-background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
+}
+
+.comment-rank.staff.staff-static {
+  animation: none;
+  background-position: 50% 0;
 }
 
 .comment-header-desktop {
@@ -2639,6 +2666,30 @@ emoji-picker.reaction-picker-panel {
   text-transform: uppercase;
   color: var(--muted);
   background: var(--bg-soft);
+}
+
+.profile-card-badge.staff-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background-image: linear-gradient(270deg, var(--accent-2), var(--accent));
+  background-size: 220% 100%;
+  animation: staffReflect 2.4s ease-in-out infinite reverse;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.profile-card-badge.staff-badge.staff-static {
+  animation: none;
+  background-position: 50% 0;
+}
+
+.staff-badge-icon {
+  width: 26px;
+  height: 14px;
+  display: block;
 }
 
 .profile-card-title-picker {
@@ -3098,6 +3149,12 @@ emoji-picker.reaction-picker-panel {
 .store-icon svg {
   width: 28px;
   height: 28px;
+}
+
+.store-icon img {
+  width: 28px;
+  height: 28px;
+  display: block;
 }
 
 .store-name {

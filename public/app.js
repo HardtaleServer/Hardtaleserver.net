@@ -60,6 +60,13 @@ const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const VERSION = "1.3.30";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
+const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
+const STAFF_RANK_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
+const STORE_RANK_ICON_SVG = {
+  star: "/Images/SVGs/RANK_HERO.svg",
+  crown: "/Images/SVGs/RANK_LEGEND.svg",
+  shield: "/Images/SVGs/RANK_MYTHIC.svg",
+};
 const STAFF_EMAILS = new Set([
   "chashsmurfis@gmail.com",
   "hardtaleserver@gmail.com",
@@ -84,6 +91,7 @@ const MOBILE_LOGO_MAP = {
   "icon-golden": "/assets/HardTale_H_Golden.png",
   "icon-fiery": "/assets/HardTale_H_Fiery.png",
   "icon-icey": "/assets/HardTale_H_Icey.png",
+  "icon-ht": "/assets/HardTale_H_HT.png",
 };
 const DESKTOP_LOGO_MAP = MOBILE_LOGO_MAP;
 const CRITICAL_IMAGE_SOURCES = [
@@ -93,6 +101,7 @@ const CRITICAL_IMAGE_SOURCES = [
   "/assets/HardTale_H_Golden.png",
   "/assets/HardTale_H_GreyScale.png",
   "/assets/HardTale_H_Icey.png",
+  "/assets/HardTale_H_HT.png",
   ...Object.values(MOBILE_LOGO_MAP),
 ];
 
@@ -137,6 +146,13 @@ const CHANGELOG_ENTRIES = [
     items: [
       "Expanded forum profile cards for your own user to include rank effects, avatar effects, and staff-gradient toggles (staff-only where applicable).",
       "Added per-rank hover glow effects to forum rank icons for clearer visual identity on author rows.",
+      "Fixed a recurring desktop sticky-navbar issue where hovering Home/Forum nav buttons could cause the Settings button to visually glitch.",
+      "Fixed staff/admin forum post rank labels so the STAFF gradient now renders correctly.",
+      "Updated the staff/admin gradient setting to toggle animation only while keeping the STAFF gradient effect enabled by default.",
+      "Added reusable Store rank SVG assets and switched Store rank icons to use shared SVG files.",
+      "Added staff-only profile badge options to show/hide badge and choose STAFF text-only vs ICON STAFF (HT icon), with gradient behavior tied to staff gradient animation.",
+      "Added HardTale_H_HT icon as a selectable mobile/desktop logo option.",
+      "Updated STAFF rank icon rendering to use the ht_staff SVG asset across rank chips.",
     ],
   },
   {
@@ -1224,6 +1240,8 @@ function CommentThread({
   const [profileUser, setProfileUser] = useState(null);
   const [profileTitleStatus, setProfileTitleStatus] = useState("");
   const [profileTitleSaving, setProfileTitleSaving] = useState(false);
+  const [profileStaffBadgeSaving, setProfileStaffBadgeSaving] = useState(false);
+  const [profileStaffBadgeIconSaving, setProfileStaffBadgeIconSaving] = useState(false);
   const [profileStaffGradientSaving, setProfileStaffGradientSaving] = useState(false);
   const [profileRankEffectsSaving, setProfileRankEffectsSaving] = useState(false);
   const [profileAvatarVfxSaving, setProfileAvatarVfxSaving] = useState(false);
@@ -1287,13 +1305,18 @@ function CommentThread({
     const email = String(comment.authorEmail || "").toLowerCase();
     const username = String(comment.authorUsername || "").toLowerCase();
     const authorName = String(comment.authorName || "").toLowerCase();
-    const staffIdentity = STAFF_EMAILS.has(email) || isStaffLabel(username) || isStaffLabel(authorName);
-    const showStaffGradient = comment?.authorShowStaffGradient !== false;
-    if (staffIdentity && showStaffGradient) {
-      return { label: "STAFF", staff: true };
+    const authorRank = String(comment.authorRank || "");
+    const staffIdentity =
+      STAFF_EMAILS.has(email) ||
+      isStaffLabel(username) ||
+      isStaffLabel(authorName) ||
+      isStaffLabel(authorRank);
+    const animateStaffGradient = comment?.authorShowStaffGradient !== false;
+    if (staffIdentity) {
+      return { label: "STAFF", staff: true, animateStaffGradient };
     }
-    const rank = comment.authorRank || "Unregistered";
-    return { label: rank, staff: false };
+    const rank = authorRank || "Unregistered";
+    return { label: rank, staff: false, animateStaffGradient: false };
   }
 
   function rankClassSlug(value) {
@@ -1313,6 +1336,12 @@ function CommentThread({
     ]
       .filter(Boolean)
       .join(" ");
+  }
+
+  function staffTextClass(entry) {
+    const rank = resolveRank(entry);
+    if (!rank.staff) return "";
+    return rank.animateStaffGradient === false ? "staff staff-static" : "staff";
   }
 
   function isOriginalPoster(entry) {
@@ -1569,6 +1598,9 @@ function CommentThread({
       return {
         availableTitles: availableTitles.length > 0 ? availableTitles : fallbackTitles,
         selectedTitle: selectedTitle || ownedRank || "Unregistered",
+        canToggleStaffBadge: Boolean(data?.canToggleStaffBadge),
+        showStaffBadge: data?.showStaffBadge !== false,
+        showStaffBadgeIcon: data?.showStaffBadgeIcon !== false,
         canToggleStaffGradient: Boolean(data?.canToggleStaffGradient),
         showStaffGradient: data?.showStaffGradient !== false,
         canToggleRankEffects: Boolean(data?.canToggleRankEffects),
@@ -1655,8 +1687,8 @@ function CommentThread({
           ? {
               ...prev,
               showStaffGradient,
-              showStaffBadge: showStaffGradient,
-              staff: prev.isStaffUser && showStaffGradient,
+              showStaffBadge: prev.isStaffUser,
+              staff: prev.isStaffUser,
             }
           : prev,
       );
@@ -1668,7 +1700,7 @@ function CommentThread({
               ? {
                   ...comment,
                   authorShowStaffGradient: showStaffGradient,
-                  authorShowStaffBadge: showStaffGradient,
+                  authorShowStaffBadge: comment.authorShowStaffBadge !== false,
                 }
               : comment;
           const replies = Array.isArray(nextComment.replies) ? nextComment.replies : [];
@@ -1680,7 +1712,7 @@ function CommentThread({
                 ? {
                     ...reply,
                     authorShowStaffGradient: showStaffGradient,
-                    authorShowStaffBadge: showStaffGradient,
+                    authorShowStaffBadge: reply.authorShowStaffBadge !== false,
                   }
                 : reply,
             ),
@@ -1693,6 +1725,108 @@ function CommentThread({
       setProfileTitleStatus(error?.message || "Failed to save staff gradient.");
     } finally {
       setProfileStaffGradientSaving(false);
+    }
+  }
+
+  async function updateOwnStaffBadgeVisibility(nextVisible) {
+    if (!profileUser?.isOwn || !profileUser?.canToggleStaffBadge || profileStaffBadgeSaving) return;
+    setProfileStaffBadgeSaving(true);
+    setProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/staff-badge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showStaffBadge: Boolean(nextVisible) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save staff badge.");
+      }
+      const data = await response.json();
+      const showStaffBadge = data?.showStaffBadge !== false;
+      setProfileUser((prev) => (prev ? { ...prev, showStaffBadge } : prev));
+      setComments((prev) =>
+        prev.map((comment) => {
+          if (!comment) return comment;
+          const nextComment =
+            comment.userId === userId
+              ? {
+                  ...comment,
+                  authorShowStaffBadge: showStaffBadge,
+                }
+              : comment;
+          const replies = Array.isArray(nextComment.replies) ? nextComment.replies : [];
+          if (replies.length === 0) return nextComment;
+          return {
+            ...nextComment,
+            replies: replies.map((reply) =>
+              reply?.userId === userId
+                ? {
+                    ...reply,
+                    authorShowStaffBadge: showStaffBadge,
+                  }
+                : reply,
+            ),
+          };
+        }),
+      );
+      setProfileTitleStatus("Saved.");
+      setTimeout(() => setProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setProfileTitleStatus(error?.message || "Failed to save staff badge.");
+    } finally {
+      setProfileStaffBadgeSaving(false);
+    }
+  }
+
+  async function updateOwnStaffBadgeIconVisibility(nextVisible) {
+    if (!profileUser?.isOwn || !profileUser?.canToggleStaffBadge || profileStaffBadgeIconSaving) return;
+    setProfileStaffBadgeIconSaving(true);
+    setProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/staff-badge-icon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showStaffBadgeIcon: Boolean(nextVisible) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save staff badge icon.");
+      }
+      const data = await response.json();
+      const showStaffBadgeIcon = data?.showStaffBadgeIcon !== false;
+      setProfileUser((prev) => (prev ? { ...prev, showStaffBadgeIcon } : prev));
+      setComments((prev) =>
+        prev.map((comment) => {
+          if (!comment) return comment;
+          const nextComment =
+            comment.userId === userId
+              ? {
+                  ...comment,
+                  authorShowStaffBadgeIcon: showStaffBadgeIcon,
+                }
+              : comment;
+          const replies = Array.isArray(nextComment.replies) ? nextComment.replies : [];
+          if (replies.length === 0) return nextComment;
+          return {
+            ...nextComment,
+            replies: replies.map((reply) =>
+              reply?.userId === userId
+                ? {
+                    ...reply,
+                    authorShowStaffBadgeIcon: showStaffBadgeIcon,
+                  }
+                : reply,
+            ),
+          };
+        }),
+      );
+      setProfileTitleStatus("Saved.");
+      setTimeout(() => setProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setProfileTitleStatus(error?.message || "Failed to save staff badge icon.");
+    } finally {
+      setProfileStaffBadgeIconSaving(false);
     }
   }
 
@@ -1789,9 +1923,16 @@ function CommentThread({
     const email = String(entry.authorEmail || "").toLowerCase();
     const username = String(entry.authorUsername || "").toLowerCase();
     const authorName = String(entry.authorName || "").toLowerCase();
-    const isStaffUser = STAFF_EMAILS.has(email) || isStaffLabel(username) || isStaffLabel(authorName);
+    let isStaffUser =
+      STAFF_EMAILS.has(email) ||
+      isStaffLabel(username) ||
+      isStaffLabel(authorName) ||
+      isStaffLabel(rank.label);
     let availableTitles = [];
     let selectedTitle = rank.label;
+    let canToggleStaffBadge = false;
+    let showStaffBadge = entry?.authorShowStaffBadge !== false;
+    let showStaffBadgeIcon = entry?.authorShowStaffBadgeIcon !== false;
     let canToggleStaffGradient = false;
     let showStaffGradient = entry?.authorShowStaffGradient !== false;
     let canToggleRankEffects = false;
@@ -1803,6 +1944,9 @@ function CommentThread({
       if (settings) {
         availableTitles = settings.availableTitles;
         selectedTitle = settings.selectedTitle || rank.label;
+        canToggleStaffBadge = Boolean(settings.canToggleStaffBadge);
+        showStaffBadge = settings.showStaffBadge !== false;
+        showStaffBadgeIcon = settings.showStaffBadgeIcon !== false;
         canToggleStaffGradient = Boolean(settings.canToggleStaffGradient);
         showStaffGradient = settings.showStaffGradient !== false;
         canToggleRankEffects = Boolean(settings.canToggleRankEffects);
@@ -1811,6 +1955,7 @@ function CommentThread({
         showAvatarVfx = settings.showAvatarVfx !== false;
       }
     }
+    isStaffUser = isStaffUser || canToggleStaffGradient || canToggleStaffBadge;
     if (isOwn && availableTitles.length === 0 && selectedTitle) {
       availableTitles = [selectedTitle];
     }
@@ -1819,14 +1964,16 @@ function CommentThread({
       name: String(entry.authorName || "User"),
       image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel: selectedTitle,
-      staff: isStaffUser && showStaffGradient,
+      staff: isStaffUser,
       username: formatUsernameForDisplay(entry.authorUsername),
       isOwn,
       isStaffUser,
       availableTitles,
+      canToggleStaffBadge,
+      showStaffBadge,
+      showStaffBadgeIcon,
       canToggleStaffGradient,
       showStaffGradient,
-      showStaffBadge: showStaffGradient,
       canToggleRankEffects,
       showRankEffects,
       canToggleAvatarVfx,
@@ -1953,7 +2100,7 @@ function CommentThread({
                               </button>
                             </div>
                           </div>`
-                        : html`<p className=${`comment-text ${resolveRank(comment).staff ? "staff" : ""}`}>
+                        : html`<p className=${`comment-text ${staffTextClass(comment)}`.trim()}>
                             ${comment.body}
                           </p>`}
                       ${actionStatusByComment[comment.id]
@@ -2097,7 +2244,7 @@ function CommentThread({
                                                   ${formatReplyReference(reply)}
                                                 </button>`
                                               : html``}
-                                            <p className=${`comment-text ${resolveRank(reply).staff ? "staff" : ""}`}>
+                                            <p className=${`comment-text ${staffTextClass(reply)}`.trim()}>
                                               ${reply.body}
                                             </p>
                                           </div>`}
@@ -2227,6 +2374,8 @@ function CommentThread({
               <div
                 className=${`comment-rank ${
                   profileUser.staff ? "staff" : ""
+                } ${
+                  profileUser.staff && profileUser.showStaffGradient === false ? "staff-static" : ""
                 } profile-card-rank ${
                   profileUser.showRankEffects === false ? "rank-effects-off" : ""
                 } rank-${String(profileUser.rankLabel || "Unregistered")
@@ -2279,6 +2428,28 @@ function CommentThread({
                     <span>Enable avatar effects</span>
                   </label>`
                 : html``}
+              ${profileUser.isOwn && profileUser.canToggleStaffBadge
+                ? html`<label className="profile-card-toggle">
+                    <input
+                      type="checkbox"
+                      checked=${profileUser.showStaffBadge !== false}
+                      disabled=${profileStaffBadgeSaving}
+                      onChange=${(event) => updateOwnStaffBadgeVisibility(event.target.checked)}
+                    />
+                    <span>Show staff badge</span>
+                  </label>`
+                : html``}
+              ${profileUser.isOwn && profileUser.canToggleStaffBadge && profileUser.showStaffBadge !== false
+                ? html`<label className="profile-card-toggle">
+                    <input
+                      type="checkbox"
+                      checked=${profileUser.showStaffBadgeIcon !== false}
+                      disabled=${profileStaffBadgeIconSaving}
+                      onChange=${(event) => updateOwnStaffBadgeIconVisibility(event.target.checked)}
+                    />
+                    <span>Use HT icon on badge</span>
+                  </label>`
+                : html``}
               ${profileUser.isOwn && profileUser.canToggleStaffGradient
                 ? html`<label className="profile-card-toggle">
                     <input
@@ -2287,15 +2458,13 @@ function CommentThread({
                       disabled=${profileStaffGradientSaving}
                       onChange=${(event) => updateOwnStaffGradientVisibility(event.target.checked)}
                     />
-                    <span>Enable staff gradient</span>
+                    <span>Enable staff gradient animation</span>
                   </label>`
                 : html``}
               ${profileTitleStatus && profileUser.isOwn
                 ? html`<div className="muted profile-card-title-status">${profileTitleStatus}</div>`
                 : html``}
-              ${profileUser.isStaffUser && profileUser.showStaffGradient !== false
-                ? html`<div className="profile-card-badge">Hardtale Staff Member</div>`
-                : html``}
+              ${renderStaffBadge(profileUser)}
             </div>`
           : html``}
       <//>
@@ -2964,6 +3133,7 @@ function SettingsMenu({
                                       { id: "icon-golden", src: "/assets/HardTale_H_Golden.png" },
                                       { id: "icon-fiery", src: "/assets/HardTale_H_Fiery.png" },
                                       { id: "icon-icey", src: "/assets/HardTale_H_Icey.png" },
+                                      { id: "icon-ht", src: "/assets/HardTale_H_HT.png" },
                                     ].map(
                                       (item) => html`<button
                                         key=${item.id}
@@ -3063,6 +3233,7 @@ function SettingsMenu({
                                       { id: "icon-golden", src: "/assets/HardTale_H_Golden.png" },
                                       { id: "icon-fiery", src: "/assets/HardTale_H_Fiery.png" },
                                       { id: "icon-icey", src: "/assets/HardTale_H_Icey.png" },
+                                      { id: "icon-ht", src: "/assets/HardTale_H_HT.png" },
                                     ].map(
                                       (item) => html`<button
                                         key=${item.id}
@@ -3711,6 +3882,8 @@ function ForumPage({ isAdmin = false }) {
   const [forumProfileUser, setForumProfileUser] = useState(null);
   const [forumProfileTitleStatus, setForumProfileTitleStatus] = useState("");
   const [forumProfileTitleSaving, setForumProfileTitleSaving] = useState(false);
+  const [forumProfileStaffBadgeSaving, setForumProfileStaffBadgeSaving] = useState(false);
+  const [forumProfileStaffBadgeIconSaving, setForumProfileStaffBadgeIconSaving] = useState(false);
   const [forumProfileStaffGradientSaving, setForumProfileStaffGradientSaving] = useState(false);
   const [forumProfileRankEffectsSaving, setForumProfileRankEffectsSaving] = useState(false);
   const [forumProfileAvatarVfxSaving, setForumProfileAvatarVfxSaving] = useState(false);
@@ -3732,6 +3905,20 @@ function ForumPage({ isAdmin = false }) {
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-");
+  }
+
+  function forumRankClassName(entry) {
+    const slug = rankSlug(entry?.authorRank || "Unregistered");
+    const isStaffRank =
+      isStaffLabel(entry?.authorRank || "") ||
+      isStaffLabel(entry?.authorName || "") ||
+      isStaffLabel(entry?.authorUsername || "");
+    const staffClass = isStaffRank
+      ? entry?.authorShowStaffGradient === false
+        ? "staff staff-static"
+        : "staff"
+      : "";
+    return `comment-rank forum-author-rank ${staffClass} rank-${slug}`.trim();
   }
 
   function getForumPostAuthorUserId(post) {
@@ -3761,6 +3948,9 @@ function ForumPage({ isAdmin = false }) {
       return {
         availableTitles: availableTitles.length > 0 ? availableTitles : fallbackTitles,
         selectedTitle: selectedTitle || ownedRank || "Unregistered",
+        canToggleStaffBadge: Boolean(data?.canToggleStaffBadge),
+        showStaffBadge: data?.showStaffBadge !== false,
+        showStaffBadgeIcon: data?.showStaffBadgeIcon !== false,
         canToggleStaffGradient: Boolean(data?.canToggleStaffGradient),
         showStaffGradient: data?.showStaffGradient !== false,
         canToggleRankEffects: Boolean(data?.canToggleRankEffects),
@@ -3780,11 +3970,17 @@ function ForumPage({ isAdmin = false }) {
     const authorUsername = String(entry.authorUsername || "");
     const authorUserId = String(entry.authorUserId || entry.createdBy || "");
     const isOwn = Boolean(userId && authorUserId && String(userId) === authorUserId);
-    const isStaffUser = isStaffLabel(authorName) || isStaffLabel(authorUsername);
+    let isStaffUser =
+      isStaffLabel(authorName) ||
+      isStaffLabel(authorUsername) ||
+      isStaffLabel(rankLabel);
     let availableTitles = [];
     let selectedTitle = rankLabel;
+    let canToggleStaffBadge = false;
+    let showStaffBadge = entry?.authorShowStaffBadge !== false;
+    let showStaffBadgeIcon = entry?.authorShowStaffBadgeIcon !== false;
     let canToggleStaffGradient = false;
-    let showStaffGradient = true;
+    let showStaffGradient = entry?.authorShowStaffGradient !== false;
     let canToggleRankEffects = false;
     let showRankEffects = true;
     let canToggleAvatarVfx = false;
@@ -3794,6 +3990,9 @@ function ForumPage({ isAdmin = false }) {
       if (settings) {
         availableTitles = settings.availableTitles;
         selectedTitle = settings.selectedTitle || rankLabel;
+        canToggleStaffBadge = Boolean(settings.canToggleStaffBadge);
+        showStaffBadge = settings.showStaffBadge !== false;
+        showStaffBadgeIcon = settings.showStaffBadgeIcon !== false;
         canToggleStaffGradient = Boolean(settings.canToggleStaffGradient);
         showStaffGradient = settings.showStaffGradient !== false;
         canToggleRankEffects = Boolean(settings.canToggleRankEffects);
@@ -3802,6 +4001,7 @@ function ForumPage({ isAdmin = false }) {
         showAvatarVfx = settings.showAvatarVfx !== false;
       }
     }
+    isStaffUser = isStaffUser || canToggleStaffGradient || canToggleStaffBadge;
     if (isOwn && availableTitles.length === 0 && selectedTitle) {
       availableTitles = [selectedTitle];
     }
@@ -3811,10 +4011,13 @@ function ForumPage({ isAdmin = false }) {
       username: formatUsernameForDisplay(authorUsername),
       image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel: selectedTitle,
-      staff: isStaffUser && showStaffGradient,
+      staff: isStaffUser,
       isStaffUser,
       isOwn,
       availableTitles,
+      canToggleStaffBadge,
+      showStaffBadge,
+      showStaffBadgeIcon,
       canToggleStaffGradient,
       showStaffGradient,
       canToggleRankEffects,
@@ -3900,16 +4103,113 @@ function ForumPage({ isAdmin = false }) {
           ? {
               ...prev,
               showStaffGradient,
-              staff: prev.isStaffUser && showStaffGradient,
+              staff: prev.isStaffUser,
             }
           : prev,
       );
+      setPosts((prev) =>
+        prev.map((post) => {
+          const postAuthorUserId = String(post?.authorUserId || post?.createdBy || "");
+          return postAuthorUserId === String(userId || "")
+            ? { ...post, authorShowStaffGradient: showStaffGradient }
+            : post;
+        }),
+      );
+      setSelectedPost((prev) => {
+        if (!prev) return prev;
+        const postAuthorUserId = String(prev?.authorUserId || prev?.createdBy || "");
+        return postAuthorUserId === String(userId || "")
+          ? { ...prev, authorShowStaffGradient: showStaffGradient }
+          : prev;
+      });
       setForumProfileTitleStatus("Saved.");
       setTimeout(() => setForumProfileTitleStatus(""), 1200);
     } catch (error) {
       setForumProfileTitleStatus(error?.message || "Failed to save staff gradient.");
     } finally {
       setForumProfileStaffGradientSaving(false);
+    }
+  }
+
+  async function updateOwnForumStaffBadgeVisibility(nextVisible) {
+    if (!forumProfileUser?.isOwn || !forumProfileUser?.canToggleStaffBadge || forumProfileStaffBadgeSaving) return;
+    setForumProfileStaffBadgeSaving(true);
+    setForumProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/staff-badge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showStaffBadge: Boolean(nextVisible) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save staff badge.");
+      }
+      const data = await response.json();
+      const showStaffBadge = data?.showStaffBadge !== false;
+      setForumProfileUser((prev) => (prev ? { ...prev, showStaffBadge } : prev));
+      setPosts((prev) =>
+        prev.map((post) => {
+          const postAuthorUserId = String(post?.authorUserId || post?.createdBy || "");
+          return postAuthorUserId === String(userId || "")
+            ? { ...post, authorShowStaffBadge: showStaffBadge }
+            : post;
+        }),
+      );
+      setSelectedPost((prev) => {
+        if (!prev) return prev;
+        const postAuthorUserId = String(prev?.authorUserId || prev?.createdBy || "");
+        return postAuthorUserId === String(userId || "")
+          ? { ...prev, authorShowStaffBadge: showStaffBadge }
+          : prev;
+      });
+      setForumProfileTitleStatus("Saved.");
+      setTimeout(() => setForumProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setForumProfileTitleStatus(error?.message || "Failed to save staff badge.");
+    } finally {
+      setForumProfileStaffBadgeSaving(false);
+    }
+  }
+
+  async function updateOwnForumStaffBadgeIconVisibility(nextVisible) {
+    if (!forumProfileUser?.isOwn || !forumProfileUser?.canToggleStaffBadge || forumProfileStaffBadgeIconSaving) return;
+    setForumProfileStaffBadgeIconSaving(true);
+    setForumProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/staff-badge-icon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showStaffBadgeIcon: Boolean(nextVisible) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save staff badge icon.");
+      }
+      const data = await response.json();
+      const showStaffBadgeIcon = data?.showStaffBadgeIcon !== false;
+      setForumProfileUser((prev) => (prev ? { ...prev, showStaffBadgeIcon } : prev));
+      setPosts((prev) =>
+        prev.map((post) => {
+          const postAuthorUserId = String(post?.authorUserId || post?.createdBy || "");
+          return postAuthorUserId === String(userId || "")
+            ? { ...post, authorShowStaffBadgeIcon: showStaffBadgeIcon }
+            : post;
+        }),
+      );
+      setSelectedPost((prev) => {
+        if (!prev) return prev;
+        const postAuthorUserId = String(prev?.authorUserId || prev?.createdBy || "");
+        return postAuthorUserId === String(userId || "")
+          ? { ...prev, authorShowStaffBadgeIcon: showStaffBadgeIcon }
+          : prev;
+      });
+      setForumProfileTitleStatus("Saved.");
+      setTimeout(() => setForumProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setForumProfileTitleStatus(error?.message || "Failed to save staff badge icon.");
+    } finally {
+      setForumProfileStaffBadgeIconSaving(false);
     }
   }
 
@@ -3987,6 +4287,10 @@ function ForumPage({ isAdmin = false }) {
         : html``}
       <div
         className=${`comment-rank ${forumProfileUser.staff ? "staff" : ""} profile-card-rank ${
+          forumProfileUser.staff && forumProfileUser.showStaffGradient === false
+            ? "staff-static"
+            : ""
+        } ${
           forumProfileUser.showRankEffects === false ? "rank-effects-off" : ""
         } rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}
       >
@@ -4033,6 +4337,28 @@ function ForumPage({ isAdmin = false }) {
             <span>Enable avatar effects</span>
           </label>`
         : html``}
+      ${forumProfileUser.isOwn && forumProfileUser.canToggleStaffBadge
+        ? html`<label className="profile-card-toggle">
+            <input
+              type="checkbox"
+              checked=${forumProfileUser.showStaffBadge !== false}
+              disabled=${forumProfileStaffBadgeSaving}
+              onChange=${(event) => updateOwnForumStaffBadgeVisibility(event.target.checked)}
+            />
+            <span>Show staff badge</span>
+          </label>`
+        : html``}
+      ${forumProfileUser.isOwn && forumProfileUser.canToggleStaffBadge && forumProfileUser.showStaffBadge !== false
+        ? html`<label className="profile-card-toggle">
+            <input
+              type="checkbox"
+              checked=${forumProfileUser.showStaffBadgeIcon !== false}
+              disabled=${forumProfileStaffBadgeIconSaving}
+              onChange=${(event) => updateOwnForumStaffBadgeIconVisibility(event.target.checked)}
+            />
+            <span>Use HT icon on badge</span>
+          </label>`
+        : html``}
       ${forumProfileUser.isOwn && forumProfileUser.canToggleStaffGradient
         ? html`<label className="profile-card-toggle">
             <input
@@ -4041,15 +4367,13 @@ function ForumPage({ isAdmin = false }) {
               disabled=${forumProfileStaffGradientSaving}
               onChange=${(event) => updateOwnForumStaffGradientVisibility(event.target.checked)}
             />
-            <span>Enable staff gradient</span>
+            <span>Enable staff gradient animation</span>
           </label>`
         : html``}
       ${forumProfileTitleStatus && forumProfileUser.isOwn
         ? html`<div className="muted profile-card-title-status">${forumProfileTitleStatus}</div>`
         : html``}
-      ${forumProfileUser.isStaffUser && forumProfileUser.showStaffGradient !== false
-        ? html`<div className="profile-card-badge">Hardtale Staff Member</div>`
-        : html``}
+      ${renderStaffBadge(forumProfileUser)}
     </div>`;
   }
 
@@ -4283,14 +4607,7 @@ function ForumPage({ isAdmin = false }) {
                     >
                       <${AuthorName} value=${selectedPost.authorName || "User"} isStaffLabel=${isStaffLabel} />
                     </button>
-                    <span
-                      className=${`comment-rank forum-author-rank rank-${String(
-                        selectedPost.authorRank || "Unregistered",
-                      )
-                        .trim()
-                        .toLowerCase()
-                        .replace(/[^a-z0-9]+/g, "-")}`.trim()}
-                    >
+                    <span className=${forumRankClassName(selectedPost)}>
                       ${(() => {
                         const iconType = getRankIconType(selectedPost.authorRank || "");
                         return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
@@ -4458,14 +4775,7 @@ function ForumPage({ isAdmin = false }) {
                       >
                         <${AuthorName} value=${post.authorName || "User"} isStaffLabel=${isStaffLabel} />
                       </button>
-                      <span
-                        className=${`comment-rank forum-author-rank rank-${String(
-                          post.authorRank || "Unregistered",
-                        )
-                          .trim()
-                          .toLowerCase()
-                          .replace(/[^a-z0-9]+/g, "-")}`.trim()}
-                      >
+                      <span className=${forumRankClassName(post)}>
                         ${(() => {
                           const iconType = getRankIconType(post.authorRank || "");
                           return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
@@ -5138,38 +5448,13 @@ function NotFoundPage({
 }
 
 function renderStoreIcon(type) {
-  const gradientId = `store-icon-gradient-${type}`;
-  const gradient = html`<defs>
-    <linearGradient id=${gradientId} x1="100%" y1="50%" x2="0%" y2="50%">
-      <stop offset="0%" stop-color="var(--accent-2)" />
-      <stop offset="100%" stop-color="var(--accent)" />
-    </linearGradient>
-  </defs>`;
-  switch (type) {
-    case "crown":
-      return html`<svg viewBox="0 0 24 24" aria-hidden="true">
-        ${gradient}
-        <path fill=${`url(#${gradientId})`} d="M3 7l4 3 5-6 5 6 4-3-2 12H5L3 7zm4 12h10l.3-2H6.7l.3 2z" />
-      </svg>`;
-    case "shield":
-      return html`<svg viewBox="0 0 24 24" aria-hidden="true">
-        ${gradient}
-        <path
-          fill=${`url(#${gradientId})`}
-          d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3zm0 4.1L7 7.8V11c0 3.6 2.2 6.8 5 8 2.8-1.2 5-4.4 5-8V7.8l-5-1.7z"
-        />
-      </svg>`;
-    case "star":
-    default:
-      return html`<svg viewBox="0 0 24 24" aria-hidden="true">
-        ${gradient}
-        <path fill=${`url(#${gradientId})`} d="M12 2l2.5 6.2 6.7.6-5.1 4.3 1.6 6.5-5.7-3.6-5.7 3.6 1.6-6.5-5.1-4.3 6.7-.6L12 2z" />
-      </svg>`;
-  }
+  const src = STORE_RANK_ICON_SVG[String(type || "").trim()] || STORE_RANK_ICON_SVG.star;
+  return html`<img src=${src} alt="" aria-hidden="true" />`;
 }
 
 function getRankIconType(label) {
   const normalized = String(label || "").trim().toLowerCase();
+  if (normalized === "staff") return "staff";
   if (normalized === "hero") return "star";
   if (normalized === "legend") return "crown";
   if (normalized === "mythic") return "shield";
@@ -5178,6 +5463,8 @@ function getRankIconType(label) {
 
 function renderRankIcon(type) {
   switch (type) {
+    case "staff":
+      return html`<img className="rank-icon-image" src=${STAFF_RANK_ICON_SVG} alt="" aria-hidden="true" />`;
     case "crown":
       return html`<svg viewBox="0 0 24 24" aria-hidden="true">
         <path fill="currentColor" d="M3 7l4 3 5-6 5 6 4-3-2 12H5L3 7zm4 12h10l.3-2H6.7l.3 2z" />
@@ -5196,6 +5483,19 @@ function renderRankIcon(type) {
     default:
       return html``;
   }
+}
+
+function renderStaffBadge(entry) {
+  if (!entry || !entry.staff || entry.showStaffBadge === false) return html``;
+  const badgeClass = `profile-card-badge staff-badge ${
+    entry.showStaffGradient === false ? "staff-static" : ""
+  }`.trim();
+  return html`<div className=${badgeClass}>
+    ${entry.showStaffBadgeIcon !== false
+      ? html`<img className="staff-badge-icon" src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" />`
+      : html``}
+    <span>STAFF</span>
+  </div>`;
 }
 
 function NotificationsPanel({ notifications, onView, onOpenProfile }) {
@@ -6306,13 +6606,16 @@ function Layout() {
     const name = String(item.authorName || item.author || "User");
     const username = formatUsernameForDisplay(item.authorUsername);
     const rankLabel = String(item.authorRank || "Unregistered");
-    const staff = isStaffLabel(name) || isStaffLabel(username);
+    const staff = isStaffLabel(name) || isStaffLabel(username) || isStaffLabel(rankLabel);
     setNotificationProfileUser({
       name,
       username,
       image: String(item.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel,
       staff,
+      showStaffBadge: item?.authorShowStaffBadge !== false,
+      showStaffBadgeIcon: item?.authorShowStaffBadgeIcon !== false,
+      showStaffGradient: item?.authorShowStaffGradient !== false,
     });
     setNotificationProfileOpen(true);
   }
@@ -6808,9 +7111,7 @@ function Layout() {
                     <span>${notificationProfileUser.rankLabel || "Unregistered"}</span>`;
                 })()}
               </div>
-              ${notificationProfileUser.staff
-                ? html`<div className="profile-card-badge">Hardtale Staff Member</div>`
-                : html``}
+              ${renderStaffBadge(notificationProfileUser)}
             </div>`
           : html``}
       <//>
