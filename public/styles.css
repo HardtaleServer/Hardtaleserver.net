@@ -799,6 +799,60 @@ body[data-theme="light"] .settings-icon {
   gap: 6px;
 }
 
+.forum-post-author-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.forum-post-author-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid var(--stroke);
+}
+
+.forum-post-op {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 999px;
+  padding: 1px 6px;
+  color: var(--text);
+}
+
+.forum-post-author-row .notification-timestamp {
+  margin-left: auto;
+  text-align: right;
+}
+
+.forum-post-header-divider {
+  height: 1px;
+  background: var(--stroke);
+  opacity: 0.9;
+}
+
+.forum-post-preview {
+  margin: 0;
+  color: var(--text);
+}
+
+.forum-post-meta {
+  justify-content: flex-start;
+  align-items: center;
+  gap: 8px;
+}
+
+.forum-post-meta .notification-timestamp {
+  margin-left: 0;
+  text-align: left;
+}
+
 .forum-post-link:hover .news-title-row h3 {
   color: var(--accent);
 }
@@ -1904,7 +1958,25 @@ emoji-picker.reaction-picker-panel {
 }
 
 .comment-author {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-weight: 600;
+}
+
+.comment-op-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid var(--stroke);
+  border-radius: 999px;
+  padding: 1px 5px;
+  color: var(--muted);
+  line-height: 1;
 }
 
 .comment-author.staff {
@@ -1940,11 +2012,28 @@ emoji-picker.reaction-picker-panel {
 }
 
 .comment-rank {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
+}
+
+.rank-icon {
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rank-icon svg {
+  width: 100%;
+  height: 100%;
+  display: block;
 }
 
 .comment-rank.rank-unregistered {
@@ -1970,89 +2059,49 @@ emoji-picker.reaction-picker-panel {
 }
 
 .comment-rank.rank-mythic {
-  color: #3fe8ff;
+  color: #ff621d;
 }
 
 .comment-author.rank-hero,
 .comment-rank.rank-hero,
 .profile-card-name.rank-hero {
-  position: relative;
-  text-shadow:
-    0 0 6px rgba(255, 170, 0, 0.32),
-    0 0 12px rgba(255, 212, 120, 0.22);
+  color: #ffaa00;
+  text-shadow: none;
 }
 
 .comment-author.rank-hero::after,
 .comment-rank.rank-hero::after,
 .profile-card-name.rank-hero::after {
-  content: "";
-  position: absolute;
-  inset: -2px -4px;
-  border-radius: 8px;
-  background: radial-gradient(circle at 20% 50%, rgba(255, 208, 110, 0.28), transparent 60%);
-  filter: blur(5px);
-  opacity: 0.42;
-  z-index: -1;
-  pointer-events: none;
-  animation: rankHeroPulse 3.2s ease-in-out infinite;
+  content: none;
+  animation: none;
 }
 
 .comment-author.rank-legend,
 .comment-rank.rank-legend,
 .profile-card-name.rank-legend {
-  position: relative;
-  text-shadow:
-    0 0 7px rgba(170, 0, 170, 0.36),
-    0 0 16px rgba(210, 90, 255, 0.22);
+  color: #aa00aa;
+  text-shadow: none;
 }
 
 .comment-author.rank-legend::after,
 .comment-rank.rank-legend::after,
 .profile-card-name.rank-legend::after {
-  content: "";
-  position: absolute;
-  inset: -2px -4px;
-  border-radius: 8px;
-  background: linear-gradient(
-    110deg,
-    rgba(120, 20, 200, 0.06) 0%,
-    rgba(210, 90, 255, 0.22) 45%,
-    rgba(120, 20, 200, 0.06) 100%
-  );
-  background-size: 220% 100%;
-  filter: blur(4px);
-  opacity: 0.5;
-  z-index: -1;
-  pointer-events: none;
-  animation: rankLegendSweep 4.4s linear infinite;
+  content: none;
+  animation: none;
 }
 
 .comment-author.rank-mythic,
 .comment-rank.rank-mythic,
 .profile-card-name.rank-mythic {
-  position: relative;
-  color: #3fe8ff;
-  text-shadow:
-    0 0 6px rgba(70, 235, 255, 0.4),
-    0 0 14px rgba(70, 190, 255, 0.28),
-    0 0 22px rgba(115, 140, 255, 0.2);
+  color: #ff621d;
+  text-shadow: none;
 }
 
 .comment-author.rank-mythic::after,
 .comment-rank.rank-mythic::after,
 .profile-card-name.rank-mythic::after {
-  content: "";
-  position: absolute;
-  inset: -3px -5px;
-  border-radius: 10px;
-  background:
-    radial-gradient(circle at 25% 30%, rgba(145, 255, 255, 0.34), transparent 55%),
-    radial-gradient(circle at 75% 70%, rgba(90, 168, 255, 0.3), transparent 55%);
-  filter: blur(6px);
-  opacity: 0.5;
-  z-index: -1;
-  pointer-events: none;
-  animation: rankMythicOrbit 5.4s ease-in-out infinite;
+  content: none;
+  animation: none;
 }
 
 .comment-author.rank-effects-off.rank-hero,
@@ -2653,6 +2702,10 @@ emoji-picker.reaction-picker-panel {
 
 .link-status-error {
   color: #ff8f8f;
+}
+
+.link-status-info {
+  color: #8ec2ff;
 }
 
 .news-hero {
@@ -4623,14 +4676,44 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   .comment-header-desktop {
     display: flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: space-between;
     gap: 10px;
+  }
+
+  .comment-header-main {
+    min-width: 0;
   }
 
   .comment-header-desktop .comment-identity {
     display: flex;
     align-items: baseline;
     gap: 8px;
+  }
+
+  .comment-profile-peek {
+    border: 1px solid var(--stroke);
+    background: var(--bg-soft);
+    color: var(--muted);
+    width: 20px;
+    height: 20px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+  }
+
+  .comment-profile-peek:hover {
+    color: var(--accent);
+    border-color: var(--accent);
+    transform: translateY(-1px);
+  }
+
+  .comment-profile-peek svg {
+    width: 11px;
+    height: 11px;
+    display: block;
   }
 
   .comment-header-desktop .comment-rank {

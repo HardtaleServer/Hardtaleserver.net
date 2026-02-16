@@ -58,7 +58,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.24";
+const VERSION = "1.3.26";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_EMAILS = new Set([
   "chashsmurfis@gmail.com",
@@ -131,6 +131,24 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.26",
+    date: "2026-02-16",
+    items: [
+      "Switched /link feature gating to LINKING_ENABLED with local mock mode when disabled.",
+      "Kept /link URL parsing active while simulating redeem outcomes for invalid/expired, already used, rate limited, and unavailable states.",
+      "Preserved the same UI flow so enabling live server integration only requires flipping the env flag.",
+    ],
+  },
+  {
+    version: "1.3.25",
+    date: "2026-02-16",
+    items: [
+      "Added LINK_REDEEM_ENABLED feature flag so /link codes can be captured while live game-server redeem is disabled.",
+      "Expanded /link UX states for linked, invalid/expired code, already used, rate limited, and server unavailable.",
+      "Added backend error code passthrough for plugin redeem responses.",
+    ],
+  },
   {
     version: "1.3.24",
     date: "2026-02-16",
@@ -405,7 +423,7 @@ const RANK_TIER_ORDER = {
   "rank-legend": 2,
   "rank-mythic": 3,
 };
-const PROFILE_DISPLAY_TITLES = ["Registered", "Hero", "Legend", "Mythic"];
+const PROFILE_DISPLAY_TITLES = ["Staff", "Registered", "Hero", "Legend", "Mythic"];
 const HOME_FORUM_PREVIEW_SECTIONS = [
   "updates",
   "bug-reports",
@@ -1147,7 +1165,14 @@ function ReactionBar({ itemType, itemId }) {
   `;
 }
 
-function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, commentsLocked = false }) {
+function CommentThread({
+  newsId,
+  focusCommentId,
+  focusReplyId,
+  autoOpen,
+  commentsLocked = false,
+  threadOwnerUserId = "",
+}) {
   const { getToken, isSignedIn, userId } = useAuth();
   const { openSignIn } = useClerk();
   const [open, setOpen] = useState(Boolean(autoOpen));
@@ -1172,6 +1197,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
   const [historyItems, setHistoryItems] = useState([]);
   const [replyTargets, setReplyTargets] = useState({});
   const focusAppliedRef = useRef(false);
+  const isForumThread = String(newsId || "").startsWith("forum:");
 
   async function loadComments() {
     try {
@@ -1253,6 +1279,11 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
     ]
       .filter(Boolean)
       .join(" ");
+  }
+
+  function isOriginalPoster(entry) {
+    if (!isForumThread || !threadOwnerUserId || !entry?.userId) return false;
+    return String(entry.userId) === String(threadOwnerUserId);
   }
 
   function authorSizeClass(value) {
@@ -1833,6 +1864,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
                         entry=${comment}
                         rank=${resolveRank(comment)}
                         authorSizeClass=${authorSizeClass}
+                        showOpBadge=${isOriginalPoster(comment)}
                       />
                       <${CommentMeta}
                         entry=${comment}
@@ -1842,11 +1874,30 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
                     </div>
                     <div className="comment-right">
                       <div className="comment-header-desktop">
-                        <${CommentIdentity}
-                          entry=${comment}
-                          rank=${resolveRank(comment)}
-                          authorSizeClass=${authorSizeClass}
-                        />
+                        <div className="comment-header-main">
+                          <${CommentIdentity}
+                            entry=${comment}
+                            rank=${resolveRank(comment)}
+                            authorSizeClass=${authorSizeClass}
+                            showOpBadge=${isOriginalPoster(comment)}
+                          />
+                        </div>
+                        ${isForumThread
+                          ? html`<button
+                              className="comment-profile-peek"
+                              type="button"
+                              onClick=${() => openProfileCard(comment)}
+                              title="Open profile card"
+                              aria-label="Open profile card"
+                            >
+                              <svg viewBox="0 0 24 24" aria-hidden="true">
+                                <path
+                                  fill="currentColor"
+                                  d="M12 3a5 5 0 100 10 5 5 0 000-10zm0 12c-4.2 0-7.5 2.2-8.6 5.4-.2.6.3 1.1.9 1.1h15.4c.6 0 1.1-.6.9-1.1C19.5 17.2 16.2 15 12 15z"
+                                />
+                              </svg>
+                            </button>`
+                          : html``}
                       </div>
                       <${CommentMeta}
                         entry=${comment}
@@ -1970,6 +2021,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
                                         entry=${reply}
                                         rank=${resolveRank(reply)}
                                         authorSizeClass=${authorSizeClass}
+                                        showOpBadge=${isOriginalPoster(reply)}
                                       />
                                       <${CommentMeta}
                                         entry=${reply}
@@ -1979,11 +2031,30 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
                                     </div>
                                     <div className="comment-right">
                                       <div className="comment-header-desktop">
-                                        <${CommentIdentity}
-                                          entry=${reply}
-                                          rank=${resolveRank(reply)}
-                                          authorSizeClass=${authorSizeClass}
-                                        />
+                                        <div className="comment-header-main">
+                                          <${CommentIdentity}
+                                            entry=${reply}
+                                            rank=${resolveRank(reply)}
+                                            authorSizeClass=${authorSizeClass}
+                                            showOpBadge=${isOriginalPoster(reply)}
+                                          />
+                                        </div>
+                                        ${isForumThread
+                                          ? html`<button
+                                              className="comment-profile-peek"
+                                              type="button"
+                                              onClick=${() => openProfileCard(reply)}
+                                              title="Open profile card"
+                                              aria-label="Open profile card"
+                                            >
+                                              <svg viewBox="0 0 24 24" aria-hidden="true">
+                                                <path
+                                                  fill="currentColor"
+                                                  d="M12 3a5 5 0 100 10 5 5 0 000-10zm0 12c-4.2 0-7.5 2.2-8.6 5.4-.2.6.3 1.1.9 1.1h15.4c.6 0 1.1-.6.9-1.1C19.5 17.2 16.2 15 12 15z"
+                                                />
+                                              </svg>
+                                            </button>`
+                                          : html``}
                                       </div>
                                       <${CommentMeta}
                                         entry=${reply}
@@ -2161,7 +2232,13 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
                   .toLowerCase()
                   .replace(/[^a-z0-9]+/g, "-")}`.trim()}
               >
-                ${profileUser.rankLabel}
+                ${(() => {
+                  const iconType = getRankIconType(profileUser.rankLabel || "");
+                  return html`
+                    ${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                    <span>${profileUser.rankLabel}</span>
+                  `;
+                })()}
               </div>
               ${profileUser.isOwn
                 ? html`<label className="profile-card-title-picker">
@@ -3629,6 +3706,13 @@ function ForumPage() {
   const [selectedPost, setSelectedPost] = useState(null);
   const [selectedPostLoading, setSelectedPostLoading] = useState(false);
 
+  function getForumPreviewText(body, limit = 220) {
+    const text = String(body || "").trim();
+    if (!text) return "";
+    if (text.length <= limit) return text;
+    return `${text.slice(0, limit).trimEnd()}...`;
+  }
+
   async function loadSectionPosts(sectionId) {
     if (!sectionId || !sectionMap[sectionId]) {
       setPosts([]);
@@ -3748,18 +3832,29 @@ function ForumPage() {
               : !selectedPost
               ? html`<p className="muted">Post not found in this section.</p>`
               : html`<article className="news-card forum-post-card">
+                  <div className="forum-post-author-row">
+                    <img
+                      className="forum-post-author-avatar"
+                      src=${selectedPost.authorImage || "/assets/HardTale_H_GreyScale.png"}
+                      alt=${selectedPost.authorName || "User"}
+                    />
+                    <span className="muted">By</span>
+                    <${AuthorName} value=${selectedPost.authorName || "User"} isStaffLabel=${isStaffLabel} />
+                    <span className="forum-post-op">OP</span>
+                    <${TimestampText} value=${selectedPost.createdAt} formatTimestamp=${formatTimestamp} />
+                  </div>
+                  <div className="forum-post-header-divider"></div>
                   <div className="news-header">
                     <div className="news-title-row">
                       <h3>${selectedPost.title}</h3>
                     </div>
                   </div>
-                  <div className="news-meta">
-                    <span className="muted">By</span>
-                    <${AuthorName} value=${selectedPost.authorName || "User"} isStaffLabel=${isStaffLabel} />
-                    <${TimestampText} value=${selectedPost.createdAt} formatTimestamp=${formatTimestamp} />
-                  </div>
                   <p className="news-body-paragraph">${selectedPost.body}</p>
-                  <${CommentThread} newsId=${`forum:${selectedPost.id}`} autoOpen=${true} />
+                  <${CommentThread}
+                    newsId=${`forum:${selectedPost.id}`}
+                    autoOpen=${true}
+                    threadOwnerUserId=${selectedPost.createdBy || selectedPost.authorUserId || ""}
+                  />
                 </article>`}
           </section>
         </section>
@@ -3815,16 +3910,24 @@ function ForumPage() {
                       className="forum-post-link"
                       to=${`/forum?section=${encodeURIComponent(selectedSectionId)}&post=${encodeURIComponent(post.id)}`}
                     >
+                      <div className="forum-post-author-row">
+                        <img
+                          className="forum-post-author-avatar"
+                          src=${post.authorImage || "/assets/HardTale_H_GreyScale.png"}
+                          alt=${post.authorName || "User"}
+                        />
+                        <span className="muted">By</span>
+                        <${AuthorName} value=${post.authorName || "User"} isStaffLabel=${isStaffLabel} />
+                        <span className="forum-post-op">OP</span>
+                        <${TimestampText} value=${post.createdAt} formatTimestamp=${formatTimestamp} />
+                      </div>
+                      <div className="forum-post-header-divider"></div>
                       <div className="news-header">
                         <div className="news-title-row">
                           <h3>${post.title}</h3>
                         </div>
                       </div>
-                      <div className="news-meta">
-                        <span className="muted">By</span>
-                        <${AuthorName} value=${post.authorName || "User"} isStaffLabel=${isStaffLabel} />
-                        <${TimestampText} value=${post.createdAt} formatTimestamp=${formatTimestamp} />
-                      </div>
+                      <p className="news-body-paragraph forum-post-preview">${getForumPreviewText(post.body)}</p>
                     </${Link}>
                   </article>`,
                 )}
@@ -4437,6 +4540,36 @@ function renderStoreIcon(type) {
   }
 }
 
+function getRankIconType(label) {
+  const normalized = String(label || "").trim().toLowerCase();
+  if (normalized === "hero") return "star";
+  if (normalized === "legend") return "crown";
+  if (normalized === "mythic") return "shield";
+  return "";
+}
+
+function renderRankIcon(type) {
+  switch (type) {
+    case "crown":
+      return html`<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="currentColor" d="M3 7l4 3 5-6 5 6 4-3-2 12H5L3 7zm4 12h10l.3-2H6.7l.3 2z" />
+      </svg>`;
+    case "shield":
+      return html`<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path
+          fill="currentColor"
+          d="M12 2l8 3v6c0 5-3.4 9.4-8 11-4.6-1.6-8-6-8-11V5l8-3zm0 4.1L7 7.8V11c0 3.6 2.2 6.8 5 8 2.8-1.2 5-4.4 5-8V7.8l-5-1.7z"
+        />
+      </svg>`;
+    case "star":
+      return html`<svg viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="currentColor" d="M12 2l2.5 6.2 6.7.6-5.1 4.3 1.6 6.5-5.7-3.6-5.7 3.6 1.6-6.5-5.1-4.3 6.7-.6L12 2z" />
+      </svg>`;
+    default:
+      return html``;
+  }
+}
+
 function NotificationsPanel({ notifications, onView }) {
   if (!notifications.length) {
     return html`<p className="muted">No notifications yet.</p>`;
@@ -4899,6 +5032,8 @@ function LinkPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [statusType, setStatusType] = useState("");
+  const [linkingEnabled, setLinkingEnabled] = useState(true);
+  const [linkMode, setLinkMode] = useState("live");
   const [linkedInfo, setLinkedInfo] = useState({
     linked: false,
     maskedPlayerUuid: "",
@@ -4921,6 +5056,8 @@ function LinkPage() {
         const response = await apiFetchWithToken(getToken, true, "/api/link/status");
         const data = await response.json().catch(() => ({}));
         if (cancelled || !response.ok) return;
+        setLinkingEnabled(data?.linkingEnabled !== false);
+        setLinkMode(String(data?.linkMode || "").toLowerCase() === "mock" ? "mock" : "live");
         if (!data?.linked) return;
         setLinkedInfo({
           linked: true,
@@ -5003,6 +5140,27 @@ function LinkPage() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
+        const errorCode = String(data?.code || "").toUpperCase();
+        if (errorCode === "INVALID_CODE" || errorCode === "EXPIRED_CODE") {
+          setStatusType("error");
+          setStatusMessage("Invalid or expired code. Run /link in-game again for a fresh code.");
+          return;
+        }
+        if (errorCode === "ALREADY_USED" || errorCode === "ALREADY_LINKED") {
+          setStatusType("error");
+          setStatusMessage("This code or game account was already used for linking.");
+          return;
+        }
+        if (errorCode === "RATE_LIMITED" || response.status === 429) {
+          setStatusType("error");
+          setStatusMessage("Too many attempts. Please wait and try again.");
+          return;
+        }
+        if (errorCode === "SERVER_UNAVAILABLE" || response.status >= 500) {
+          setStatusType("error");
+          setStatusMessage("Link service is unavailable right now. Try again later.");
+          return;
+        }
         setStatusType("error");
         setStatusMessage(String(data?.error || "Link failed. Try again."));
         return;
@@ -5012,8 +5170,14 @@ function LinkPage() {
         maskedPlayerUuid: String(data?.maskedPlayerUuid || ""),
         playerName: String(data?.playerName || ""),
       });
+      const nextMode = String(data?.linkMode || "").toLowerCase() === "mock" ? "mock" : "live";
+      setLinkMode(nextMode);
       setStatusType("success");
-      setStatusMessage("Your game account is linked.");
+      setStatusMessage(
+        nextMode === "mock"
+          ? "Mock link succeeded. This is a simulated result until live server integration is enabled."
+          : "Your game account is linked.",
+      );
     } catch {
       setStatusType("error");
       setStatusMessage("Link failed. Please try again.");
@@ -5058,8 +5222,13 @@ function LinkPage() {
             disabled=${!isComplete || isSubmitting}
             onClick=${onVerifyClick}
           >
-            ${isSubmitting ? "Linking..." : "Verify Link Code"}
+            ${isSubmitting ? (linkMode === "mock" ? "Simulating..." : "Linking...") : linkMode === "mock" ? "Simulate Link Code" : "Verify Link Code"}
           </button>
+          ${!linkingEnabled
+            ? html`<div className="link-status link-status-info">
+                Mock mode active: live game-server redeem is disabled. You can still test full /link UX flows.
+              </div>`
+            : html``}
           ${linkedInfo.linked
             ? html`<div className="link-status link-status-success">
                 Linked account: ${linkedInfo.playerName || linkedInfo.maskedPlayerUuid || "Linked"}
@@ -5067,7 +5236,11 @@ function LinkPage() {
             : html``}
           ${statusMessage
             ? html`<div className=${`link-status ${
-                statusType === "error" ? "link-status-error" : "link-status-success"
+                statusType === "error"
+                  ? "link-status-error"
+                  : statusType === "info"
+                  ? "link-status-info"
+                  : "link-status-success"
               }`}>${statusMessage}</div>`
             : html``}
           <div className="muted link-hint">Use /link in-game soon to generate this code from your UUID.</div>

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-16 (v1.3.26)
+- Switched `/link` feature gating to `LINKING_ENABLED` with local mock mode when disabled.
+- Kept `/link` URL parsing active while simulating redeem outcomes for invalid/expired, already used, rate-limited, and unavailable states.
+- Preserved the same `/link` UI flow so enabling live server integration only requires flipping the env flag.
+
+## 2026-02-16 (v1.3.25)
+- Added `LINK_REDEEM_ENABLED` feature flag so `/link` can accept code input while live redeem is disabled.
+- Expanded `/link` UX states for linked, invalid/expired code, already used, rate limited, and server unavailable.
+- Added backend error-code passthrough for plugin redeem responses.
+
 ## 2026-02-16 (v1.3.24)
 - Added account linking APIs: `/api/link/status` and `/api/link/redeem`, including Mongo persistence for `webUserId <-> playerUuid`.
 - Added `/link` page verify flow (authenticated redeem call, loading/success/error states, and linked account status display).

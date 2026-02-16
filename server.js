@@ -69,12 +69,16 @@ const STORE_RANK_PRODUCTS = {
 const STORE_PRODUCT_IDS = new Set(Object.keys(STORE_RANK_PRODUCTS));
 const STORE_RANK_BY_LABEL = { Hero: 1, Legend: 2, Mythic: 3 };
 const DISPLAY_TITLES = ["Registered", "Hero", "Legend", "Mythic"];
+const STAFF_DISPLAY_TITLE = "Staff";
 const DISPLAY_TITLE_TIER = { Registered: 0, Hero: 1, Legend: 2, Mythic: 3 };
 const OWNED_RANKS = ["Unregistered", "Registered", "Hero", "Legend", "Mythic"];
 const MONGO_URI = process.env.MONGO_URI || "";
 const MONGO_DB_NAME = process.env.MONGO_DB || "hardtaledb";
 const LINK_SERVICE_BASE_URL = String(process.env.LINK_SERVICE_BASE_URL || "").trim();
 const LINK_SERVICE_AUTH_TOKEN = String(process.env.LINK_SERVICE_AUTH_TOKEN || "").trim();
+const LINKING_ENABLED = String(
+  process.env.LINKING_ENABLED || process.env.LINK_REDEEM_ENABLED || "false",
+).toLowerCase() === "true";
 const LINK_SERVICE_TIMEOUT_MS = Math.max(
   2000,
   Math.min(Number(process.env.LINK_SERVICE_TIMEOUT_MS || 8000), 20000),
@@ -536,10 +540,10 @@ function parseJsonSafely(raw) {
 
 async function redeemLinkCodeWithGameServer({ code, webUserId, idempotencyKey }) {
   if (!LINK_SERVICE_BASE_URL) {
-    return { ok: false, status: 503, error: "Link service base URL is not configured" };
+    return { ok: false, status: 503, code: "SERVER_UNAVAILABLE", error: "Link service base URL is not configured" };
   }
   if (!LINK_SERVICE_AUTH_TOKEN) {
-    return { ok: false, status: 503, error: "Link service auth token is not configured" };
+    return { ok: false, status: 503, code: "SERVER_UNAVAILABLE", error: "Link service auth token is not configured" };
   }
 
   const controller = new AbortController();
@@ -565,6 +569,7 @@ async function redeemLinkCodeWithGameServer({ code, webUserId, idempotencyKey })
       return {
         ok: false,
         status: response.status,
+        code: normalizeText(parsedBody?.code || "", 60),
         error:
           normalizeText(parsedBody?.error || parsedBody?.message || rawBody || "Redeem failed", 200) ||
           "Redeem failed",
@@ -573,12 +578,39 @@ async function redeemLinkCodeWithGameServer({ code, webUserId, idempotencyKey })
     return { ok: true, status: response.status, data: parsedBody || {} };
   } catch (error) {
     if (error?.name === "AbortError") {
-      return { ok: false, status: 504, error: "Redeem request timed out" };
+      return { ok: false, status: 504, code: "SERVER_UNAVAILABLE", error: "Redeem request timed out" };
     }
-    return { ok: false, status: 502, error: "Failed to reach link service" };
+    return { ok: false, status: 502, code: "SERVER_UNAVAILABLE", error: "Failed to reach link service" };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function buildMockRedeemResult({ code }) {
+  const normalizedCode = normalizeLinkCode(code);
+  if (normalizedCode.startsWith("EXP")) {
+    return { ok: false, status: 400, code: "EXPIRED_CODE", error: "Mock mode: code expired" };
+  }
+  if (normalizedCode.startsWith("USED")) {
+    return { ok: false, status: 409, code: "ALREADY_USED", error: "Mock mode: code already used" };
+  }
+  if (normalizedCode.startsWith("RATE")) {
+    return { ok: false, status: 429, code: "RATE_LIMITED", error: "Mock mode: too many attempts" };
+  }
+  if (normalizedCode.startsWith("DOWN")) {
+    return { ok: false, status: 503, code: "SERVER_UNAVAILABLE", error: "Mock mode: link service unavailable" };
+  }
+
+  const uuidSeed = crypto.createHash("sha256").update(`mock-link:${normalizedCode}`).digest("hex").slice(0, 32);
+  const playerUuid = normalizePlayerUuid(uuidSeed);
+  return {
+    ok: true,
+    status: 200,
+    data: {
+      playerUuid,
+      playerName: `Mock-${normalizedCode.slice(-4)}`,
+    },
+  };
 }
 
 function formatUsernameForDisplay(value, limit = 80) {
@@ -856,6 +888,7 @@ function maxRankLabel(currentRank, nextRank) {
 
 function normalizeDisplayTitle(value) {
   const title = normalizeText(value, 20);
+  if (title === STAFF_DISPLAY_TITLE) return STAFF_DISPLAY_TITLE;
   return DISPLAY_TITLES.includes(title) ? title : "";
 }
 
@@ -873,11 +906,16 @@ function getUnlockedDisplayTitles(ownedRank) {
 
 function resolveDisplayRankFromMetadata(metadata = {}, includeAllTitles = false) {
   const ownedRank = normalizeOwnedRank(metadata?.rank) || "Unregistered";
-  const availableTitles = includeAllTitles ? [...DISPLAY_TITLES] : getUnlockedDisplayTitles(ownedRank);
+  const baseTitles = includeAllTitles ? [...DISPLAY_TITLES] : getUnlockedDisplayTitles(ownedRank);
+  const availableTitles = includeAllTitles
+    ? [STAFF_DISPLAY_TITLE, ...baseTitles]
+    : baseTitles;
   const preferred = normalizeDisplayTitle(metadata?.displayRank);
   const displayRank =
     preferred && availableTitles.includes(preferred)
       ? preferred
+      : includeAllTitles
+      ? STAFF_DISPLAY_TITLE
       : ownedRank === "Unregistered"
       ? "Unregistered"
       : ownedRank;
@@ -2546,10 +2584,12 @@ app.get("/api/link/status", async (req, res) => {
     if (!auth) return;
     const doc = await linkedAccountsCollection.findOne({ webUserId: auth.userId });
     if (!doc) {
-      return res.json({ linked: false });
+      return res.json({ linked: false, linkingEnabled: LINKING_ENABLED, linkMode: LINKING_ENABLED ? "live" : "mock" });
     }
     return res.json({
       linked: true,
+      linkingEnabled: LINKING_ENABLED,
+      linkMode: LINKING_ENABLED ? "live" : "mock",
       playerUuid: doc.playerUuid || "",
       maskedPlayerUuid: maskPlayerUuid(doc.playerUuid),
       playerName: normalizeText(doc.playerName || "", 60),
@@ -2569,29 +2609,43 @@ app.post("/api/link/redeem", async (req, res) => {
 
     const code = normalizeLinkCode(req.body?.code);
     if (!/^[A-Z0-9]{8}$/.test(code)) {
-      return res.status(400).json({ error: "Link code must be 8 letters/numbers" });
+      return res.status(400).json({ code: "INVALID_CODE", error: "Link code must be 8 letters/numbers" });
     }
 
-    const idempotencyKey = crypto.randomUUID();
-    const redeemResult = await redeemLinkCodeWithGameServer({
-      code,
-      webUserId: auth.userId,
-      idempotencyKey,
-    });
+    let redeemResult;
+    if (LINKING_ENABLED) {
+      const idempotencyKey = crypto.randomUUID();
+      redeemResult = await redeemLinkCodeWithGameServer({
+        code,
+        webUserId: auth.userId,
+        idempotencyKey,
+      });
+    } else {
+      redeemResult = buildMockRedeemResult({ code });
+    }
     if (!redeemResult.ok) {
-      return res.status(redeemResult.status || 502).json({ error: redeemResult.error || "Redeem failed" });
+      return res.status(redeemResult.status || 502).json({
+        code: redeemResult.code || "",
+        error: redeemResult.error || "Redeem failed",
+      });
     }
 
     const payload = redeemResult.data || {};
     const playerUuid = normalizePlayerUuid(payload.playerUuid || payload.playerUUID || payload.uuid || payload.playerId);
     if (!playerUuid) {
-      return res.status(502).json({ error: "Redeem succeeded but did not return a valid player UUID" });
+      return res.status(502).json({
+        code: "SERVER_UNAVAILABLE",
+        error: "Redeem succeeded but did not return a valid player UUID",
+      });
     }
 
     const playerName = normalizeText(payload.playerName || payload.username || payload.playerUsername || "", 60);
     const existingByPlayer = await linkedAccountsCollection.findOne({ playerUuid });
     if (existingByPlayer && existingByPlayer.webUserId !== auth.userId) {
-      return res.status(409).json({ error: "That game account is already linked to another web account" });
+      return res.status(409).json({
+        code: "ALREADY_LINKED",
+        error: "That game account is already linked to another web account",
+      });
     }
 
     const nowIso = new Date().toISOString();
@@ -2602,7 +2656,7 @@ app.post("/api/link/redeem", async (req, res) => {
           webUserId: auth.userId,
           playerUuid,
           playerName,
-          linkedSource: "redeemCode",
+          linkedSource: LINKING_ENABLED ? "redeemCode" : "mock",
           codeLast4: code.slice(-4),
           updatedAt: nowIso,
           linkedAt: nowIso,
@@ -2620,10 +2674,14 @@ app.post("/api/link/redeem", async (req, res) => {
       playerUuid,
       maskedPlayerUuid: maskPlayerUuid(playerUuid),
       playerName,
+      linkMode: LINKING_ENABLED ? "live" : "mock",
     });
   } catch (error) {
     if (error?.code === 11000) {
-      return res.status(409).json({ error: "That game account is already linked to another web account" });
+      return res.status(409).json({
+        code: "ALREADY_LINKED",
+        error: "That game account is already linked to another web account",
+      });
     }
     console.error("Failed to redeem link code", error);
     return res.status(500).json({ error: "Failed to redeem link code" });

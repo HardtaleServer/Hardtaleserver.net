@@ -1,5 +1,8 @@
 # Usage
 
+## Linking notes
+- For linking mock/live setup, rollout, and rollback checklist, use: `LINKING_LAUNCH_NOTES.md`
+
 ## Run the app
 1. `cd D:\hytale-server-app`
 2. `npm install`
