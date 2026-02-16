@@ -4832,22 +4832,58 @@ function VotePage() {
 function LinkPage() {
   const location = useLocation();
   const LINK_CODE_LENGTH = 8;
-  const [digits, setDigits] = useState(Array.from({ length: LINK_CODE_LENGTH }, () => ""));
+  const LINK_CODE_REGEX = new RegExp(`^[A-Z0-9]{${LINK_CODE_LENGTH}}$`);
+  const EMPTY_CODE_ARRAY = useMemo(
+    () => Array.from({ length: LINK_CODE_LENGTH }, () => ""),
+    [LINK_CODE_LENGTH],
+  );
   const inputRefs = useRef([]);
+
+  function normalizeCode(value) {
+    return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  }
+
+  function extractCodeFromSearch(search) {
+    const rawSearch = String(search || "").replace(/^\?/, "");
+    if (!rawSearch) return "";
+
+    let decoded = rawSearch;
+    try {
+      decoded = decodeURIComponent(rawSearch);
+    } catch {}
+
+    const params = new URLSearchParams(rawSearch);
+    const candidates = [rawSearch, decoded];
+    for (const [key, value] of params.entries()) {
+      candidates.push(key, value);
+    }
+    candidates.push(...rawSearch.split(/[&=]/g), ...decoded.split(/[&=]/g));
+
+    for (const candidate of candidates) {
+      const normalized = normalizeCode(candidate);
+      if (normalized.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(normalized)) {
+        return normalized;
+      }
+      const match = normalized.match(new RegExp(`[A-Z0-9]{${LINK_CODE_LENGTH}}`));
+      if (match?.[0]) {
+        return match[0];
+      }
+    }
+
+    return "";
+  }
+
+  const [digits, setDigits] = useState(() => {
+    const initialCode = extractCodeFromSearch(location.search);
+    return initialCode ? initialCode.split("") : [...EMPTY_CODE_ARRAY];
+  });
   const fullCode = digits.join("");
-  const isComplete =
-    fullCode.length === LINK_CODE_LENGTH &&
-    new RegExp(`^\\d{${LINK_CODE_LENGTH}}$`).test(fullCode);
+  const isComplete = fullCode.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(fullCode);
 
   useEffect(() => {
-    const rawSearch = String(location.search || "").replace(/^\?/, "");
-    if (!rawSearch) return;
-    const decoded = decodeURIComponent(rawSearch);
-    const match = decoded.match(new RegExp(`\\d{${LINK_CODE_LENGTH}}`));
-    if (!match) return;
-    const parsed = match[0].split("");
-    if (parsed.length !== LINK_CODE_LENGTH) return;
-    setDigits(parsed);
+    const parsedCode = extractCodeFromSearch(location.search);
+    if (!parsedCode) return;
+    setDigits(parsedCode.split(""));
   }, [location.search, LINK_CODE_LENGTH]);
 
   function setDigitAt(index, value) {
@@ -4858,7 +4894,7 @@ function LinkPage() {
 
   function onInput(index, event) {
     const raw = String(event.target.value || "");
-    const value = raw.replace(/\D/g, "").slice(-1);
+    const value = normalizeCode(raw).slice(-1);
     setDigitAt(index, value);
     if (value && index < LINK_CODE_LENGTH - 1) {
       inputRefs.current[index + 1]?.focus();
@@ -4884,7 +4920,7 @@ function LinkPage() {
 
   function onPaste(event) {
     const text = String(event.clipboardData?.getData("text") || "");
-    const pastedDigits = text.replace(/\D/g, "").slice(0, LINK_CODE_LENGTH).split("");
+    const pastedDigits = normalizeCode(text).slice(0, LINK_CODE_LENGTH).split("");
     if (pastedDigits.length === 0) return;
     event.preventDefault();
     const next = Array.from({ length: LINK_CODE_LENGTH }, () => "");
@@ -4903,7 +4939,7 @@ function LinkPage() {
         <div className="link-eyebrow">Account Linking</div>
         <h1 className="link-title">Link Hardtale UUID to Clerk</h1>
         <p className="link-copy">
-          Enter your 8-digit link code. This page is prepared for the upcoming HardtaleNetwork plugin auth flow.
+          Enter your 8-character link code. This page is prepared for the upcoming HardtaleNetwork plugin auth flow.
         </p>
         <div className="link-code-grid" onPaste=${onPaste}>
           ${digits.map(
@@ -4914,12 +4950,12 @@ function LinkPage() {
               }}
               className="link-code-input"
               type="text"
-              inputmode="numeric"
+              inputmode="text"
               autocomplete="one-time-code"
-              pattern="[0-9]*"
+              pattern="[A-Za-z0-9]*"
               maxLength="1"
               value=${digit}
-              aria-label=${`Link code digit ${index + 1}`}
+              aria-label=${`Link code character ${index + 1}`}
               onInput=${(event) => onInput(index, event)}
               onKeyDown=${(event) => onKeyDown(index, event)}
               onFocus=${(event) => event.target.select()}
