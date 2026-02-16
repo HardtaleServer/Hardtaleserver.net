@@ -68,6 +68,16 @@ const DEFAULT_STAFF_ROLE_BY_USERNAME = new Map([
   ["smurfis", "Developer"],
   ["hardtale", "Admin"],
 ]);
+const NOTIFICATION_PROFILE_ALIAS_SOURCE_USERNAME = String(
+  process.env.NOTIFICATION_PROFILE_ALIAS_SOURCE_USERNAME || "smurfis",
+)
+  .trim()
+  .slice(0, 80);
+const NOTIFICATION_PROFILE_ALIAS_TARGETS = new Set(["system", "admin", "hardtale"]);
+let notificationAliasSourceCache = {
+  userId: "",
+  expiresAt: 0,
+};
 const STORE_RANK_PRODUCTS = {
   "rank-hero": { id: "rank-hero", name: "Hero Rank", price: 6.99, rank: "Hero", tier: 1 },
   "rank-legend": { id: "rank-legend", name: "Legend Rank", price: 14.0, rank: "Legend", tier: 2 },
@@ -825,6 +835,81 @@ async function getFreshAuthorSnapshot(userId, cache = new Map()) {
   }
 }
 
+async function resolveNotificationAliasSourceUserId() {
+  const sourceUsername = usernameKey(NOTIFICATION_PROFILE_ALIAS_SOURCE_USERNAME);
+  if (!sourceUsername) return "";
+  const now = Date.now();
+  if (notificationAliasSourceCache.expiresAt > now) {
+    return notificationAliasSourceCache.userId;
+  }
+  try {
+    const result = await clerkClient.users.getUserList({
+      query: NOTIFICATION_PROFILE_ALIAS_SOURCE_USERNAME,
+      limit: 20,
+    });
+    const users = Array.isArray(result?.data) ? result.data : [];
+    const match = users.find((entry) => usernameKey(entry?.username) === sourceUsername);
+    const userId = normalizeText(match?.id, 128);
+    notificationAliasSourceCache = {
+      userId,
+      expiresAt: now + 5 * 60 * 1000,
+    };
+    return userId;
+  } catch {
+    notificationAliasSourceCache = {
+      userId: "",
+      expiresAt: now + 30 * 1000,
+    };
+    return "";
+  }
+}
+
+function shouldApplyNotificationAlias(item) {
+  if (!item) return false;
+  const authorUserId = normalizeText(item.authorUserId, 128);
+  if (authorUserId) return false;
+  const keys = [
+    usernameKey(item.authorUsername),
+    usernameKey(item.authorName),
+    usernameKey(item.author),
+  ].filter(Boolean);
+  return keys.some((key) => NOTIFICATION_PROFILE_ALIAS_TARGETS.has(key));
+}
+
+async function applyNotificationAuthorAliases(list = []) {
+  if (!Array.isArray(list) || list.length === 0) return list;
+  if (!NOTIFICATION_PROFILE_ALIAS_SOURCE_USERNAME) return list;
+  if (!list.some((item) => shouldApplyNotificationAlias(item))) return list;
+
+  const sourceUserId = await resolveNotificationAliasSourceUserId();
+  if (!sourceUserId) return list;
+
+  const cache = new Map();
+  const snapshot = await getFreshAuthorSnapshot(sourceUserId, cache);
+  if (!snapshot) return list;
+
+  return list.map((item) => {
+    if (!shouldApplyNotificationAlias(item)) return item;
+    return {
+      ...item,
+      author: snapshot.authorName,
+      authorName: snapshot.authorName,
+      authorUserId: sourceUserId,
+      authorUsername: snapshot.authorUsername,
+      authorImage: snapshot.authorImage,
+      authorRank: snapshot.authorRank,
+      authorOwnedRank: snapshot.authorOwnedRank,
+      authorIsStaff: snapshot.authorIsStaff,
+      authorStaffRole: snapshot.authorStaffRole,
+      authorShowStaffBadge: snapshot.authorShowStaffBadge,
+      authorShowStaffBadgeIcon: snapshot.authorShowStaffBadgeIcon,
+      authorShowStaffGradient: snapshot.authorShowStaffGradient,
+      authorShowRankEffects: snapshot.authorShowRankEffects,
+      authorShowAvatarVfx: snapshot.authorShowAvatarVfx,
+    };
+  });
+}
+
 function hasAuthorSnapshotChanged(entry, snapshot) {
   if (!entry || !snapshot) return false;
   return (
@@ -1296,7 +1381,8 @@ async function resolveNotificationQueryForUser(userIdRaw) {
 
 async function withNotificationReadState(list = [], userIdRaw = "") {
   const userId = normalizeText(userIdRaw, 128);
-  const items = stripMongoIdList(list);
+  const baseItems = stripMongoIdList(list);
+  const items = await applyNotificationAuthorAliases(baseItems);
   if (!userId || items.length === 0) {
     return items.map((item) => ({ ...item, readByMe: false }));
   }
