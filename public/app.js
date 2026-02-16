@@ -1260,7 +1260,7 @@ function CommentThread({
   threadOwnerUserId = "",
 }) {
   const { getToken, isSignedIn, userId } = useAuth();
-  const { openSignIn } = useClerk();
+  const { openSignIn, openUserProfile } = useClerk();
   const [open, setOpen] = useState(Boolean(autoOpen));
   const [comments, setComments] = useState([]);
   const [commentCount, setCommentCount] = useState(0);
@@ -1284,6 +1284,8 @@ function CommentThread({
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState([]);
   const [replyTargets, setReplyTargets] = useState({});
+  const [selfProfileChooserOpen, setSelfProfileChooserOpen] = useState(false);
+  const [selfProfileChooserEntry, setSelfProfileChooserEntry] = useState(null);
   const focusAppliedRef = useRef(false);
   const isForumThread = String(newsId || "").startsWith("forum:");
 
@@ -2104,6 +2106,18 @@ function CommentThread({
     setProfileOpen(true);
   }
 
+  function openCommentProfileEntry(entry) {
+    if (!entry) return;
+    const entryUserId = String(entry?.userId || "");
+    const isOwnEntry = Boolean(isSignedIn && userId && entryUserId && String(userId) === entryUserId);
+    if (isOwnEntry) {
+      setSelfProfileChooserEntry(entry);
+      setSelfProfileChooserOpen(true);
+      return;
+    }
+    openProfileCard(entry);
+  }
+
   return html`
     <div className="comment-thread">
       <button className="comment-toggle" type="button" onClick=${() => setOpen(!open)}>
@@ -2154,7 +2168,7 @@ function CommentThread({
                       <button
                         className="comment-avatar-trigger"
                         type="button"
-                        onClick=${() => openProfileCard(comment)}
+                        onClick=${() => openCommentProfileEntry(comment)}
                         title="Open profile card"
                       >
                         <img
@@ -2296,7 +2310,7 @@ function CommentThread({
                                       <button
                                         className="comment-avatar-trigger"
                                         type="button"
-                                        onClick=${() => openProfileCard(reply)}
+                                        onClick=${() => openCommentProfileEntry(reply)}
                                         title="Open profile card"
                                       >
                                         <img
@@ -2571,6 +2585,17 @@ function CommentThread({
                     <span>Show staff badge</span>
                   </label>`
                 : html``}
+              ${profileUser.isOwn && profileUser.canToggleStaffBadge
+                ? html`<label className="profile-card-toggle">
+                    <input
+                      type="checkbox"
+                      checked=${profileUser.showStaffBadgeIcon !== false}
+                      disabled=${profileStaffBadgeIconSaving}
+                      onChange=${(event) => updateOwnStaffBadgeIconVisibility(event.target.checked)}
+                    />
+                    <span>Use icon staff badge style</span>
+                  </label>`
+                : html``}
               ${profileUser.isOwn &&
               profileUser.canToggleStaffGradient &&
               isStaffLabel(profileUser.rankLabel || "")
@@ -2591,6 +2616,40 @@ function CommentThread({
               ${renderOwnedRankBadges(profileUser)}
             </div>`
           : html``}
+      <//>
+      <${PopUp}
+        show=${selfProfileChooserOpen}
+        onClose=${() => {
+          setSelfProfileChooserOpen(false);
+          setSelfProfileChooserEntry(null);
+        }}
+        title="Profile Options"
+      >
+        <div className="comment-actions right">
+          <button
+            className="button primary"
+            type="button"
+            onClick=${() => {
+              const target = selfProfileChooserEntry;
+              setSelfProfileChooserOpen(false);
+              setSelfProfileChooserEntry(null);
+              if (target) openProfileCard(target);
+            }}
+          >
+            View profile card
+          </button>
+          <button
+            className="button ghost-btn"
+            type="button"
+            onClick=${() => {
+              setSelfProfileChooserOpen(false);
+              setSelfProfileChooserEntry(null);
+              if (openUserProfile) openUserProfile({});
+            }}
+          >
+            View Clerk card
+          </button>
+        </div>
       <//>
       <${PopUp}
         show=${historyOpen}
@@ -3701,7 +3760,10 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
         )}
       </div>
       <p className="muted store-support-note">
-        Support the server and become a local Hero, Legend, or Mythic by giving global boosts to the entire server.
+        Support the server and become a local <span className="store-support-rank rank-hero">Hero</span>,{" "}
+        <span className="store-support-rank rank-legend">Legend</span>, or{" "}
+        <span className="store-support-rank rank-mythic">Mythic</span> by giving global boosts to the entire
+        server.
       </p>
     </section>
     <section className="card fade-in rank-philosophy">
@@ -3862,7 +3924,7 @@ function capitalizePerk(text) {
 
 function SupportPage({ isAdmin }) {
   const { getToken, isSignedIn } = useAuth();
-  const { openSignIn } = useClerk();
+  const { openSignIn, openUserProfile } = useClerk();
   const navigate = useNavigate();
   const [showTicketModal, setShowTicketModal] = useState(true);
   const [tickets, setTickets] = useState([]);
@@ -4159,6 +4221,8 @@ function ForumPage({ isAdmin = false }) {
   const [forumHistoryOpen, setForumHistoryOpen] = useState(false);
   const [forumHistoryItems, setForumHistoryItems] = useState([]);
   const [forumHistoryTitle, setForumHistoryTitle] = useState("Post Edit History");
+  const [forumSelfChooserOpen, setForumSelfChooserOpen] = useState(false);
+  const [forumSelfChooserEntry, setForumSelfChooserEntry] = useState(null);
 
   function getForumPreviewText(body, limit = 220) {
     const text = String(body || "").trim();
@@ -4203,6 +4267,18 @@ function ForumPage({ isAdmin = false }) {
     );
   }
 
+  function renderForumStaffPill(entry) {
+    if (!forumShowStaffPill(entry)) return html``;
+    const showStaffBadgeIcon = entry?.authorShowStaffBadgeIcon !== false;
+    const staffPillClass = `forum-staff-pill ${showStaffBadgeIcon ? "with-icon" : "text-only"} ${
+      entry?.authorShowStaffGradient === false ? "staff-static" : ""
+    }`.trim();
+    return html`<span className=${staffPillClass}>
+      ${showStaffBadgeIcon ? html`<img className="comment-staff-pill-icon" src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" />` : html``}
+      <span className="staff-pill-label">STAFF</span>
+    </span>`;
+  }
+
   function getForumPostAuthorUserId(post) {
     return String(post?.authorUserId || post?.createdBy || "");
   }
@@ -4211,6 +4287,18 @@ function ForumPage({ isAdmin = false }) {
     if (!isSignedIn) return false;
     const authorUserId = getForumPostAuthorUserId(post);
     return Boolean((userId && authorUserId && String(userId) === authorUserId) || isAdmin);
+  }
+
+  function openForumProfileEntry(entry) {
+    if (!entry) return;
+    const authorUserId = getForumPostAuthorUserId(entry);
+    const isOwnEntry = Boolean(isSignedIn && userId && authorUserId && String(userId) === authorUserId);
+    if (isOwnEntry) {
+      setForumSelfChooserEntry(entry);
+      setForumSelfChooserOpen(true);
+      return;
+    }
+    openForumProfileCard(entry);
   }
 
   function isForumPostForcedEdit(post) {
@@ -4718,6 +4806,17 @@ function ForumPage({ isAdmin = false }) {
             <span>Show staff badge</span>
           </label>`
         : html``}
+      ${forumProfileUser.isOwn && forumProfileUser.canToggleStaffBadge
+        ? html`<label className="profile-card-toggle">
+            <input
+              type="checkbox"
+              checked=${forumProfileUser.showStaffBadgeIcon !== false}
+              disabled=${forumProfileStaffBadgeIconSaving}
+              onChange=${(event) => updateOwnForumStaffBadgeIconVisibility(event.target.checked)}
+            />
+            <span>Use icon staff badge style</span>
+          </label>`
+        : html``}
       ${forumProfileUser.isOwn &&
       forumProfileUser.canToggleStaffGradient &&
       isStaffLabel(forumProfileUser.rankLabel || "")
@@ -4951,7 +5050,7 @@ function ForumPage({ isAdmin = false }) {
                     <button
                       className="forum-post-author-trigger"
                       type="button"
-                      onClick=${() => openForumProfileCard(selectedPost)}
+                      onClick=${() => openForumProfileEntry(selectedPost)}
                       title="Open profile card"
                       aria-label="Open profile card"
                     >
@@ -4965,12 +5064,12 @@ function ForumPage({ isAdmin = false }) {
                     <button
                       className="forum-post-author-name-btn"
                       type="button"
-                      onClick=${() => openForumProfileCard(selectedPost)}
+                      onClick=${() => openForumProfileEntry(selectedPost)}
                     >
                       <${AuthorName} value=${selectedPost.authorName || "User"} isStaffLabel=${isStaffLabel} />
                     </button>
                     ${forumShowStaffPill(selectedPost)
-                      ? html`<span className="forum-staff-pill">STAFF</span>`
+                      ? renderForumStaffPill(selectedPost)
                       : html``}
                     <span className=${forumRankClassName(selectedPost)}>
                       ${(() => {
@@ -5077,6 +5176,40 @@ function ForumPage({ isAdmin = false }) {
             ${renderForumProfileCard()}
           <//>
           <${PopUp}
+            show=${forumSelfChooserOpen}
+            onClose=${() => {
+              setForumSelfChooserOpen(false);
+              setForumSelfChooserEntry(null);
+            }}
+            title="Profile Options"
+          >
+            <div className="comment-actions right">
+              <button
+                className="button primary"
+                type="button"
+                onClick=${() => {
+                  const target = forumSelfChooserEntry;
+                  setForumSelfChooserOpen(false);
+                  setForumSelfChooserEntry(null);
+                  if (target) openForumProfileCard(target);
+                }}
+              >
+                View profile card
+              </button>
+              <button
+                className="button ghost-btn"
+                type="button"
+                onClick=${() => {
+                  setForumSelfChooserOpen(false);
+                  setForumSelfChooserEntry(null);
+                  if (openUserProfile) openUserProfile({});
+                }}
+              >
+                View Clerk card
+              </button>
+            </div>
+          <//>
+          <${PopUp}
             show=${forumHistoryOpen}
             onClose=${() => setForumHistoryOpen(false)}
             title=${forumHistoryTitle}
@@ -5168,7 +5301,7 @@ function ForumPage({ isAdmin = false }) {
                       <button
                         className="forum-post-author-trigger"
                         type="button"
-                        onClick=${() => openForumProfileCard(post)}
+                        onClick=${() => openForumProfileEntry(post)}
                         title="Open profile card"
                         aria-label="Open profile card"
                       >
@@ -5182,12 +5315,12 @@ function ForumPage({ isAdmin = false }) {
                       <button
                         className="forum-post-author-name-btn"
                         type="button"
-                        onClick=${() => openForumProfileCard(post)}
+                        onClick=${() => openForumProfileEntry(post)}
                       >
                         <${AuthorName} value=${post.authorName || "User"} isStaffLabel=${isStaffLabel} />
                       </button>
                       ${forumShowStaffPill(post)
-                        ? html`<span className="forum-staff-pill">STAFF</span>`
+                        ? renderForumStaffPill(post)
                         : html``}
                       <span className=${forumRankClassName(post)}>
                         ${(() => {
@@ -5295,6 +5428,40 @@ function ForumPage({ isAdmin = false }) {
           title="Profile Card"
         >
           ${renderForumProfileCard()}
+        <//>
+        <${PopUp}
+          show=${forumSelfChooserOpen}
+          onClose=${() => {
+            setForumSelfChooserOpen(false);
+            setForumSelfChooserEntry(null);
+          }}
+          title="Profile Options"
+        >
+          <div className="comment-actions right">
+            <button
+              className="button primary"
+              type="button"
+              onClick=${() => {
+                const target = forumSelfChooserEntry;
+                setForumSelfChooserOpen(false);
+                setForumSelfChooserEntry(null);
+                if (target) openForumProfileCard(target);
+              }}
+            >
+              View profile card
+            </button>
+            <button
+              className="button ghost-btn"
+              type="button"
+              onClick=${() => {
+                setForumSelfChooserOpen(false);
+                setForumSelfChooserEntry(null);
+                if (openUserProfile) openUserProfile({});
+              }}
+            >
+              View Clerk card
+            </button>
+          </div>
         <//>
         <${PopUp}
           show=${forumHistoryOpen}
@@ -5951,11 +6118,23 @@ function renderStaffBadge(entry) {
 
 function renderOwnedRankBadges(entry) {
   if (!entry) return html``;
-  const badges = buildOwnedRankBadges(entry.ownedRank, Boolean(entry.isStaffUser || entry.staff));
+  const isStaffUser = Boolean(entry.isStaffUser || entry.staff);
+  const badges = buildOwnedRankBadges(entry.ownedRank, isStaffUser);
+  const showStaffBadgeChip = isStaffUser && entry.showStaffBadge !== false;
+  const showStaffBadgeIcon = entry.showStaffBadgeIcon !== false;
+  const staffBadgeChipClass = `profile-owned-badge staff-owned-badge ${
+    entry.showStaffGradient === false ? "staff-static" : ""
+  }`.trim();
   return html`<div className="profile-card-badges-block">
     <div className="profile-card-badges-title">Badges</div>
     ${badges.length > 0
       ? html`<div className="profile-card-badges-row">
+          ${showStaffBadgeChip
+            ? html`<span className=${staffBadgeChipClass}>
+                ${showStaffBadgeIcon ? html`<img className="staff-badge-icon" src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" />` : html``}
+                <span>STAFF</span>
+              </span>`
+            : html``}
           ${badges.map((label) => {
             const iconType = getRankIconType(label);
             const slug = String(label).trim().toLowerCase();

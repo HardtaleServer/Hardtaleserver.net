@@ -2149,16 +2149,39 @@ emoji-picker.reaction-picker-panel {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   border-radius: 999px;
   padding: 1px 6px;
-  border: 1px solid color-mix(in srgb, var(--accent) 44%, var(--stroke));
-  color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--stroke));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
   line-height: 1;
+}
+
+.comment-staff-pill-icon {
+  width: 16px;
+  height: 9px;
+  display: block;
+}
+
+.comment-staff-pill .staff-pill-label,
+.forum-staff-pill .staff-pill-label {
+  background-image: linear-gradient(270deg, var(--accent-2), var(--accent));
+  background-size: 220% 100%;
+  animation: staffReflect 2.4s ease-in-out infinite reverse;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.comment-staff-pill.staff-static .staff-pill-label,
+.forum-staff-pill.staff-static .staff-pill-label {
+  animation: none;
+  background-position: 50% 0;
 }
 
 .comment-author.staff {
@@ -2795,6 +2818,26 @@ emoji-picker.reaction-picker-panel {
   letter-spacing: 0.06em;
 }
 
+.profile-owned-badge.staff-owned-badge {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--stroke));
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-soft));
+}
+
+.profile-owned-badge.staff-owned-badge span {
+  background-image: linear-gradient(270deg, var(--accent-2), var(--accent));
+  background-size: 220% 100%;
+  animation: staffReflect 2.4s ease-in-out infinite reverse;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.profile-owned-badge.staff-owned-badge.staff-static span {
+  animation: none;
+  background-position: 50% 0;
+}
+
 .profile-owned-badge .rank-icon {
   width: 12px;
   height: 12px;
@@ -3400,6 +3443,22 @@ body[data-theme="dark"] .store-cta {
 
 .store-support-note {
   margin-top: 16px;
+}
+
+.store-support-rank {
+  font-weight: 700;
+}
+
+.store-support-rank.rank-hero {
+  color: var(--rank-hero);
+}
+
+.store-support-rank.rank-legend {
+  color: var(--rank-legend);
+}
+
+.store-support-rank.rank-mythic {
+  color: var(--rank-mythic);
 }
 
 .store-link-required {

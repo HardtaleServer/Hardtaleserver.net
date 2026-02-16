@@ -5,6 +5,7 @@ import { getRankDisplayLabel, getRankIconType } from "./rankConfig.js";
 const html = htm.bind(React.createElement);
 const LINKED_STATUS_ICON_SVG = "/Images/SVGs/LINKED.svg";
 const UNLINKED_STATUS_ICON_SVG = "/Images/SVGs/UNLINKED.svg";
+const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
 
 function renderRankIcon(type) {
   switch (type) {
@@ -40,15 +41,31 @@ export default function CommentIdentity({ entry, rank, authorSizeClass, showStaf
   const rankEffectsClass = entry?.authorShowRankEffects === false ? "rank-effects-off" : "";
   const rankLabel = rank?.label || "Unregistered";
   const rankIconType = getRankIconType(rankLabel);
+  const showStaffBadgeIcon = entry?.authorShowStaffBadgeIcon !== false;
   const rankClass = `rank-${String(rank?.label || "Unregistered")
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")}`;
+  const staffPillClass = `comment-staff-pill ${showStaffBadgeIcon ? "with-icon" : "text-only"} ${
+    rank?.animateStaffGradient === false ? "staff-static" : ""
+  }`.trim();
   return html`
     <div className="comment-identity">
       <div className=${`comment-author ${sizeClass} ${staffClass} ${staffStaticClass} ${rankEffectsClass} ${rankClass}`.trim()}>
         <span>${name}</span>
-        ${showStaffPill ? html`<span className="comment-staff-pill">STAFF</span>` : html``}
+        ${showStaffPill
+          ? html`<span className=${staffPillClass}>
+              ${showStaffBadgeIcon
+                ? html`<img
+                    className="comment-staff-pill-icon"
+                    src=${STAFF_BADGE_ICON_SVG}
+                    alt=""
+                    aria-hidden="true"
+                  />`
+                : html``}
+              <span className="staff-pill-label">STAFF</span>
+            </span>`
+          : html``}
       </div>
       <div className=${`comment-rank ${staffClass} ${staffStaticClass} ${rankEffectsClass} ${rankClass}`.trim()}>
         ${rankIconType ? html`<span className="rank-icon">${renderRankIcon(rankIconType)}</span>` : html``}
