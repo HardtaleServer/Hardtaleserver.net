@@ -2619,6 +2619,13 @@ app.post("/api/cart", async (req, res) => {
     if (!auth?.userId) {
       return res.status(401).json({ error: "Not authenticated" });
     }
+    const linked = await linkedAccountsCollection.findOne(
+      { webUserId: auth.userId },
+      { projection: { _id: 1 } },
+    );
+    if (!linked) {
+      return res.status(403).json({ error: "Link your game account before using the store" });
+    }
 
     const items = normalizeCartItems(req.body?.items);
     await cartsCollection.updateOne(
@@ -2645,6 +2652,13 @@ app.post("/api/cart/checkout", async (req, res) => {
     const auth = getAuth(req);
     if (!auth?.userId) {
       return res.status(401).json({ error: "Not authenticated" });
+    }
+    const linked = await linkedAccountsCollection.findOne(
+      { webUserId: auth.userId },
+      { projection: { _id: 1 } },
+    );
+    if (!linked) {
+      return res.status(403).json({ error: "Link your game account before checkout" });
     }
 
     const cart = await cartsCollection.findOne({ userId: auth.userId });
@@ -2733,6 +2747,29 @@ app.get("/api/link/status", async (req, res) => {
   } catch (error) {
     console.error("Failed to load link status", error);
     return res.status(500).json({ error: "Failed to load link status" });
+  }
+});
+
+app.get("/api/profile/link-status/:userId", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const userId = normalizeText(req.params.userId, 128);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+    const doc = await linkedAccountsCollection.findOne({ webUserId: userId });
+    if (!doc) {
+      return res.json({ linked: false, playerUuid: "", playerName: "" });
+    }
+    return res.json({
+      linked: true,
+      playerUuid: String(doc.playerUuid || ""),
+      playerName: normalizeText(doc.playerName || "", 60),
+      linkedAt: doc.linkedAt || doc.createdAt || doc.updatedAt || "",
+    });
+  } catch (error) {
+    console.error("Failed to load profile link status", error);
+    return res.status(500).json({ error: "Failed to load profile link status" });
   }
 });
 

@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here.
 
-## 2026-02-16 (v1.3.32)
+## 2026-02-16 (v1.3.33)
 - Expanded forum profile cards for your own profile to include all rank controls: display title, rank effects toggle, avatar effects toggle, and staff-gradient toggle (staff-only).
 - Added per-rank hover glow effects to forum rank icons (Registered/Hero/Legend/Mythic/Staff) on forum author rows.
 - Fixed a recurring desktop sticky-navbar issue where hovering Home/Forum nav buttons could cause the Settings button to visually glitch.
@@ -16,6 +16,10 @@ All notable changes to this project are documented here.
 - Added owned-rank badge pills to profile cards under a dedicated `Badges` section, including staff users who own store ranks.
 - Reworked Store rank cards to use clickable Clerk-avatar profile previews with per-tier badge progression and unlocked title previews.
 - Note: `Unregistered` title remains a reserved default state pending `/link` UUID authentication gating.
+- Added shared rank config mapping for display labels and icon assignment to centralize future rank updates.
+- Swapped rank icon mapping globally so Hero uses `shield` and Mythic uses `star`.
+- Updated rank palette tokens to a centralized CSS source of truth and retuned Hero/Legend colors with matching hover glows.
+- Updated Store tier button locking so lower tiers are disabled/greyed out when a higher tier is already in cart.
 
 ## 2026-02-16 (v1.3.29)
 - Added forum post `PATCH`/`DELETE` APIs with owner-or-staff authorization checks.

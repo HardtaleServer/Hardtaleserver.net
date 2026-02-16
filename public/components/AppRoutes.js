@@ -25,6 +25,8 @@ export default function AppRoutes({
   setNews,
   setNotifications,
   addToCart,
+  isLinkedAccount,
+  cart,
 }) {
   return html`
     <${Routes}>
@@ -64,7 +66,14 @@ export default function AppRoutes({
           onNotificationsUpdate=${setNotifications}
         />`}
       />
-      <${Route} path="/store" element=${html`<${StorePage} onAdd=${addToCart} />`} />
+      <${Route}
+        path="/store"
+        element=${html`<${StorePage}
+          onAdd=${addToCart}
+          isLinkedAccount=${isLinkedAccount}
+          cart=${cart}
+        />`}
+      />
       <${Route} path="/vote" element=${html`<${VotePage} />`} />
       <${Route} path="/forum" element=${html`<${ForumPage} isAdmin=${isAdmin} />`} />
       <${Route} path="/subscriptions" element=${html`<${SubscriptionsPage} />`} />

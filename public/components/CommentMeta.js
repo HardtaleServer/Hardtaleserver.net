@@ -7,6 +7,7 @@ export default function CommentMeta({
   entry,
   formatTimestamp,
   variant = "desktop",
+  showOpBadge = false,
   showHistoryButton = false,
   onHistoryClick,
   onHistoryMouseDown,
@@ -36,6 +37,9 @@ export default function CommentMeta({
               <img src=${historyIcon} alt="" aria-hidden="true" className="comment-action-icon" />
               <span>${editCount}</span>
             </button>`
+          : html``}
+        ${showOpBadge && showHistoryButton && editCount > 0
+          ? html`<span className="comment-op-badge">OP</span>`
           : html``}
       </div>
     </div>

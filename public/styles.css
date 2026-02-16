@@ -10,6 +10,14 @@
   --accent: #2aa3ff;
   --accent-2: #ff3b3b;
   --accent-3: #5ef7a6;
+  --rank-registered: #479284;
+  --rank-hero: #2ccf9e;
+  --rank-legend: #ff9a3d;
+  --rank-mythic: #ff621d;
+  --rank-registered-glow: rgba(71, 146, 132, 0.72);
+  --rank-hero-glow: rgba(44, 207, 158, 0.82);
+  --rank-legend-glow: rgba(255, 154, 61, 0.86);
+  --rank-mythic-glow: rgba(255, 98, 29, 0.85);
 }
 
 * {
@@ -876,25 +884,25 @@ body[data-theme="light"] .settings-icon {
 
 .forum-author-rank.rank-registered:hover .rank-icon,
 .forum-post-author-row:hover .forum-author-rank.rank-registered .rank-icon {
-  filter: drop-shadow(0 0 4px rgba(71, 146, 132, 0.72));
+  filter: drop-shadow(0 0 4px var(--rank-registered-glow));
   transform: translateY(-1px);
 }
 
 .forum-author-rank.rank-hero:hover .rank-icon,
 .forum-post-author-row:hover .forum-author-rank.rank-hero .rank-icon {
-  filter: drop-shadow(0 0 5px rgba(255, 170, 0, 0.8));
+  filter: drop-shadow(0 0 5px var(--rank-hero-glow));
   transform: translateY(-1px);
 }
 
 .forum-author-rank.rank-legend:hover .rank-icon,
 .forum-post-author-row:hover .forum-author-rank.rank-legend .rank-icon {
-  filter: drop-shadow(0 0 5px rgba(170, 0, 170, 0.8));
+  filter: drop-shadow(0 0 5px var(--rank-legend-glow));
   transform: translateY(-1px);
 }
 
 .forum-author-rank.rank-mythic:hover .rank-icon,
 .forum-post-author-row:hover .forum-author-rank.rank-mythic .rank-icon {
-  filter: drop-shadow(0 0 6px rgba(255, 98, 29, 0.85));
+  filter: drop-shadow(0 0 6px var(--rank-mythic-glow));
   transform: translateY(-1px);
 }
 
@@ -2036,16 +2044,16 @@ emoji-picker.reaction-picker-panel {
 .comment-avatar.avatar-rank-hero:not(.avatar-vfx-off),
 .profile-card-avatar.avatar-rank-hero:not(.avatar-vfx-off) {
   box-shadow:
-    0 0 0 1px rgba(255, 191, 80, 0.5),
-    0 0 14px rgba(255, 181, 64, 0.36);
+    0 0 0 1px color-mix(in srgb, var(--rank-hero) 62%, transparent),
+    0 0 14px color-mix(in srgb, var(--rank-hero) 42%, transparent);
   animation: avatarHeroGlow 3.2s ease-in-out infinite;
 }
 
 .comment-avatar.avatar-rank-legend:not(.avatar-vfx-off),
 .profile-card-avatar.avatar-rank-legend:not(.avatar-vfx-off) {
   box-shadow:
-    0 0 0 1px rgba(170, 80, 220, 0.55),
-    0 0 16px rgba(165, 95, 235, 0.32);
+    0 0 0 1px color-mix(in srgb, var(--rank-legend) 68%, transparent),
+    0 0 16px color-mix(in srgb, var(--rank-legend) 46%, transparent);
   filter: saturate(1.08);
   animation: avatarLegendShift 4.4s ease-in-out infinite;
 }
@@ -2214,31 +2222,31 @@ emoji-picker.reaction-picker-panel {
 }
 
 .comment-rank.rank-registered {
-  color: #479284;
+  color: var(--rank-registered);
   text-shadow: 0 0 1px rgba(0, 0, 0, 0.45);
 }
 
 .comment-author.rank-registered,
 .profile-card-name.rank-registered {
-  color: #479284;
+  color: var(--rank-registered);
 }
 
 .comment-rank.rank-hero {
-  color: #ffaa00;
+  color: var(--rank-hero);
 }
 
 .comment-rank.rank-legend {
-  color: #aa00aa;
+  color: var(--rank-legend);
 }
 
 .comment-rank.rank-mythic {
-  color: #ff621d;
+  color: var(--rank-mythic);
 }
 
 .comment-author.rank-hero,
 .comment-rank.rank-hero,
 .profile-card-name.rank-hero {
-  color: #ffaa00;
+  color: var(--rank-hero);
   text-shadow: none;
 }
 
@@ -2252,7 +2260,7 @@ emoji-picker.reaction-picker-panel {
 .comment-author.rank-legend,
 .comment-rank.rank-legend,
 .profile-card-name.rank-legend {
-  color: #aa00aa;
+  color: var(--rank-legend);
   text-shadow: none;
 }
 
@@ -2266,7 +2274,7 @@ emoji-picker.reaction-picker-panel {
 .comment-author.rank-mythic,
 .comment-rank.rank-mythic,
 .profile-card-name.rank-mythic {
-  color: #ff621d;
+  color: var(--rank-mythic);
   text-shadow: none;
 }
 
@@ -2683,6 +2691,15 @@ emoji-picker.reaction-picker-panel {
   font-size: 13px;
 }
 
+.profile-card-link-meta {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text);
+}
+
 .profile-card-badge {
   margin-top: 2px;
   border-radius: 999px;
@@ -2717,7 +2734,12 @@ emoji-picker.reaction-picker-panel {
 .staff-badge-icon {
   width: 26px;
   height: 14px;
+  padding-right: 5px;
   display: block;
+}
+
+.comment-meta-right .comment-op-badge {
+  justify-self: end;
 }
 
 .profile-card-badges-block {
@@ -3283,15 +3305,15 @@ emoji-picker.reaction-picker-panel {
 }
 
 .store-name.rank-hero {
-  color: #ffaa00;
+  color: var(--rank-hero);
 }
 
 .store-name.rank-legend {
-  color: #aa00aa;
+  color: var(--rank-legend);
 }
 
 .store-name.rank-mythic {
-  color: #ff621d;
+  color: var(--rank-mythic);
 }
 
 .store-badge-preview-row {
@@ -3348,6 +3370,12 @@ emoji-picker.reaction-picker-panel {
   filter: brightness(1.05);
 }
 
+.store-cta:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+  filter: none;
+}
+
 body[data-theme="dark"] .button.primary,
 body[data-theme="dark"] .store-cta {
   color: #fff;
@@ -3355,6 +3383,11 @@ body[data-theme="dark"] .store-cta {
 
 .store-support-note {
   margin-top: 16px;
+}
+
+.store-link-required {
+  margin-top: 4px;
+  margin-bottom: 10px;
 }
 
 .ranks-info {

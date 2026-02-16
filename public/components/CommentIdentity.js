@@ -1,15 +1,10 @@
 import React from "react";
 import htm from "htm";
+import { getRankDisplayLabel, getRankIconType } from "./rankConfig.js";
 
 const html = htm.bind(React.createElement);
-
-function getRankIconType(label) {
-  const normalized = String(label || "").trim().toLowerCase();
-  if (normalized === "hero") return "star";
-  if (normalized === "legend") return "crown";
-  if (normalized === "mythic") return "shield";
-  return "";
-}
+const LINKED_STATUS_ICON_SVG = "/Images/SVGs/LINKED.svg";
+const UNLINKED_STATUS_ICON_SVG = "/Images/SVGs/UNLINKED.svg";
 
 function renderRankIcon(type) {
   switch (type) {
@@ -28,12 +23,16 @@ function renderRankIcon(type) {
       return html`<svg viewBox="0 0 24 24" aria-hidden="true">
         <path fill="currentColor" d="M12 2l2.5 6.2 6.7.6-5.1 4.3 1.6 6.5-5.7-3.6-5.7 3.6 1.6-6.5-5.1-4.3 6.7-.6L12 2z" />
       </svg>`;
+    case "linked":
+      return html`<img className="rank-icon-image" src=${LINKED_STATUS_ICON_SVG} alt="" aria-hidden="true" />`;
+    case "unlinked":
+      return html`<img className="rank-icon-image" src=${UNLINKED_STATUS_ICON_SVG} alt="" aria-hidden="true" />`;
     default:
       return html``;
   }
 }
 
-export default function CommentIdentity({ entry, rank, authorSizeClass, showOpBadge = false }) {
+export default function CommentIdentity({ entry, rank, authorSizeClass }) {
   const name = String(entry?.authorName || "User");
   const sizeClass = authorSizeClass ? authorSizeClass(name) : "";
   const staffClass = rank?.staff ? "staff" : "";
@@ -49,11 +48,10 @@ export default function CommentIdentity({ entry, rank, authorSizeClass, showOpBa
     <div className="comment-identity">
       <div className=${`comment-author ${sizeClass} ${staffClass} ${staffStaticClass} ${rankEffectsClass} ${rankClass}`.trim()}>
         <span>${name}</span>
-        ${showOpBadge ? html`<span className="comment-op-badge">OP</span>` : html``}
       </div>
       <div className=${`comment-rank ${staffClass} ${staffStaticClass} ${rankEffectsClass} ${rankClass}`.trim()}>
         ${rankIconType ? html`<span className="rank-icon">${renderRankIcon(rankIconType)}</span>` : html``}
-        <span>${rankLabel}</span>
+        <span>${getRankDisplayLabel(rankLabel)}</span>
       </div>
     </div>
   `;
