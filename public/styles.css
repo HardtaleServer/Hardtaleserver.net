@@ -2191,13 +2191,6 @@ emoji-picker.reaction-picker-panel {
   display: block;
 }
 
-.rank-icon-image {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: contain;
-}
-
 .comment-rank.rank-unregistered {
   color: #6f6f6f;
 }
