@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-16 (v1.3.30)
+- Expanded forum profile cards for your own profile to include all rank controls: display title, rank effects toggle, avatar effects toggle, and staff-gradient toggle (staff-only).
+- Added per-rank hover glow effects to forum rank icons (Registered/Hero/Legend/Mythic/Staff) on forum author rows.
+
 ## 2026-02-16 (v1.3.29)
 - Added forum post `PATCH`/`DELETE` APIs with owner-or-staff authorization checks.
 - Added forum post edit/delete controls in the UI for post owners and staff/admin users.

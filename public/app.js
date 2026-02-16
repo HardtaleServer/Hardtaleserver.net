@@ -58,7 +58,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.29";
+const VERSION = "1.3.30";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_EMAILS = new Set([
   "chashsmurfis@gmail.com",
@@ -131,6 +131,14 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.30",
+    date: "2026-02-16",
+    items: [
+      "Expanded forum profile cards for your own user to include rank effects, avatar effects, and staff-gradient toggles (staff-only where applicable).",
+      "Added per-rank hover glow effects to forum rank icons for clearer visual identity on author rows.",
+    ],
+  },
   {
     version: "1.3.29",
     date: "2026-02-16",
@@ -3703,6 +3711,9 @@ function ForumPage({ isAdmin = false }) {
   const [forumProfileUser, setForumProfileUser] = useState(null);
   const [forumProfileTitleStatus, setForumProfileTitleStatus] = useState("");
   const [forumProfileTitleSaving, setForumProfileTitleSaving] = useState(false);
+  const [forumProfileStaffGradientSaving, setForumProfileStaffGradientSaving] = useState(false);
+  const [forumProfileRankEffectsSaving, setForumProfileRankEffectsSaving] = useState(false);
+  const [forumProfileAvatarVfxSaving, setForumProfileAvatarVfxSaving] = useState(false);
   const [editingPostId, setEditingPostId] = useState("");
   const [editingPostTitle, setEditingPostTitle] = useState("");
   const [editingPostBody, setEditingPostBody] = useState("");
@@ -3750,6 +3761,12 @@ function ForumPage({ isAdmin = false }) {
       return {
         availableTitles: availableTitles.length > 0 ? availableTitles : fallbackTitles,
         selectedTitle: selectedTitle || ownedRank || "Unregistered",
+        canToggleStaffGradient: Boolean(data?.canToggleStaffGradient),
+        showStaffGradient: data?.showStaffGradient !== false,
+        canToggleRankEffects: Boolean(data?.canToggleRankEffects),
+        showRankEffects: data?.showRankEffects !== false,
+        canToggleAvatarVfx: Boolean(data?.canToggleAvatarVfx),
+        showAvatarVfx: data?.showAvatarVfx !== false,
       };
     } catch {
       return null;
@@ -3763,14 +3780,26 @@ function ForumPage({ isAdmin = false }) {
     const authorUsername = String(entry.authorUsername || "");
     const authorUserId = String(entry.authorUserId || entry.createdBy || "");
     const isOwn = Boolean(userId && authorUserId && String(userId) === authorUserId);
-    const staff = isStaffLabel(authorName) || isStaffLabel(authorUsername);
+    const isStaffUser = isStaffLabel(authorName) || isStaffLabel(authorUsername);
     let availableTitles = [];
     let selectedTitle = rankLabel;
+    let canToggleStaffGradient = false;
+    let showStaffGradient = true;
+    let canToggleRankEffects = false;
+    let showRankEffects = true;
+    let canToggleAvatarVfx = false;
+    let showAvatarVfx = true;
     if (isOwn && isSignedIn) {
       const settings = await loadOwnForumProfileTitleSettings();
       if (settings) {
         availableTitles = settings.availableTitles;
         selectedTitle = settings.selectedTitle || rankLabel;
+        canToggleStaffGradient = Boolean(settings.canToggleStaffGradient);
+        showStaffGradient = settings.showStaffGradient !== false;
+        canToggleRankEffects = Boolean(settings.canToggleRankEffects);
+        showRankEffects = settings.showRankEffects !== false;
+        canToggleAvatarVfx = Boolean(settings.canToggleAvatarVfx);
+        showAvatarVfx = settings.showAvatarVfx !== false;
       }
     }
     if (isOwn && availableTitles.length === 0 && selectedTitle) {
@@ -3782,9 +3811,16 @@ function ForumPage({ isAdmin = false }) {
       username: formatUsernameForDisplay(authorUsername),
       image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel: selectedTitle,
-      staff,
+      staff: isStaffUser && showStaffGradient,
+      isStaffUser,
       isOwn,
       availableTitles,
+      canToggleStaffGradient,
+      showStaffGradient,
+      canToggleRankEffects,
+      showRankEffects,
+      canToggleAvatarVfx,
+      showAvatarVfx,
       authorUserId,
     });
     setForumProfileOpen(true);
@@ -3843,23 +3879,117 @@ function ForumPage({ isAdmin = false }) {
     }
   }
 
+  async function updateOwnForumStaffGradientVisibility(nextVisible) {
+    if (!forumProfileUser?.isOwn || !forumProfileUser?.canToggleStaffGradient || forumProfileStaffGradientSaving) return;
+    setForumProfileStaffGradientSaving(true);
+    setForumProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/staff-gradient", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showStaffGradient: Boolean(nextVisible) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save staff gradient.");
+      }
+      const data = await response.json();
+      const showStaffGradient = data?.showStaffGradient !== false;
+      setForumProfileUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              showStaffGradient,
+              staff: prev.isStaffUser && showStaffGradient,
+            }
+          : prev,
+      );
+      setForumProfileTitleStatus("Saved.");
+      setTimeout(() => setForumProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setForumProfileTitleStatus(error?.message || "Failed to save staff gradient.");
+    } finally {
+      setForumProfileStaffGradientSaving(false);
+    }
+  }
+
+  async function updateOwnForumRankEffectsVisibility(nextVisible) {
+    if (!forumProfileUser?.isOwn || !forumProfileUser?.canToggleRankEffects || forumProfileRankEffectsSaving) return;
+    setForumProfileRankEffectsSaving(true);
+    setForumProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/rank-effects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showRankEffects: Boolean(nextVisible) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save rank effects.");
+      }
+      const data = await response.json();
+      const showRankEffects = data?.showRankEffects !== false;
+      setForumProfileUser((prev) => (prev ? { ...prev, showRankEffects } : prev));
+      setForumProfileTitleStatus("Saved.");
+      setTimeout(() => setForumProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setForumProfileTitleStatus(error?.message || "Failed to save rank effects.");
+    } finally {
+      setForumProfileRankEffectsSaving(false);
+    }
+  }
+
+  async function updateOwnForumAvatarVfxVisibility(nextVisible) {
+    if (!forumProfileUser?.isOwn || !forumProfileUser?.canToggleAvatarVfx || forumProfileAvatarVfxSaving) return;
+    setForumProfileAvatarVfxSaving(true);
+    setForumProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/avatar-vfx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showAvatarVfx: Boolean(nextVisible) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save avatar effects.");
+      }
+      const data = await response.json();
+      const showAvatarVfx = data?.showAvatarVfx !== false;
+      setForumProfileUser((prev) => (prev ? { ...prev, showAvatarVfx } : prev));
+      setForumProfileTitleStatus("Saved.");
+      setTimeout(() => setForumProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setForumProfileTitleStatus(error?.message || "Failed to save avatar effects.");
+    } finally {
+      setForumProfileAvatarVfxSaving(false);
+    }
+  }
+
   function renderForumProfileCard() {
     if (!forumProfileUser) return html``;
     return html`<div className="profile-card">
       <img
         className=${`profile-card-avatar avatar-rank-${rankSlug(
           forumProfileUser.rankLabel || "Unregistered",
-        )}`.trim()}
+        )} ${forumProfileUser.showAvatarVfx === false ? "avatar-vfx-off" : ""}`.trim()}
         src=${forumProfileUser.image}
         alt=${forumProfileUser.name}
       />
-      <div className=${`profile-card-name rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}>
+      <div
+        className=${`profile-card-name ${
+          forumProfileUser.showRankEffects === false ? "rank-effects-off" : ""
+        } rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}
+      >
         ${forumProfileUser.name}
       </div>
       ${forumProfileUser.username
         ? html`<div className="profile-card-username">@${forumProfileUser.username}</div>`
         : html``}
-      <div className=${`comment-rank profile-card-rank rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}>
+      <div
+        className=${`comment-rank ${forumProfileUser.staff ? "staff" : ""} profile-card-rank ${
+          forumProfileUser.showRankEffects === false ? "rank-effects-off" : ""
+        } rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}
+      >
         ${(() => {
           const iconType = getRankIconType(forumProfileUser.rankLabel || "");
           return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
@@ -3881,10 +4011,45 @@ function ForumPage({ isAdmin = false }) {
             </select>
           </label>`
         : html``}
+      ${forumProfileUser.isOwn && forumProfileUser.canToggleRankEffects
+        ? html`<label className="profile-card-toggle">
+            <input
+              type="checkbox"
+              checked=${forumProfileUser.showRankEffects !== false}
+              disabled=${forumProfileRankEffectsSaving}
+              onChange=${(event) => updateOwnForumRankEffectsVisibility(event.target.checked)}
+            />
+            <span>Enable rank effects</span>
+          </label>`
+        : html``}
+      ${forumProfileUser.isOwn && forumProfileUser.canToggleAvatarVfx
+        ? html`<label className="profile-card-toggle">
+            <input
+              type="checkbox"
+              checked=${forumProfileUser.showAvatarVfx !== false}
+              disabled=${forumProfileAvatarVfxSaving}
+              onChange=${(event) => updateOwnForumAvatarVfxVisibility(event.target.checked)}
+            />
+            <span>Enable avatar effects</span>
+          </label>`
+        : html``}
+      ${forumProfileUser.isOwn && forumProfileUser.canToggleStaffGradient
+        ? html`<label className="profile-card-toggle">
+            <input
+              type="checkbox"
+              checked=${forumProfileUser.showStaffGradient !== false}
+              disabled=${forumProfileStaffGradientSaving}
+              onChange=${(event) => updateOwnForumStaffGradientVisibility(event.target.checked)}
+            />
+            <span>Enable staff gradient</span>
+          </label>`
+        : html``}
       ${forumProfileTitleStatus && forumProfileUser.isOwn
         ? html`<div className="muted profile-card-title-status">${forumProfileTitleStatus}</div>`
         : html``}
-      ${forumProfileUser.staff ? html`<div className="profile-card-badge">Hardtale Staff Member</div>` : html``}
+      ${forumProfileUser.isStaffUser && forumProfileUser.showStaffGradient !== false
+        ? html`<div className="profile-card-badge">Hardtale Staff Member</div>`
+        : html``}
     </div>`;
   }
 

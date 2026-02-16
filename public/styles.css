@@ -860,6 +860,40 @@ body[data-theme="light"] .settings-icon {
   letter-spacing: 0.06em;
 }
 
+.forum-author-rank .rank-icon {
+  transition: filter 0.2s ease, transform 0.2s ease;
+}
+
+.forum-author-rank.rank-registered:hover .rank-icon,
+.forum-post-author-row:hover .forum-author-rank.rank-registered .rank-icon {
+  filter: drop-shadow(0 0 4px rgba(71, 146, 132, 0.72));
+  transform: translateY(-1px);
+}
+
+.forum-author-rank.rank-hero:hover .rank-icon,
+.forum-post-author-row:hover .forum-author-rank.rank-hero .rank-icon {
+  filter: drop-shadow(0 0 5px rgba(255, 170, 0, 0.8));
+  transform: translateY(-1px);
+}
+
+.forum-author-rank.rank-legend:hover .rank-icon,
+.forum-post-author-row:hover .forum-author-rank.rank-legend .rank-icon {
+  filter: drop-shadow(0 0 5px rgba(170, 0, 170, 0.8));
+  transform: translateY(-1px);
+}
+
+.forum-author-rank.rank-mythic:hover .rank-icon,
+.forum-post-author-row:hover .forum-author-rank.rank-mythic .rank-icon {
+  filter: drop-shadow(0 0 6px rgba(255, 98, 29, 0.85));
+  transform: translateY(-1px);
+}
+
+.forum-author-rank.staff:hover .rank-icon,
+.forum-post-author-row:hover .forum-author-rank.staff .rank-icon {
+  filter: drop-shadow(0 0 6px rgba(42, 163, 255, 0.75));
+  transform: translateY(-1px);
+}
+
 .forum-post-author-row .notification-timestamp {
   margin-left: auto;
   text-align: right;
