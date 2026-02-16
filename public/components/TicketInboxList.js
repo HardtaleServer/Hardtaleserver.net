@@ -8,6 +8,7 @@ export default function TicketInboxList({
   tickets = [],
   onSelectTicket,
   formatTimestamp,
+  isAdmin = false,
 }) {
   if (loading) {
     return html`<p className="muted">Loading tickets...</p>`;
@@ -25,6 +26,9 @@ export default function TicketInboxList({
           onClick=${() => onSelectTicket && onSelectTicket(ticket.id)}
         >
           <div>${ticket.subject} - ${ticket.status.toUpperCase()}</div>
+          ${isAdmin
+            ? html`<div className="muted">Category: ${String(ticket.category || "support").toUpperCase()}</div>`
+            : html``}
           <div className="muted">${formatTimestamp ? formatTimestamp(ticket.updatedAt || ticket.createdAt) : ""}</div>
         </button>`,
       )}

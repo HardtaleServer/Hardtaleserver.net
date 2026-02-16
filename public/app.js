@@ -3522,6 +3522,7 @@ function SupportPage({ isAdmin }) {
                   loading=${loading}
                   tickets=${tickets}
                   formatTimestamp=${formatTimestamp}
+                  isAdmin=${isAdmin}
                   onSelectTicket=${(ticketId) => setSelectedTicketId(ticketId)}
                 />
 
@@ -4338,6 +4339,7 @@ function NotFoundPage({
                   loading=${ticketLoading}
                   tickets=${tickets}
                   formatTimestamp=${formatTimestamp}
+                  isAdmin=${isAdmin}
                   onSelectTicket=${(ticketId) => setSelectedTicketId(ticketId)}
                 />
 
