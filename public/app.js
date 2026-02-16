@@ -58,7 +58,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.21";
+const VERSION = "1.3.22";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_EMAILS = new Set([
   "chashsmurfis@gmail.com",
@@ -131,6 +131,16 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.22",
+    date: "2026-02-16",
+    items: [
+      "Fixed desktop navbar hover conflicts that caused nav/cart/notification flicker when sticky mode was active.",
+      "Moved notification unread tracking to the server per user for cross-device consistency, including a mark-read API.",
+      "Updated Support Center with ticket inbox timestamps and admin-visible ticket categories, auto-delete of closed tickets after 24 hours, and user notifications when staff reply (with View deep-link to the ticket).",
+      "Updated /link code entry from 6 digits to 8 digits.",
+    ],
+  },
   {
     version: "1.3.21",
     date: "2026-02-16",
@@ -4970,7 +4980,6 @@ function Layout() {
   const [cartStatus, setCartStatus] = useState("");
   const [pendingItem, setPendingItem] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
-  const [topbarHeight, setTopbarHeight] = useState(0);
   const shellRef = useRef(null);
   const topbarRef = useRef(null);
   const playRef = useRef(null);
@@ -5129,16 +5138,6 @@ function Layout() {
     onChange();
     media.addEventListener("change", onChange);
     return () => media.removeEventListener("change", onChange);
-  }, []);
-
-  useEffect(() => {
-    function updateHeight() {
-      if (!topbarRef.current) return;
-      setTopbarHeight(topbarRef.current.offsetHeight || 0);
-    }
-    updateHeight();
-    window.addEventListener("resize", updateHeight);
-    return () => window.removeEventListener("resize", updateHeight);
   }, []);
 
   useEffect(() => {
@@ -5555,24 +5554,27 @@ function Layout() {
       <div className="glow"></div>
       <div className="sparks"></div>
       <div className="shell" ref=${shellRef}>
-        ${!desktopStickyVisible
-          ? html`<header className=${`topbar fade-in ${hideLogo ? "logo-hidden" : ""} ${!isMobile && logoSide === "right" ? "logo-right" : ""}`} ref=${topbarRef}>
-              <${Link}
-                className=${`logo island-logo ${hideLogo ? "logo-hidden" : ""}`}
-                to="/"
-                onClick=${() => setActive("home")}
-              >
-                <img
-                  className="logo-image"
-                  src=${LOGO_SRC}
-                  alt="Hardtale logo"
-                  onError=${handleLogoError}
-                />
-              <//>
-              <${DesktopNavShell} />
-              <${DesktopAuthButtonsBlock} />
-            </header>`
-          : html`<div className="topbar-spacer" style=${{ height: `${topbarHeight}px` }} aria-hidden="true"></div>`}
+        <header
+          className=${`topbar fade-in ${hideLogo ? "logo-hidden" : ""} ${
+            !isMobile && logoSide === "right" ? "logo-right" : ""
+          } ${desktopStickyVisible ? "desktop-sticky-active" : ""}`}
+          ref=${topbarRef}
+        >
+          <${Link}
+            className=${`logo island-logo ${hideLogo ? "logo-hidden" : ""}`}
+            to="/"
+            onClick=${() => setActive("home")}
+          >
+            <img
+              className="logo-image"
+              src=${LOGO_SRC}
+              alt="Hardtale logo"
+              onError=${handleLogoError}
+            />
+          <//>
+          <${DesktopNavShell} />
+          <${DesktopAuthButtonsBlock} />
+        </header>
 
         <${AppRoutes}
           Routes=${Routes}
