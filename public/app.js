@@ -58,7 +58,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.22";
+const VERSION = "1.3.24";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_EMAILS = new Set([
   "chashsmurfis@gmail.com",
@@ -131,6 +131,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.24",
+    date: "2026-02-16",
+    items: [
+      "Added account linking APIs: /api/link/status and /api/link/redeem with Mongo persistence for webUserId <-> playerUuid.",
+      "Integrated /link UI with authenticated verify flow, success/error states, and linked account status display.",
+      "Added server-to-server redeem call plumbing for plugin integration via LINK_SERVICE_BASE_URL and LINK_SERVICE_AUTH_TOKEN.",
+    ],
+  },
   {
     version: "1.3.23",
     date: "2026-02-16",
@@ -4839,6 +4848,8 @@ function VotePage() {
 
 function LinkPage() {
   const location = useLocation();
+  const { getToken, isSignedIn, isLoaded: isAuthLoaded } = useAuth();
+  const { openSignIn } = useClerk();
   const LINK_CODE_LENGTH = 8;
   const LINK_CODE_REGEX = new RegExp(`^[A-Z0-9]{${LINK_CODE_LENGTH}}$`);
   const EMPTY_CODE_ARRAY = useMemo(
@@ -4885,6 +4896,14 @@ function LinkPage() {
     const initialCode = extractCodeFromSearch(location.search);
     return initialCode ? initialCode.split("") : [...EMPTY_CODE_ARRAY];
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [statusMessage, setStatusMessage] = useState("");
+  const [statusType, setStatusType] = useState("");
+  const [linkedInfo, setLinkedInfo] = useState({
+    linked: false,
+    maskedPlayerUuid: "",
+    playerName: "",
+  });
   const fullCode = digits.join("");
   const isComplete = fullCode.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(fullCode);
 
@@ -4893,6 +4912,30 @@ function LinkPage() {
     if (!parsedCode) return;
     setDigits(parsedCode.split(""));
   }, [location.search, LINK_CODE_LENGTH]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadStatus() {
+      if (!isAuthLoaded || !isSignedIn) return;
+      try {
+        const response = await apiFetchWithToken(getToken, true, "/api/link/status");
+        const data = await response.json().catch(() => ({}));
+        if (cancelled || !response.ok) return;
+        if (!data?.linked) return;
+        setLinkedInfo({
+          linked: true,
+          maskedPlayerUuid: String(data.maskedPlayerUuid || ""),
+          playerName: String(data.playerName || ""),
+        });
+      } catch {
+        // noop
+      }
+    }
+    loadStatus();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthLoaded, isSignedIn, getToken]);
 
   function setDigitAt(index, value) {
     const next = [...digits];
@@ -4941,6 +4984,44 @@ function LinkPage() {
     inputRefs.current[focusIndex]?.select();
   }
 
+  async function onVerifyClick() {
+    if (!isSignedIn) {
+      setStatusType("error");
+      setStatusMessage("Sign in first to link your game account.");
+      if (openSignIn) openSignIn({});
+      return;
+    }
+    if (!isComplete || isSubmitting) return;
+    setIsSubmitting(true);
+    setStatusType("");
+    setStatusMessage("");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/link/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: fullCode }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setStatusType("error");
+        setStatusMessage(String(data?.error || "Link failed. Try again."));
+        return;
+      }
+      setLinkedInfo({
+        linked: true,
+        maskedPlayerUuid: String(data?.maskedPlayerUuid || ""),
+        playerName: String(data?.playerName || ""),
+      });
+      setStatusType("success");
+      setStatusMessage("Your game account is linked.");
+    } catch {
+      setStatusType("error");
+      setStatusMessage("Link failed. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
   return html`
     <section className="link-page fade-in">
       <div className="card link-card">
@@ -4971,9 +5052,24 @@ function LinkPage() {
           )}
         </div>
         <div className="link-actions">
-          <button className="button primary" type="button" disabled=${!isComplete}>
-            Verify Link Code
+          <button
+            className="button primary"
+            type="button"
+            disabled=${!isComplete || isSubmitting}
+            onClick=${onVerifyClick}
+          >
+            ${isSubmitting ? "Linking..." : "Verify Link Code"}
           </button>
+          ${linkedInfo.linked
+            ? html`<div className="link-status link-status-success">
+                Linked account: ${linkedInfo.playerName || linkedInfo.maskedPlayerUuid || "Linked"}
+              </div>`
+            : html``}
+          ${statusMessage
+            ? html`<div className=${`link-status ${
+                statusType === "error" ? "link-status-error" : "link-status-success"
+              }`}>${statusMessage}</div>`
+            : html``}
           <div className="muted link-hint">Use /link in-game soon to generate this code from your UUID.</div>
         </div>
       </div>

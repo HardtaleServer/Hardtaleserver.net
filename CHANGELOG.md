@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-16 (v1.3.24)
+- Added account linking APIs: `/api/link/status` and `/api/link/redeem`, including Mongo persistence for `webUserId <-> playerUuid`.
+- Added `/link` page verify flow (authenticated redeem call, loading/success/error states, and linked account status display).
+- Added server-to-server redeem integration config via `LINK_SERVICE_BASE_URL`, `LINK_SERVICE_AUTH_TOKEN`, and optional `LINK_SERVICE_TIMEOUT_MS`.
+
 ## 2026-02-16 (v1.3.23)
 - Updated `Registered` rank color to `#479284`.
 - Reworked `Mythic` rank visuals to a more distinct rare/cosmic cyan palette so it no longer closely matches `Legend`.

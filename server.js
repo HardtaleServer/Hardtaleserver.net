@@ -73,6 +73,12 @@ const DISPLAY_TITLE_TIER = { Registered: 0, Hero: 1, Legend: 2, Mythic: 3 };
 const OWNED_RANKS = ["Unregistered", "Registered", "Hero", "Legend", "Mythic"];
 const MONGO_URI = process.env.MONGO_URI || "";
 const MONGO_DB_NAME = process.env.MONGO_DB || "hardtaledb";
+const LINK_SERVICE_BASE_URL = String(process.env.LINK_SERVICE_BASE_URL || "").trim();
+const LINK_SERVICE_AUTH_TOKEN = String(process.env.LINK_SERVICE_AUTH_TOKEN || "").trim();
+const LINK_SERVICE_TIMEOUT_MS = Math.max(
+  2000,
+  Math.min(Number(process.env.LINK_SERVICE_TIMEOUT_MS || 8000), 20000),
+);
 
 app.use(express.json({ limit: "100kb" }));
 app.use("/api", clerkMiddleware());
@@ -107,6 +113,7 @@ let cartsCollection = null;
 let purchasesCollection = null;
 let supportTicketsCollection = null;
 let forumPostsCollection = null;
+let linkedAccountsCollection = null;
 let mongoConnectInFlight = null;
 let mongoReconnectTimer = null;
 let mongoReconnectDelayMs = 1000;
@@ -125,6 +132,7 @@ function resetMongoState() {
   purchasesCollection = null;
   supportTicketsCollection = null;
   forumPostsCollection = null;
+  linkedAccountsCollection = null;
   mongoConnectInFlight = null;
 }
 
@@ -157,7 +165,8 @@ async function connectMongo() {
     cartsCollection &&
     purchasesCollection &&
     supportTicketsCollection &&
-    forumPostsCollection
+    forumPostsCollection &&
+    linkedAccountsCollection
   ) {
     return;
   }
@@ -189,6 +198,7 @@ async function connectMongo() {
       purchasesCollection = mongoDb.collection("purchases");
       supportTicketsCollection = mongoDb.collection("support_tickets");
       forumPostsCollection = mongoDb.collection("forum_posts");
+      linkedAccountsCollection = mongoDb.collection("linked_accounts");
       await commentsCollection.createIndex({ newsId: 1, createdAt: 1 });
       await commentsCollection.createIndex({ userId: 1 });
       await commentRevisionsCollection.createIndex({ commentId: 1, createdAt: 1 });
@@ -209,6 +219,9 @@ async function connectMongo() {
       await forumPostsCollection.createIndex({ id: 1 }, { unique: true });
       await forumPostsCollection.createIndex({ section: 1, createdAt: -1 });
       await forumPostsCollection.createIndex({ createdBy: 1, createdAt: -1 });
+      await linkedAccountsCollection.createIndex({ webUserId: 1 }, { unique: true });
+      await linkedAccountsCollection.createIndex({ playerUuid: 1 }, { unique: true });
+      await linkedAccountsCollection.createIndex({ updatedAt: -1 });
       mongoReconnectDelayMs = 1000;
       console.log("Connected to MongoDB");
     } catch (error) {
@@ -321,7 +334,8 @@ async function requireMongoReady(res) {
     !notificationReadsCollection ||
     !cartsCollection ||
     !purchasesCollection ||
-    !supportTicketsCollection
+    !supportTicketsCollection ||
+    !linkedAccountsCollection
   ) {
     try {
       await connectMongo();
@@ -339,7 +353,8 @@ async function requireMongoReady(res) {
     !notificationReadsCollection ||
     !cartsCollection ||
     !purchasesCollection ||
-    !supportTicketsCollection
+    !supportTicketsCollection ||
+    !linkedAccountsCollection
   ) {
     res.status(503).json({
       error: "Database not connected",
@@ -487,6 +502,83 @@ function isValidEmoji(value) {
 
 function normalizeText(value, limit) {
   return String(value || "").trim().slice(0, limit);
+}
+
+function normalizeLinkCode(value) {
+  return String(value || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 8);
+}
+
+function normalizePlayerUuid(value) {
+  const compact = String(value || "")
+    .toLowerCase()
+    .replace(/[^0-9a-f]/g, "");
+  if (compact.length !== 32) return "";
+  return `${compact.slice(0, 8)}-${compact.slice(8, 12)}-${compact.slice(12, 16)}-${compact.slice(16, 20)}-${compact.slice(20)}`;
+}
+
+function maskPlayerUuid(value) {
+  const uuid = normalizePlayerUuid(value);
+  if (!uuid) return "";
+  return `${uuid.slice(0, 8)}-****-****-****-${uuid.slice(-12)}`;
+}
+
+function parseJsonSafely(raw) {
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
+async function redeemLinkCodeWithGameServer({ code, webUserId, idempotencyKey }) {
+  if (!LINK_SERVICE_BASE_URL) {
+    return { ok: false, status: 503, error: "Link service base URL is not configured" };
+  }
+  if (!LINK_SERVICE_AUTH_TOKEN) {
+    return { ok: false, status: 503, error: "Link service auth token is not configured" };
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), LINK_SERVICE_TIMEOUT_MS);
+  const endpoint = `${LINK_SERVICE_BASE_URL.replace(/\/+$/, "")}/api/v1/link/redeem`;
+  const requestBody = JSON.stringify({ code, webUserId });
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${LINK_SERVICE_AUTH_TOKEN}`,
+        "X-Service-Auth": LINK_SERVICE_AUTH_TOKEN,
+        "X-Idempotency-Key": idempotencyKey,
+      },
+      body: requestBody,
+      signal: controller.signal,
+    });
+    const rawBody = await response.text();
+    const parsedBody = parseJsonSafely(rawBody);
+    if (!response.ok) {
+      return {
+        ok: false,
+        status: response.status,
+        error:
+          normalizeText(parsedBody?.error || parsedBody?.message || rawBody || "Redeem failed", 200) ||
+          "Redeem failed",
+      };
+    }
+    return { ok: true, status: response.status, data: parsedBody || {} };
+  } catch (error) {
+    if (error?.name === "AbortError") {
+      return { ok: false, status: 504, error: "Redeem request timed out" };
+    }
+    return { ok: false, status: 502, error: "Failed to reach link service" };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function formatUsernameForDisplay(value, limit = 80) {
@@ -2444,6 +2536,97 @@ app.post("/api/cart/checkout", async (req, res) => {
   } catch (error) {
     console.error("Failed to checkout cart", error);
     return res.status(500).json({ error: "Failed to checkout cart" });
+  }
+});
+
+app.get("/api/link/status", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const doc = await linkedAccountsCollection.findOne({ webUserId: auth.userId });
+    if (!doc) {
+      return res.json({ linked: false });
+    }
+    return res.json({
+      linked: true,
+      playerUuid: doc.playerUuid || "",
+      maskedPlayerUuid: maskPlayerUuid(doc.playerUuid),
+      playerName: normalizeText(doc.playerName || "", 60),
+      linkedAt: doc.linkedAt || doc.createdAt || doc.updatedAt || "",
+    });
+  } catch (error) {
+    console.error("Failed to load link status", error);
+    return res.status(500).json({ error: "Failed to load link status" });
+  }
+});
+
+app.post("/api/link/redeem", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+
+    const code = normalizeLinkCode(req.body?.code);
+    if (!/^[A-Z0-9]{8}$/.test(code)) {
+      return res.status(400).json({ error: "Link code must be 8 letters/numbers" });
+    }
+
+    const idempotencyKey = crypto.randomUUID();
+    const redeemResult = await redeemLinkCodeWithGameServer({
+      code,
+      webUserId: auth.userId,
+      idempotencyKey,
+    });
+    if (!redeemResult.ok) {
+      return res.status(redeemResult.status || 502).json({ error: redeemResult.error || "Redeem failed" });
+    }
+
+    const payload = redeemResult.data || {};
+    const playerUuid = normalizePlayerUuid(payload.playerUuid || payload.playerUUID || payload.uuid || payload.playerId);
+    if (!playerUuid) {
+      return res.status(502).json({ error: "Redeem succeeded but did not return a valid player UUID" });
+    }
+
+    const playerName = normalizeText(payload.playerName || payload.username || payload.playerUsername || "", 60);
+    const existingByPlayer = await linkedAccountsCollection.findOne({ playerUuid });
+    if (existingByPlayer && existingByPlayer.webUserId !== auth.userId) {
+      return res.status(409).json({ error: "That game account is already linked to another web account" });
+    }
+
+    const nowIso = new Date().toISOString();
+    await linkedAccountsCollection.updateOne(
+      { webUserId: auth.userId },
+      {
+        $set: {
+          webUserId: auth.userId,
+          playerUuid,
+          playerName,
+          linkedSource: "redeemCode",
+          codeLast4: code.slice(-4),
+          updatedAt: nowIso,
+          linkedAt: nowIso,
+        },
+        $setOnInsert: {
+          createdAt: nowIso,
+        },
+      },
+      { upsert: true },
+    );
+
+    return res.json({
+      success: true,
+      linked: true,
+      playerUuid,
+      maskedPlayerUuid: maskPlayerUuid(playerUuid),
+      playerName,
+    });
+  } catch (error) {
+    if (error?.code === 11000) {
+      return res.status(409).json({ error: "That game account is already linked to another web account" });
+    }
+    console.error("Failed to redeem link code", error);
+    return res.status(500).json({ error: "Failed to redeem link code" });
   }
 });
 

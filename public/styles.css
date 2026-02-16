@@ -2642,6 +2642,19 @@ emoji-picker.reaction-picker-panel {
   font-size: 12px;
 }
 
+.link-status {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.link-status-success {
+  color: #62d6b2;
+}
+
+.link-status-error {
+  color: #ff8f8f;
+}
+
 .news-hero {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
