@@ -32,7 +32,7 @@ function renderRankIcon(type) {
   }
 }
 
-export default function CommentIdentity({ entry, rank, authorSizeClass }) {
+export default function CommentIdentity({ entry, rank, authorSizeClass, showStaffPill = false }) {
   const name = String(entry?.authorName || "User");
   const sizeClass = authorSizeClass ? authorSizeClass(name) : "";
   const staffClass = rank?.staff ? "staff" : "";
@@ -48,6 +48,7 @@ export default function CommentIdentity({ entry, rank, authorSizeClass }) {
     <div className="comment-identity">
       <div className=${`comment-author ${sizeClass} ${staffClass} ${staffStaticClass} ${rankEffectsClass} ${rankClass}`.trim()}>
         <span>${name}</span>
+        ${showStaffPill ? html`<span className="comment-staff-pill">STAFF</span>` : html``}
       </div>
       <div className=${`comment-rank ${staffClass} ${staffStaticClass} ${rankEffectsClass} ${rankClass}`.trim()}>
         ${rankIconType ? html`<span className="rank-icon">${renderRankIcon(rankIconType)}</span>` : html``}

@@ -2144,6 +2144,23 @@ emoji-picker.reaction-picker-panel {
   line-height: 1;
 }
 
+.comment-staff-pill,
+.forum-staff-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-radius: 999px;
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 44%, var(--stroke));
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  line-height: 1;
+}
+
 .comment-author.staff {
   background-image: linear-gradient(270deg, var(--accent-2), var(--accent));
   background-size: 220% 100%;

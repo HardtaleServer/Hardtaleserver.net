@@ -1343,17 +1343,35 @@ function CommentThread({
     const authorName = String(comment.authorName || "").toLowerCase();
     const authorRank = String(comment.authorRank || "");
     const staffIdentity =
+      Boolean(comment?.authorIsStaff) ||
       STAFF_EMAILS.has(email) ||
       isStaffLabel(username) ||
       isStaffLabel(authorName) ||
       isStaffLabel(authorRank);
     const showStaffBadge = comment?.authorShowStaffBadge !== false;
     const animateStaffGradient = comment?.authorShowStaffGradient !== false;
-    if (staffIdentity && showStaffBadge) {
+    const selectedRank = authorRank || "Unregistered";
+    const selectedIsStaff = isStaffLabel(selectedRank);
+    if (staffIdentity && showStaffBadge && (selectedIsStaff || !authorRank)) {
       return { label: "STAFF", staff: true, animateStaffGradient };
     }
-    const rank = authorRank || "Unregistered";
+    const rank = selectedRank;
     return { label: rank, staff: false, animateStaffGradient: false };
+  }
+
+  function showStaffNameBadge(entry) {
+    if (!entry) return false;
+    const email = String(entry.authorEmail || "").toLowerCase();
+    const username = String(entry.authorUsername || "").toLowerCase();
+    const authorName = String(entry.authorName || "").toLowerCase();
+    return (
+      entry?.authorShowStaffBadge !== false &&
+      (Boolean(entry?.authorIsStaff) ||
+        STAFF_EMAILS.has(email) ||
+        isStaffLabel(username) ||
+        isStaffLabel(authorName) ||
+        isStaffLabel(entry?.authorRank || ""))
+    );
   }
 
   function rankClassSlug(value) {
@@ -1688,6 +1706,14 @@ function CommentThread({
       }
       const data = await response.json();
       const selectedTitle = String(data?.selectedTitle || nextTitle);
+      const shouldDisableStaffGradient = !isStaffLabel(selectedTitle);
+      if (shouldDisableStaffGradient) {
+        await apiFetchWithToken(getToken, true, "/api/profile/staff-gradient", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ showStaffGradient: false }),
+        }).catch(() => {});
+      }
       const availableRaw = Array.isArray(data?.availableTitles) ? data.availableTitles : [];
       const availableTitles = PROFILE_DISPLAY_TITLES.filter((title) => availableRaw.includes(title));
       setProfileUser((prev) =>
@@ -1696,6 +1722,7 @@ function CommentThread({
               ...prev,
               rankLabel: selectedTitle,
               availableTitles: availableTitles.length > 0 ? availableTitles : prev.availableTitles,
+              showStaffGradient: shouldDisableStaffGradient ? false : prev.showStaffGradient,
             }
           : prev,
       );
@@ -1703,13 +1730,29 @@ function CommentThread({
         prev.map((comment) => {
           if (!comment) return comment;
           const nextComment =
-            comment.userId === userId ? { ...comment, authorRank: selectedTitle } : comment;
+            comment.userId === userId
+              ? {
+                  ...comment,
+                  authorRank: selectedTitle,
+                  authorShowStaffGradient: shouldDisableStaffGradient
+                    ? false
+                    : comment.authorShowStaffGradient,
+                }
+              : comment;
           const replies = Array.isArray(nextComment.replies) ? nextComment.replies : [];
           if (replies.length === 0) return nextComment;
           return {
             ...nextComment,
             replies: replies.map((reply) =>
-              reply?.userId === userId ? { ...reply, authorRank: selectedTitle } : reply,
+              reply?.userId === userId
+                ? {
+                    ...reply,
+                    authorRank: selectedTitle,
+                    authorShowStaffGradient: shouldDisableStaffGradient
+                      ? false
+                      : reply.authorShowStaffGradient,
+                  }
+                : reply,
             ),
           };
         }),
@@ -1745,7 +1788,10 @@ function CommentThread({
               ...prev,
               showStaffGradient,
               showStaffBadge: prev.isStaffUser,
-              staff: prev.isStaffUser,
+              staff:
+                prev.isStaffUser &&
+                prev.showStaffBadge !== false &&
+                isStaffLabel(prev.rankLabel || ""),
             }
           : prev,
       );
@@ -1806,7 +1852,7 @@ function CommentThread({
           ? {
               ...prev,
               showStaffBadge,
-              staff: prev.isStaffUser && showStaffBadge,
+              staff: prev.isStaffUser && showStaffBadge && isStaffLabel(prev.rankLabel || ""),
             }
           : prev,
       );
@@ -2023,6 +2069,9 @@ function CommentThread({
         showAvatarVfx = settings.showAvatarVfx !== false;
       }
     }
+    if (!isStaffLabel(selectedTitle)) {
+      showStaffGradient = false;
+    }
     isStaffUser = isStaffUser || canToggleStaffGradient || canToggleStaffBadge;
     if (isOwn && availableTitles.length === 0 && selectedTitle) {
       availableTitles = [selectedTitle];
@@ -2034,7 +2083,7 @@ function CommentThread({
       image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel: selectedTitle,
       ownedRank,
-      staff: isStaffUser && showStaffBadge,
+      staff: isStaffUser && showStaffBadge && isStaffLabel(selectedTitle),
       username: formatUsernameForDisplay(entry.authorUsername),
       isOwn,
       isStaffUser,
@@ -2118,6 +2167,7 @@ function CommentThread({
                         entry=${comment}
                         rank=${resolveRank(comment)}
                         authorSizeClass=${authorSizeClass}
+                        showStaffPill=${showStaffNameBadge(comment)}
                       />
                       <${CommentMeta}
                         entry=${comment}
@@ -2132,6 +2182,7 @@ function CommentThread({
                             entry=${comment}
                             rank=${resolveRank(comment)}
                             authorSizeClass=${authorSizeClass}
+                            showStaffPill=${showStaffNameBadge(comment)}
                           />
                         </div>
                       </div>
@@ -2258,6 +2309,7 @@ function CommentThread({
                                         entry=${reply}
                                         rank=${resolveRank(reply)}
                                         authorSizeClass=${authorSizeClass}
+                                        showStaffPill=${showStaffNameBadge(reply)}
                                       />
                                       <${CommentMeta}
                                         entry=${reply}
@@ -2272,6 +2324,7 @@ function CommentThread({
                                             entry=${reply}
                                             rank=${resolveRank(reply)}
                                             authorSizeClass=${authorSizeClass}
+                                            showStaffPill=${showStaffNameBadge(reply)}
                                           />
                                         </div>
                                       </div>
@@ -2518,7 +2571,9 @@ function CommentThread({
                     <span>Show staff badge</span>
                   </label>`
                 : html``}
-              ${profileUser.isOwn && profileUser.canToggleStaffGradient
+              ${profileUser.isOwn &&
+              profileUser.canToggleStaffGradient &&
+              isStaffLabel(profileUser.rankLabel || "")
                 ? html`<label className="profile-card-toggle">
                     <input
                       type="checkbox"
@@ -4122,18 +4177,30 @@ function ForumPage({ isAdmin = false }) {
   function forumRankClassName(entry) {
     const slug = rankSlug(entry?.authorRank || "Unregistered");
     const showStaffBadge = entry?.authorShowStaffBadge !== false;
-    const isStaffRank =
-      showStaffBadge &&
-      (Boolean(entry?.authorIsStaff) ||
-        isStaffLabel(entry?.authorRank || "") ||
-        isStaffLabel(entry?.authorName || "") ||
-        isStaffLabel(entry?.authorUsername || ""));
+    const staffIdentity =
+      Boolean(entry?.authorIsStaff) ||
+      isStaffLabel(entry?.authorName || "") ||
+      isStaffLabel(entry?.authorUsername || "") ||
+      isStaffLabel(entry?.authorRank || "");
+    const selectedIsStaff = isStaffLabel(entry?.authorRank || "");
+    const isStaffRank = showStaffBadge && staffIdentity && selectedIsStaff;
     const staffClass = isStaffRank
       ? entry?.authorShowStaffGradient === false
         ? "staff staff-static"
         : "staff"
       : "";
     return `comment-rank forum-author-rank ${staffClass} rank-${slug}`.trim();
+  }
+
+  function forumShowStaffPill(entry) {
+    if (!entry) return false;
+    return (
+      entry?.authorShowStaffBadge !== false &&
+      (Boolean(entry?.authorIsStaff) ||
+        isStaffLabel(entry?.authorName || "") ||
+        isStaffLabel(entry?.authorUsername || "") ||
+        isStaffLabel(entry?.authorRank || ""))
+    );
   }
 
   function getForumPostAuthorUserId(post) {
@@ -4256,6 +4323,9 @@ function ForumPage({ isAdmin = false }) {
         showAvatarVfx = settings.showAvatarVfx !== false;
       }
     }
+    if (!isStaffLabel(selectedTitle)) {
+      showStaffGradient = false;
+    }
     isStaffUser = isStaffUser || canToggleStaffGradient || canToggleStaffBadge;
     if (isOwn && availableTitles.length === 0 && selectedTitle) {
       availableTitles = [selectedTitle];
@@ -4268,7 +4338,7 @@ function ForumPage({ isAdmin = false }) {
       image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel: selectedTitle,
       ownedRank,
-      staff: isStaffUser && showStaffBadge,
+      staff: isStaffUser && showStaffBadge && isStaffLabel(selectedTitle),
       isStaffUser,
       isOwn,
       availableTitles,
@@ -4307,6 +4377,14 @@ function ForumPage({ isAdmin = false }) {
       }
       const data = await response.json();
       const selectedTitle = String(data?.selectedTitle || nextTitle);
+      const shouldDisableStaffGradient = !isStaffLabel(selectedTitle);
+      if (shouldDisableStaffGradient) {
+        await apiFetchWithToken(getToken, true, "/api/profile/staff-gradient", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ showStaffGradient: false }),
+        }).catch(() => {});
+      }
       const availableRaw = Array.isArray(data?.availableTitles) ? data.availableTitles : [];
       const availableTitles = PROFILE_DISPLAY_TITLES.filter((title) => availableRaw.includes(title));
       setForumProfileUser((prev) =>
@@ -4315,6 +4393,7 @@ function ForumPage({ isAdmin = false }) {
               ...prev,
               rankLabel: selectedTitle,
               availableTitles: availableTitles.length > 0 ? availableTitles : prev.availableTitles,
+              showStaffGradient: shouldDisableStaffGradient ? false : prev.showStaffGradient,
             }
           : prev,
       );
@@ -4322,7 +4401,13 @@ function ForumPage({ isAdmin = false }) {
         prev.map((post) => {
           const postAuthorUserId = String(post?.authorUserId || post?.createdBy || "");
           return postAuthorUserId === String(userId || "")
-            ? { ...post, authorRank: selectedTitle }
+            ? {
+                ...post,
+                authorRank: selectedTitle,
+                authorShowStaffGradient: shouldDisableStaffGradient
+                  ? false
+                  : post.authorShowStaffGradient,
+              }
             : post;
         }),
       );
@@ -4330,7 +4415,13 @@ function ForumPage({ isAdmin = false }) {
         if (!prev) return prev;
         const postAuthorUserId = String(prev?.authorUserId || prev?.createdBy || "");
         return postAuthorUserId === String(userId || "")
-          ? { ...prev, authorRank: selectedTitle }
+          ? {
+              ...prev,
+              authorRank: selectedTitle,
+              authorShowStaffGradient: shouldDisableStaffGradient
+                ? false
+                : prev.authorShowStaffGradient,
+            }
           : prev;
       });
       setForumProfileTitleStatus("Saved.");
@@ -4363,7 +4454,10 @@ function ForumPage({ isAdmin = false }) {
           ? {
               ...prev,
               showStaffGradient,
-              staff: prev.isStaffUser,
+              staff:
+                prev.isStaffUser &&
+                prev.showStaffBadge !== false &&
+                isStaffLabel(prev.rankLabel || ""),
             }
           : prev,
       );
@@ -4412,7 +4506,7 @@ function ForumPage({ isAdmin = false }) {
           ? {
               ...prev,
               showStaffBadge,
-              staff: prev.isStaffUser && showStaffBadge,
+              staff: prev.isStaffUser && showStaffBadge && isStaffLabel(prev.rankLabel || ""),
             }
           : prev,
       );
@@ -4624,7 +4718,9 @@ function ForumPage({ isAdmin = false }) {
             <span>Show staff badge</span>
           </label>`
         : html``}
-      ${forumProfileUser.isOwn && forumProfileUser.canToggleStaffGradient
+      ${forumProfileUser.isOwn &&
+      forumProfileUser.canToggleStaffGradient &&
+      isStaffLabel(forumProfileUser.rankLabel || "")
         ? html`<label className="profile-card-toggle">
             <input
               type="checkbox"
@@ -4873,6 +4969,9 @@ function ForumPage({ isAdmin = false }) {
                     >
                       <${AuthorName} value=${selectedPost.authorName || "User"} isStaffLabel=${isStaffLabel} />
                     </button>
+                    ${forumShowStaffPill(selectedPost)
+                      ? html`<span className="forum-staff-pill">STAFF</span>`
+                      : html``}
                     <span className=${forumRankClassName(selectedPost)}>
                       ${(() => {
                         const iconType = getRankIconType(selectedPost.authorRank || "");
@@ -5087,6 +5186,9 @@ function ForumPage({ isAdmin = false }) {
                       >
                         <${AuthorName} value=${post.authorName || "User"} isStaffLabel=${isStaffLabel} />
                       </button>
+                      ${forumShowStaffPill(post)
+                        ? html`<span className="forum-staff-pill">STAFF</span>`
+                        : html``}
                       <span className=${forumRankClassName(post)}>
                         ${(() => {
                           const iconType = getRankIconType(post.authorRank || "");
