@@ -93,8 +93,9 @@ const ACHIEVEMENT_DEFS = [
     icon: "L",
   },
 ];
-const MONGO_URI = process.env.MONGO_URI || "";
-const MONGO_DB_NAME = process.env.MONGO_DB || "hardtaledb";
+const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI || "";
+const MONGO_DB_NAME = process.env.MONGO_DB || process.env.MONGODB_DB || "hardtaledb";
+const FULFILLMENT_API_TOKEN = String(process.env.FULFILLMENT_API_TOKEN || "").trim();
 const LINK_SERVICE_BASE_URL = String(process.env.LINK_SERVICE_BASE_URL || "").trim();
 const LINK_SERVICE_AUTH_TOKEN = String(process.env.LINK_SERVICE_AUTH_TOKEN || "").trim();
 const LINKING_ENABLED = String(
@@ -247,6 +248,9 @@ async function connectMongo() {
       await notificationReadsCollection.createIndex({ userId: 1, readAt: -1 });
       await cartsCollection.createIndex({ userId: 1 }, { unique: true });
       await purchasesCollection.createIndex({ userId: 1, createdAt: -1 });
+      await purchasesCollection.createIndex({ purchaseId: 1 }, { unique: true, sparse: true });
+      await purchasesCollection.createIndex({ fulfilled: 1, status: 1, createdAt: 1 });
+      await purchasesCollection.createIndex({ uuid: 1, fulfilled: 1, status: 1, createdAt: 1 });
       await supportTicketsCollection.createIndex({ id: 1 }, { unique: true });
       await supportTicketsCollection.createIndex({ createdBy: 1, createdAt: -1 });
       await supportTicketsCollection.createIndex({ status: 1, updatedAt: -1 });
@@ -543,6 +547,21 @@ function requireCommentAuth(req, res) {
   return auth;
 }
 
+function requireFulfillmentAuth(req, res) {
+  if (!FULFILLMENT_API_TOKEN) {
+    res.status(503).json({ error: "Fulfillment API token is not configured" });
+    return false;
+  }
+  const authHeader = String(req.headers?.authorization || "");
+  const prefix = "Bearer ";
+  const token = authHeader.startsWith(prefix) ? authHeader.slice(prefix.length).trim() : "";
+  if (!token || token !== FULFILLMENT_API_TOKEN) {
+    res.status(401).json({ error: "Unauthorized" });
+    return false;
+  }
+  return true;
+}
+
 function isValidEmoji(value) {
   if (!value) return false;
   if (typeof value !== "string") return false;
@@ -552,6 +571,14 @@ function isValidEmoji(value) {
 
 function normalizeText(value, limit) {
   return String(value || "").trim().slice(0, limit);
+}
+
+function normalizeUuidList(value) {
+  const raw = Array.isArray(value) ? value.join(",") : String(value || "");
+  return raw
+    .split(",")
+    .map((entry) => normalizePlayerUuid(entry))
+    .filter(Boolean);
 }
 
 function normalizeLinkCode(value) {
@@ -980,6 +1007,26 @@ function getHighestRankFromItems(items = []) {
     }
   }
   return best;
+}
+
+function buildFulfillmentGrants(items = []) {
+  const grants = [];
+  const highestRank = getHighestRankFromItems(items);
+  if (highestRank) {
+    grants.push({
+      type: "rank",
+      id: highestRank,
+    });
+  }
+  for (const entry of items) {
+    const id = normalizeText(entry?.id, 80);
+    if (!id) continue;
+    grants.push({
+      type: "store_item",
+      id,
+    });
+  }
+  return grants;
 }
 
 function maxRankLabel(currentRank, nextRank) {
@@ -2997,7 +3044,7 @@ app.post("/api/cart", async (req, res) => {
     }
     const linked = await linkedAccountsCollection.findOne(
       { webUserId: auth.userId },
-      { projection: { _id: 1 } },
+      { projection: { _id: 1, playerUuid: 1 } },
     );
     if (!linked) {
       return res.status(403).json({ error: "Link your game account before using the store" });
@@ -3071,13 +3118,20 @@ app.post("/api/cart/checkout", async (req, res) => {
       }
     }
 
+    const purchaseId = crypto.randomUUID();
     await purchasesCollection.insertOne({
-      id: crypto.randomUUID(),
+      id: purchaseId,
+      purchaseId,
       userId: auth.userId,
+      uuid: normalizePlayerUuid(linked?.playerUuid),
+      grants: buildFulfillmentGrants(items),
+      status: "PAID",
+      fulfilled: false,
       items,
       total,
       awardedRank: awardedRank || null,
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
 
     await cartsCollection.updateOne(
@@ -3095,11 +3149,124 @@ app.post("/api/cart/checkout", async (req, res) => {
     return res.json({
       success: true,
       cart: { items: [] },
+      purchaseId,
       awardedRank: awardedRank || null,
     });
   } catch (error) {
     console.error("Failed to checkout cart", error);
     return res.status(500).json({ error: "Failed to checkout cart" });
+  }
+});
+
+app.get("/api/fulfillment/pending", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    if (!requireFulfillmentAuth(req, res)) return;
+
+    const serverId = normalizeText(req.query?.serverId, 80);
+    if (!serverId) {
+      return res.status(400).json({ error: "serverId is required" });
+    }
+    const limitRaw = Number(req.query?.limit);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 500) : 100;
+    const uuids = [
+      ...normalizeUuidList(req.query?.uuid),
+      ...normalizeUuidList(req.query?.uuids),
+      ...normalizeUuidList(req.query?.onlineUuids),
+      ...normalizeUuidList(req.query?.online),
+    ];
+    const filter = {
+      status: "PAID",
+      fulfilled: { $ne: true },
+    };
+    if (uuids.length > 0) {
+      filter.uuid = { $in: Array.from(new Set(uuids)) };
+    }
+    const docs = await purchasesCollection
+      .find(filter)
+      .sort({ createdAt: 1 })
+      .limit(limit)
+      .project({
+        _id: 0,
+        purchaseId: 1,
+        id: 1,
+        userId: 1,
+        uuid: 1,
+        grants: 1,
+        items: 1,
+        status: 1,
+        fulfilled: 1,
+        createdAt: 1,
+      })
+      .toArray();
+    const purchases = docs.map((doc) => ({
+      purchaseId: normalizeText(doc.purchaseId || doc.id, 128),
+      uuid: normalizePlayerUuid(doc.uuid),
+      grants: Array.isArray(doc.grants) ? doc.grants : [],
+      status: normalizeText(doc.status, 20) || "PAID",
+      fulfilled: Boolean(doc.fulfilled),
+      createdAt: doc.createdAt || new Date().toISOString(),
+    }));
+    return res.json({ purchases });
+  } catch (error) {
+    console.error("Failed to load pending fulfillments", error);
+    return res.status(500).json({ error: "Failed to load pending fulfillments" });
+  }
+});
+
+app.post("/api/fulfillment/ack", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    if (!requireFulfillmentAuth(req, res)) return;
+
+    const purchaseId = normalizeText(req.body?.purchaseId, 128);
+    if (!purchaseId) {
+      return res.status(400).json({ error: "purchaseId is required" });
+    }
+    const now = new Date().toISOString();
+    const resultPayload = req.body?.result && typeof req.body.result === "object"
+      ? req.body.result
+      : {
+          ok: req.body?.ok !== false,
+          detail: normalizeText(req.body?.detail || "", 300),
+          serverId: normalizeText(req.body?.serverId || "", 80),
+        };
+    const ackFilter = {
+      $or: [{ purchaseId }, { id: purchaseId }],
+      status: "PAID",
+      fulfilled: { $ne: true },
+    };
+    const ackUpdate = {
+      $set: {
+        fulfilled: true,
+        fulfilledAt: now,
+        fulfillmentResult: resultPayload,
+        updatedAt: now,
+      },
+    };
+    const updated = await purchasesCollection.updateOne(ackFilter, ackUpdate);
+    if (updated.modifiedCount > 0) {
+      return res.json({
+        success: true,
+        purchaseId,
+        alreadyFulfilled: false,
+      });
+    }
+    const existing = await purchasesCollection.findOne(
+      { $or: [{ purchaseId }, { id: purchaseId }] },
+      { projection: { _id: 0, fulfilled: 1 } },
+    );
+    if (existing && existing.fulfilled === true) {
+      return res.json({
+        success: true,
+        purchaseId,
+        alreadyFulfilled: true,
+      });
+    }
+    return res.status(404).json({ error: "Purchase not found" });
+  } catch (error) {
+    console.error("Failed to acknowledge fulfillment", error);
+    return res.status(500).json({ error: "Failed to acknowledge fulfillment" });
   }
 });
 
