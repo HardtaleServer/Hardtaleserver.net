@@ -79,6 +79,20 @@ const DISPLAY_TITLES = ["Registered", "Hero", "Legend", "Mythic"];
 const STAFF_DISPLAY_TITLE = "Staff";
 const DISPLAY_TITLE_TIER = { Registered: 0, Hero: 1, Legend: 2, Mythic: 3 };
 const OWNED_RANKS = ["Unregistered", "Registered", "Hero", "Legend", "Mythic"];
+const ACHIEVEMENT_DEFS = [
+  {
+    key: "welcome_login",
+    title: "Welcome!",
+    description: "Login to Hardtale",
+    icon: "W",
+  },
+  {
+    key: "linking_up",
+    title: "Linking up",
+    description: "Use /link successfully",
+    icon: "L",
+  },
+];
 const MONGO_URI = process.env.MONGO_URI || "";
 const MONGO_DB_NAME = process.env.MONGO_DB || "hardtaledb";
 const LINK_SERVICE_BASE_URL = String(process.env.LINK_SERVICE_BASE_URL || "").trim();
@@ -126,6 +140,7 @@ let purchasesCollection = null;
 let supportTicketsCollection = null;
 let forumPostsCollection = null;
 let linkedAccountsCollection = null;
+let userAchievementsCollection = null;
 let mongoConnectInFlight = null;
 let mongoReconnectTimer = null;
 let mongoReconnectDelayMs = 1000;
@@ -146,6 +161,7 @@ function resetMongoState() {
   supportTicketsCollection = null;
   forumPostsCollection = null;
   linkedAccountsCollection = null;
+  userAchievementsCollection = null;
   mongoConnectInFlight = null;
 }
 
@@ -180,7 +196,8 @@ async function connectMongo() {
     purchasesCollection &&
     supportTicketsCollection &&
     forumPostsCollection &&
-    linkedAccountsCollection
+    linkedAccountsCollection &&
+    userAchievementsCollection
   ) {
     return;
   }
@@ -214,6 +231,7 @@ async function connectMongo() {
       supportTicketsCollection = mongoDb.collection("support_tickets");
       forumPostsCollection = mongoDb.collection("forum_posts");
       linkedAccountsCollection = mongoDb.collection("linked_accounts");
+      userAchievementsCollection = mongoDb.collection("user_achievements");
       await commentsCollection.createIndex({ newsId: 1, createdAt: 1 });
       await commentsCollection.createIndex({ userId: 1 });
       await commentRevisionsCollection.createIndex({ commentId: 1, createdAt: 1 });
@@ -238,6 +256,8 @@ async function connectMongo() {
       await linkedAccountsCollection.createIndex({ webUserId: 1 }, { unique: true });
       await linkedAccountsCollection.createIndex({ playerUuid: 1 }, { unique: true });
       await linkedAccountsCollection.createIndex({ updatedAt: -1 });
+      await userAchievementsCollection.createIndex({ userId: 1, key: 1 }, { unique: true });
+      await userAchievementsCollection.createIndex({ userId: 1, unlockedAt: -1 });
       mongoReconnectDelayMs = 1000;
       console.log("Connected to MongoDB");
     } catch (error) {
@@ -361,7 +381,8 @@ async function requireMongoReady(res) {
     !supportTicketsCollection ||
     !forumPostsCollection ||
     !forumPostRevisionsCollection ||
-    !linkedAccountsCollection
+    !linkedAccountsCollection ||
+    !userAchievementsCollection
   ) {
     try {
       await connectMongo();
@@ -382,7 +403,8 @@ async function requireMongoReady(res) {
     !supportTicketsCollection ||
     !forumPostsCollection ||
     !forumPostRevisionsCollection ||
-    !linkedAccountsCollection
+    !linkedAccountsCollection ||
+    !userAchievementsCollection
   ) {
     res.status(503).json({
       error: "Database not connected",
@@ -725,9 +747,11 @@ async function getFreshAuthorSnapshot(userId, cache = new Map()) {
   try {
     const user = await clerkClient.users.getUser(key);
     const staffRole = resolveStaffRoleForUser(user);
+    const linked = await isLinkedUserId(key);
     const rankInfo = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
       Boolean(staffRole),
+      linked,
     );
     const staffUser = Boolean(staffRole);
     const snapshot = {
@@ -975,6 +999,12 @@ function normalizeOwnedRank(value) {
   return OWNED_RANKS.includes(rank) ? rank : "";
 }
 
+function applyLinkedOwnedRankFloor(ownedRank, linked = false) {
+  const normalized = normalizeOwnedRank(ownedRank) || "Unregistered";
+  if (!linked) return normalized;
+  return normalized === "Unregistered" ? "Registered" : normalized;
+}
+
 function getUnlockedDisplayTitles(ownedRank) {
   const normalizedOwned = normalizeOwnedRank(ownedRank) || "Unregistered";
   if (normalizedOwned === "Unregistered") return [];
@@ -982,8 +1012,8 @@ function getUnlockedDisplayTitles(ownedRank) {
   return DISPLAY_TITLES.filter((title) => (DISPLAY_TITLE_TIER[title] ?? 0) <= maxTier);
 }
 
-function resolveDisplayRankFromMetadata(metadata = {}, includeAllTitles = false) {
-  const ownedRank = normalizeOwnedRank(metadata?.rank) || "Unregistered";
+function resolveDisplayRankFromMetadata(metadata = {}, includeAllTitles = false, linked = false) {
+  const ownedRank = applyLinkedOwnedRankFloor(metadata?.rank, linked);
   const baseTitles = includeAllTitles ? [...DISPLAY_TITLES] : getUnlockedDisplayTitles(ownedRank);
   const availableTitles = includeAllTitles
     ? [STAFF_DISPLAY_TITLE, ...baseTitles]
@@ -998,6 +1028,104 @@ function resolveDisplayRankFromMetadata(metadata = {}, includeAllTitles = false)
       ? "Unregistered"
       : ownedRank;
   return { ownedRank, displayRank, availableTitles };
+}
+
+async function isLinkedUserId(userId) {
+  const id = normalizeText(userId, 128);
+  if (!id || !linkedAccountsCollection) return false;
+  const doc = await linkedAccountsCollection.findOne({ webUserId: id }, { projection: { _id: 1 } });
+  return Boolean(doc);
+}
+
+function buildAchievementCatalogWithState(unlockedRows = []) {
+  const unlockedMap = new Map();
+  for (const row of unlockedRows) {
+    const key = normalizeText(row?.key, 80);
+    if (!key) continue;
+    unlockedMap.set(key, String(row?.unlockedAt || ""));
+  }
+  return ACHIEVEMENT_DEFS.map((item) => {
+    const unlockedAt = unlockedMap.get(item.key) || "";
+    return {
+      key: item.key,
+      title: item.title,
+      description: item.description,
+      icon: item.icon,
+      unlocked: Boolean(unlockedAt),
+      unlockedAt,
+      locked: !unlockedAt,
+      status: unlockedAt ? "COMPLETE" : "INCOMPLETE",
+    };
+  });
+}
+
+async function getUserAchievements(userId) {
+  const safeUserId = normalizeText(userId, 128);
+  if (!safeUserId || !userAchievementsCollection) {
+    return buildAchievementCatalogWithState([]);
+  }
+  const rows = await userAchievementsCollection
+    .find({ userId: safeUserId })
+    .project({ key: 1, unlockedAt: 1 })
+    .toArray();
+  return buildAchievementCatalogWithState(rows);
+}
+
+async function notifyAchievementUnlocked(userId, achievement) {
+  if (!notificationsCollection || !achievement || !userId) return;
+  const now = new Date().toISOString();
+  await notificationsCollection.insertOne({
+    id: crypto.randomUUID(),
+    title: "Achievement Unlocked",
+    message: `${achievement.title} completed`,
+    author: "System",
+    authorName: "System",
+    authorUserId: "",
+    authorUsername: "",
+    authorImage: "",
+    authorRank: "Registered",
+    authorOwnedRank: "Registered",
+    authorShowStaffBadge: false,
+    authorShowStaffBadgeIcon: false,
+    authorShowStaffGradient: false,
+    featured: false,
+    type: "achievement_unlock",
+    targetUserId: normalizeText(userId, 128),
+    readMoreUrl: "",
+    isDeleted: false,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await pruneCollection(notificationsCollection, 120);
+}
+
+async function unlockAchievement(userId, key, { notify = true } = {}) {
+  const safeUserId = normalizeText(userId, 128);
+  const achievementKey = normalizeText(key, 80);
+  if (!safeUserId || !achievementKey || !userAchievementsCollection) return false;
+  const now = new Date().toISOString();
+  const result = await userAchievementsCollection.updateOne(
+    { userId: safeUserId, key: achievementKey },
+    {
+      $setOnInsert: {
+        userId: safeUserId,
+        key: achievementKey,
+        unlockedAt: now,
+      },
+      $set: {
+        updatedAt: now,
+      },
+    },
+    { upsert: true },
+  );
+  const inserted = Boolean(result?.upsertedCount);
+  if (inserted && notify) {
+    const achievement = ACHIEVEMENT_DEFS.find((entry) => entry.key === achievementKey);
+    if (achievement) {
+      await notifyAchievementUnlocked(safeUserId, achievement);
+    }
+  }
+  return inserted;
 }
 
 function normalizeNewsItem(item) {
@@ -1362,6 +1490,9 @@ app.get("/api/me", async (req, res) => {
     if (!auth?.userId) {
       return res.json({ isAdmin: false, isStaff: false, staffRole: "" });
     }
+    if (userAchievementsCollection) {
+      await unlockAchievement(auth.userId, "welcome_login", { notify: true }).catch(() => {});
+    }
     const user = await clerkClient.users.getUser(auth.userId);
     const staffRole = resolveStaffRoleForUser(user);
     return res.json({
@@ -1400,7 +1531,8 @@ app.get("/api/admin/users", async (req, res) => {
       : [];
     const linkedSet = new Set(linkedRows.map((row) => String(row.webUserId || "")));
     const entries = users.map((entry) => {
-      const ownedRank = normalizeOwnedRank(entry?.publicMetadata?.rank) || "Unregistered";
+      const linked = linkedSet.has(String(entry?.id || ""));
+      const ownedRank = applyLinkedOwnedRankFloor(entry?.publicMetadata?.rank, linked);
       const staffRole = resolveStaffRoleForUser(entry);
       return {
         userId: String(entry?.id || ""),
@@ -1409,7 +1541,7 @@ app.get("/api/admin/users", async (req, res) => {
         email: normalizeText(getUserEmail(entry), 120),
         image: String(entry?.imageUrl || ""),
         ownedRank,
-        linked: linkedSet.has(String(entry?.id || "")),
+        linked,
         staffRole,
         isStaff: Boolean(staffRole),
         isAdmin: isAdminUser(entry),
@@ -1454,7 +1586,12 @@ app.post("/api/admin/users/:userId/role", async (req, res) => {
     const refreshedUser = await clerkClient.users.getUser(targetUserId);
     const staffRole = resolveStaffRoleForUser(refreshedUser);
     const isStaff = Boolean(staffRole);
-    const rankInfo = resolveDisplayRankFromMetadata(refreshedUser?.publicMetadata || {}, isStaff);
+    const linkedAccount = await isLinkedUserId(targetUserId);
+    const rankInfo = resolveDisplayRankFromMetadata(
+      refreshedUser?.publicMetadata || {},
+      isStaff,
+      linkedAccount,
+    );
     const showStaffBadge = resolveStaffBadgeVisible(refreshedUser?.publicMetadata || {});
     const showStaffBadgeIcon = resolveStaffBadgeIconVisible(refreshedUser?.publicMetadata || {});
     const showStaffGradient = resolveStaffGradientVisible(refreshedUser?.publicMetadata || {});
@@ -1518,22 +1655,41 @@ app.post("/api/admin/users/:userId/role", async (req, res) => {
   }
 });
 
+app.get("/api/profile/achievements/:userId", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const userId = normalizeText(req.params.userId, 128);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+    const achievements = await getUserAchievements(userId);
+    return res.json({ userId, achievements });
+  } catch (error) {
+    console.error("Failed to load profile achievements", error);
+    return res.status(500).json({ error: "Failed to load profile achievements" });
+  }
+});
+
 app.get("/api/profile/title", async (req, res) => {
   try {
+    if (!(await requireMongoReady(res))) return;
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const user = await clerkClient.users.getUser(auth.userId);
+    const linked = await isLinkedUserId(auth.userId);
     const staffRole = resolveStaffRoleForUser(user);
     const isStaff = Boolean(staffRole);
     const { ownedRank, displayRank, availableTitles } = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
       isStaff,
+      linked,
     );
     return res.json({
       ownedRank,
       selectedTitle: displayRank,
       availableTitles,
       staffRole,
+      achievements: await getUserAchievements(auth.userId),
       canToggleStaffBadge: isStaff,
       showStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
       showStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
@@ -1670,7 +1826,8 @@ app.post("/api/profile/rank-effects", async (req, res) => {
     if (!auth) return;
     const user = await clerkClient.users.getUser(auth.userId);
     const isStaff = isStaffUser(user);
-    const rankInfo = resolveDisplayRankFromMetadata(user?.publicMetadata || {}, isStaff);
+    const linked = await isLinkedUserId(auth.userId);
+    const rankInfo = resolveDisplayRankFromMetadata(user?.publicMetadata || {}, isStaff, linked);
     if (!isStaff && rankInfo.ownedRank === "Unregistered") {
       return res.status(400).json({ error: "Rank effects unavailable for Unregistered" });
     }
@@ -1699,7 +1856,8 @@ app.post("/api/profile/avatar-vfx", async (req, res) => {
     if (!auth) return;
     const user = await clerkClient.users.getUser(auth.userId);
     const isStaff = isStaffUser(user);
-    const rankInfo = resolveDisplayRankFromMetadata(user?.publicMetadata || {}, isStaff);
+    const linked = await isLinkedUserId(auth.userId);
+    const rankInfo = resolveDisplayRankFromMetadata(user?.publicMetadata || {}, isStaff, linked);
     if (!isStaff && rankInfo.ownedRank === "Unregistered") {
       return res.status(400).json({ error: "Avatar VFX unavailable for Unregistered" });
     }
@@ -1733,9 +1891,11 @@ app.post("/api/profile/title", async (req, res) => {
     }
 
     const user = await clerkClient.users.getUser(auth.userId);
+    const linked = await isLinkedUserId(auth.userId);
     const rankInfo = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
       isStaffUser(user),
+      linked,
     );
     if (!rankInfo.availableTitles.includes(requestedTitle)) {
       return res.status(400).json({ error: "Title not unlocked" });
@@ -2135,9 +2295,11 @@ app.post("/api/comments", async (req, res) => {
     const authorIsStaff = Boolean(staffRole);
     const showRankEffects = resolveRankEffectsVisible(user?.publicMetadata || {});
     const showAvatarVfx = resolveAvatarVfxVisible(user?.publicMetadata || {});
+    const linked = await isLinkedUserId(auth.userId);
     const rankInfo = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
       authorIsStaff,
+      linked,
     );
     const rank = rankInfo.displayRank;
     const authorUsername = formatUsernameForDisplay(user?.username, 80);
@@ -2281,9 +2443,11 @@ app.post("/api/comments/:id/replies", async (req, res) => {
     const showStaffGradient = resolveStaffGradientVisible(user?.publicMetadata || {});
     const showRankEffects = resolveRankEffectsVisible(user?.publicMetadata || {});
     const showAvatarVfx = resolveAvatarVfxVisible(user?.publicMetadata || {});
+    const linked = await isLinkedUserId(auth.userId);
     const rankInfo = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
       authorIsStaff,
+      linked,
     );
     const rank = rankInfo.displayRank;
     const authorUsername = formatUsernameForDisplay(user?.username, 80);
@@ -2895,6 +3059,7 @@ app.post("/api/cart/checkout", async (req, res) => {
         const nextDisplayRank = resolveDisplayRankFromMetadata(
           nextMetadata,
           isAdminUser(user),
+          true,
         ).displayRank;
         await clerkClient.users.updateUserMetadata(auth.userId, {
           publicMetadata: nextMetadata,
@@ -3057,11 +3222,11 @@ app.post("/api/link/redeem", async (req, res) => {
       const currentRank = String(user?.publicMetadata?.rank || "Unregistered");
       const nextRank = maxRankLabel(currentRank, "Registered");
       const isStaff = isStaffUser(user);
-      const nextMetadata = {
-        ...user.publicMetadata,
-        rank: nextRank,
-      };
-      const nextDisplayRank = resolveDisplayRankFromMetadata(nextMetadata, isStaff).displayRank;
+        const nextMetadata = {
+          ...user.publicMetadata,
+          rank: nextRank,
+        };
+      const nextDisplayRank = resolveDisplayRankFromMetadata(nextMetadata, isStaff, true).displayRank;
       await clerkClient.users.updateUserMetadata(auth.userId, {
         publicMetadata: nextMetadata,
       });
@@ -3085,6 +3250,7 @@ app.post("/api/link/redeem", async (req, res) => {
           },
         },
       );
+      await unlockAchievement(auth.userId, "linking_up", { notify: true }).catch(() => {});
     } catch (metadataError) {
       console.error("Failed to apply linked rank after /link redeem", metadataError);
     }
@@ -3183,9 +3349,11 @@ app.post("/api/forum/posts", async (req, res) => {
 
     const user = await clerkClient.users.getUser(auth.userId);
     const staffRole = resolveStaffRoleForUser(user);
+    const linked = await isLinkedUserId(auth.userId);
     const rankInfo = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
       Boolean(staffRole),
+      linked,
     );
     const authorRank = rankInfo.displayRank;
     const authorIsStaff = Boolean(staffRole);
@@ -3244,6 +3412,7 @@ app.patch("/api/forum/posts/:id", async (req, res) => {
 
     const user = await clerkClient.users.getUser(auth.userId);
     const isStaff = isAdminUser(user);
+    const actorLinked = await isLinkedUserId(auth.userId);
     const isOwner = String(doc.createdBy || "") === auth.userId;
     if (!isOwner && !isStaff) {
       return res.status(403).json({ error: "Not authorized" });
@@ -3307,6 +3476,7 @@ app.patch("/api/forum/posts/:id", async (req, res) => {
         authorRank: resolveDisplayRankFromMetadata(
           user?.publicMetadata || {},
           isStaff,
+          actorLinked,
         ).displayRank,
         authorStaffRole: resolveStaffRoleForUser(user),
         authorShowStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
@@ -3355,6 +3525,7 @@ app.delete("/api/forum/posts/:id", async (req, res) => {
 
     const user = await clerkClient.users.getUser(auth.userId);
     const isStaff = isAdminUser(user);
+    const actorLinked = await isLinkedUserId(auth.userId);
     const isOwner = String(doc.createdBy || "") === auth.userId;
     if (!isOwner && !isStaff) {
       return res.status(403).json({ error: "Not authorized" });
@@ -3387,6 +3558,7 @@ app.delete("/api/forum/posts/:id", async (req, res) => {
         authorRank: resolveDisplayRankFromMetadata(
           user?.publicMetadata || {},
           isStaff,
+          actorLinked,
         ).displayRank,
         authorStaffRole: resolveStaffRoleForUser(user),
         authorShowStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),

@@ -1731,6 +1731,19 @@ function CommentThread({
     }
   }
 
+  async function loadProfileAchievements(targetUserId) {
+    const safeUserId = String(targetUserId || "").trim();
+    if (!safeUserId) return [];
+    try {
+      const response = await fetch(`/api/profile/achievements/${encodeURIComponent(safeUserId)}`);
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json().catch(() => ({}));
+      return Array.isArray(data?.achievements) ? data.achievements : [];
+    } catch {
+      return [];
+    }
+  }
+
   async function updateOwnDisplayTitle(nextTitle) {
     if (!profileUser?.isOwn || !nextTitle || profileTitleSaving) return;
     const current = String(profileUser.rankLabel || "");
@@ -2119,7 +2132,10 @@ function CommentThread({
     if (isOwn && availableTitles.length === 0 && selectedTitle) {
       availableTitles = [selectedTitle];
     }
-    const linkStatus = await loadProfileLinkStatus(authorUserId);
+    const [linkStatus, achievements] = await Promise.all([
+      loadProfileLinkStatus(authorUserId),
+      loadProfileAchievements(authorUserId),
+    ]);
     setProfileTitleStatus("");
     setProfileUser({
       name: String(entry.authorName || "User"),
@@ -2143,6 +2159,7 @@ function CommentThread({
       hytalePlayerName: linkStatus.playerName,
       hytalePlayerUuid: linkStatus.playerUuid,
       linkedAccount: linkStatus.linked,
+      achievements,
     });
     setProfileOpen(true);
   }
@@ -4418,6 +4435,19 @@ function ForumPage({ isAdmin = false }) {
     }
   }
 
+  async function loadForumProfileAchievements(targetUserId) {
+    const safeUserId = String(targetUserId || "").trim();
+    if (!safeUserId) return [];
+    try {
+      const response = await fetch(`/api/profile/achievements/${encodeURIComponent(safeUserId)}`);
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json().catch(() => ({}));
+      return Array.isArray(data?.achievements) ? data.achievements : [];
+    } catch {
+      return [];
+    }
+  }
+
   async function openForumProfileCard(entry) {
     if (!entry) return;
     const rankLabel = String(entry.authorRank || "Unregistered");
@@ -4466,7 +4496,10 @@ function ForumPage({ isAdmin = false }) {
     if (isOwn && availableTitles.length === 0 && selectedTitle) {
       availableTitles = [selectedTitle];
     }
-    const linkStatus = await loadForumProfileLinkStatus(authorUserId);
+    const [linkStatus, achievements] = await Promise.all([
+      loadForumProfileLinkStatus(authorUserId),
+      loadForumProfileAchievements(authorUserId),
+    ]);
     setForumProfileTitleStatus("");
     setForumProfileUser({
       name: authorName,
@@ -4491,6 +4524,7 @@ function ForumPage({ isAdmin = false }) {
       hytalePlayerName: linkStatus.playerName,
       hytalePlayerUuid: linkStatus.playerUuid,
       linkedAccount: linkStatus.linked,
+      achievements,
     });
     setForumProfileOpen(true);
   }
@@ -7390,6 +7424,19 @@ function Layout() {
     }
   }
 
+  async function loadLayoutProfileAchievements(targetUserId) {
+    const safeUserId = String(targetUserId || "").trim();
+    if (!safeUserId) return [];
+    try {
+      const response = await fetch(`/api/profile/achievements/${encodeURIComponent(safeUserId)}`);
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json().catch(() => ({}));
+      return Array.isArray(data?.achievements) ? data.achievements : [];
+    } catch {
+      return [];
+    }
+  }
+
   async function openNotificationProfile(item) {
     if (!item) return;
     const name = String(item.authorName || item.author || "User");
@@ -7397,7 +7444,10 @@ function Layout() {
     const rankLabel = String(item.authorRank || "Unregistered");
     const staff = isStaffLabel(name) || isStaffLabel(username) || isStaffLabel(rankLabel);
     const authorUserId = String(item.authorUserId || "").trim();
-    const linkStatus = await loadLayoutProfileLinkStatus(authorUserId);
+    const [linkStatus, achievements] = await Promise.all([
+      loadLayoutProfileLinkStatus(authorUserId),
+      loadLayoutProfileAchievements(authorUserId),
+    ]);
     setNotificationProfileUser({
       name,
       username,
@@ -7412,6 +7462,7 @@ function Layout() {
       hytalePlayerName: linkStatus.playerName,
       hytalePlayerUuid: linkStatus.playerUuid,
       linkedAccount: linkStatus.linked,
+      achievements,
     });
     setNotificationProfileOpen(true);
   }

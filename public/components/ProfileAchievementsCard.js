@@ -21,12 +21,16 @@ export default function ProfileAchievementsCard({ achievements = [] }) {
       .slice(0, 3);
     const iconUrl = String(entry?.iconUrl || "").trim();
     const locked = Boolean(entry?.locked);
+    const status = String(entry?.status || (locked ? "INCOMPLETE" : "COMPLETE"))
+      .trim()
+      .toUpperCase();
     return {
       id: String(entry?.id || `${label}-${index}`),
       label: label || `Achievement ${index + 1}`,
       icon: icon || "A",
       iconUrl,
       locked,
+      status,
     };
   });
 
@@ -43,8 +47,12 @@ export default function ProfileAchievementsCard({ achievements = [] }) {
               ${item.iconUrl
                 ? html`<img src=${item.iconUrl} alt=${item.label} />`
                 : html`<span>${item.icon}</span>`}
+              ${item.locked ? html`<span className="profile-achievement-lock">🔒</span>` : html``}
             </span>
             <span className="profile-achievement-label">${item.label}</span>
+            <span className=${`profile-achievement-status ${item.locked ? "incomplete" : "complete"}`.trim()}>
+              ${item.status}
+            </span>
           </div>`,
         )}
       </div>

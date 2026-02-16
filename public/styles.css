@@ -2923,6 +2923,7 @@ emoji-picker.reaction-picker-panel {
   font-weight: 800;
   color: var(--text);
   overflow: hidden;
+  position: relative;
 }
 
 .profile-achievement-circle img {
@@ -2935,6 +2936,36 @@ emoji-picker.reaction-picker-panel {
   font-size: 10px;
   text-align: center;
   color: var(--muted);
+}
+
+.profile-achievement-lock {
+  position: absolute;
+  inset: auto 2px 2px auto;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.profile-achievement-status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  border: 1px solid var(--stroke);
+}
+
+.profile-achievement-status.incomplete {
+  color: var(--muted);
+  background: color-mix(in srgb, var(--muted) 10%, var(--bg-soft));
+}
+
+.profile-achievement-status.complete {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg-soft));
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--stroke));
 }
 
 .profile-achievement-chip.locked .profile-achievement-circle {
