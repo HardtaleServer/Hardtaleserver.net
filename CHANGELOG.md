@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-16 (v1.3.34)
+- Fixed unlinked-user cart autosave noise by skipping `/api/cart` POST sync unless the account is linked.
+- Reworked Store rank cards so rank title/icon sits above the profile preview card and removed duplicate rank text inside the preview row.
+- Updated Store badge behavior so each rank card displays only its own rank badge while the clicked preview modal shows tier progression badges.
+- Added reusable profile achievements card groundwork with circular badge slots for future API-based integrations.
+
 ## 2026-02-16 (v1.3.33)
 - Expanded forum profile cards for your own profile to include all rank controls: display title, rank effects toggle, avatar effects toggle, and staff-gradient toggle (staff-only).
 - Added per-rank hover glow effects to forum rank icons (Registered/Hero/Legend/Mythic/Staff) on forum author rows.
@@ -21,6 +27,8 @@ All notable changes to this project are documented here.
 - Updated rank palette tokens to a centralized CSS source of truth and retuned Hero/Legend colors with matching hover glows.
 - Updated Store tier button locking so lower tiers are disabled/greyed out when a higher tier is already in cart.
 - Started migrating permissions and staff-role handling to server-authoritative APIs (foundation for live game-server synced permission updates).
+- Updated profile-card owned-rank badges to use rank-aligned colors (with staff gradient behavior preserved for staff badge chips).
+- Added a reusable profile achievements card section with circular badge slots and API-ready placeholder support for future Kyuubisoft Achievements/Titles/Rewards integration.
 
 ## 2026-02-16 (v1.3.29)
 - Added forum post `PATCH`/`DELETE` APIs with owner-or-staff authorization checks.

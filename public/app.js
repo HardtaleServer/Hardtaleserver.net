@@ -61,7 +61,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.33";
+const VERSION = "1.3.34";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
 const LINKED_STATUS_ICON_SVG = "/Images/SVGs/LINKED.svg";
@@ -144,6 +144,16 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.34",
+    date: "2026-02-16",
+    items: [
+      "Fixed unlinked-user cart autosave noise by skipping /api/cart POST sync unless the account is linked.",
+      "Reworked Store rank cards so rank title/icon sits above the profile preview card and removed duplicate rank text inside the preview row.",
+      "Updated Store badge behavior so each rank card displays only its own rank badge while the clicked preview modal shows tier progression badges.",
+      "Added reusable profile achievements card groundwork with circular badge slots for future API-based integrations.",
+    ],
+  },
   {
     version: "1.3.33",
     date: "2026-02-16",
@@ -3688,9 +3698,15 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
     return getStoreRankLabel(item).toLowerCase().replace(/[^a-z0-9]+/g, "-");
   }
 
-  function getStorePreviewBadges(item) {
+  function getStoreCardBadges(item) {
     const label = getStoreRankLabel(item);
     return label ? [label] : [];
+  }
+
+  function getStorePreviewBadges(item) {
+    if (!item?.id) return [];
+    const maxTier = RANK_TIER_ORDER[item.id] || 0;
+    return STORE_BADGE_ORDER.filter((label) => (OWNED_RANK_TIER[label] || 0) <= maxTier);
   }
 
   function isTierLockedInCart(item) {
@@ -3738,6 +3754,13 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
               ? "Tier locked"
               : "Add to cart";
             return html`<div key=${item.id} className=${`store-card rank-preview-${getStoreRankSlug(item)}`.trim()}>
+            <div className=${`comment-rank store-profile-rank rank-${getStoreRankSlug(item)}`.trim()}>
+              ${(() => {
+                const iconType = getRankIconType(getStoreRankLabel(item));
+                return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                  <span>${getStoreRankLabel(item)}</span>`;
+              })()}
+            </div>
             <div className=${`comment-rank store-rank-title rank-${getStoreRankSlug(item)}`.trim()}>
               ${(() => {
                 const iconType = getRankIconType(getStoreRankLabel(item));
@@ -3758,7 +3781,7 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
                   ? html`<div className="store-profile-username">@${storePreviewUsername}</div>`
                   : html``}
                 <div className="store-badge-preview-row">
-                  ${getStorePreviewBadges(item).map(
+                  ${getStoreCardBadges(item).map(
                     (label) => html`<${RankBadge} label=${label} className="store-owned-badge" />`,
                   )}
                 </div>
@@ -7251,13 +7274,13 @@ function Layout() {
   }, [isAuthLoaded, isSignedIn, userId, getToken, setNotifications]);
 
   useEffect(() => {
-    if (!isSignedIn || !userId || !cartLoaded) return;
+    if (!isSignedIn || !userId || !cartLoaded || !isLinkedAccount) return;
     apiFetchWithToken(getToken, true, "/api/cart", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items: serializeCartItems(cart) }),
     }).catch(() => {});
-  }, [cart, isSignedIn, userId, cartLoaded, getToken]);
+  }, [cart, isSignedIn, userId, cartLoaded, isLinkedAccount, getToken]);
 
   useEffect(() => {
     if (!pendingItem) return;
