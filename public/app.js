@@ -1140,6 +1140,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
   const [profileTitleStatus, setProfileTitleStatus] = useState("");
   const [profileTitleSaving, setProfileTitleSaving] = useState(false);
   const [profileStaffBadgeSaving, setProfileStaffBadgeSaving] = useState(false);
+  const [profileStaffGradientSaving, setProfileStaffGradientSaving] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState([]);
   const [replyTargets, setReplyTargets] = useState({});
@@ -1199,7 +1200,9 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
     const email = String(comment.authorEmail || "").toLowerCase();
     const username = String(comment.authorUsername || "").toLowerCase();
     const authorName = String(comment.authorName || "").toLowerCase();
-    if (STAFF_EMAILS.has(email) || isStaffLabel(username) || isStaffLabel(authorName)) {
+    const staffIdentity = STAFF_EMAILS.has(email) || isStaffLabel(username) || isStaffLabel(authorName);
+    const showStaffGradient = comment?.authorShowStaffGradient !== false;
+    if (staffIdentity && showStaffGradient) {
       return { label: "STAFF", staff: true };
     }
     const rank = comment.authorRank || "Registered";
@@ -1456,6 +1459,8 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
         selectedTitle: selectedTitle || ownedRank,
         canToggleStaffBadge: Boolean(data?.canToggleStaffBadge),
         showStaffBadge: data?.showStaffBadge !== false,
+        canToggleStaffGradient: Boolean(data?.canToggleStaffGradient),
+        showStaffGradient: data?.showStaffGradient !== false,
       };
     } catch {
       return null;
@@ -1558,14 +1563,67 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
     }
   }
 
+  async function updateOwnStaffGradientVisibility(nextVisible) {
+    if (!profileUser?.isOwn || !profileUser?.canToggleStaffGradient || profileStaffGradientSaving) return;
+    setProfileStaffGradientSaving(true);
+    setProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/staff-gradient", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showStaffGradient: Boolean(nextVisible) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save staff gradient.");
+      }
+      const data = await response.json();
+      const showStaffGradient = data?.showStaffGradient !== false;
+      setProfileUser((prev) =>
+        prev ? { ...prev, showStaffGradient, staff: prev.isStaffUser && showStaffGradient } : prev,
+      );
+      setComments((prev) =>
+        prev.map((comment) => {
+          if (!comment) return comment;
+          const nextComment =
+            comment.userId === userId
+              ? { ...comment, authorShowStaffGradient: showStaffGradient }
+              : comment;
+          const replies = Array.isArray(nextComment.replies) ? nextComment.replies : [];
+          if (replies.length === 0) return nextComment;
+          return {
+            ...nextComment,
+            replies: replies.map((reply) =>
+              reply?.userId === userId
+                ? { ...reply, authorShowStaffGradient: showStaffGradient }
+                : reply,
+            ),
+          };
+        }),
+      );
+      setProfileTitleStatus("Saved.");
+      setTimeout(() => setProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setProfileTitleStatus(error?.message || "Failed to save staff gradient.");
+    } finally {
+      setProfileStaffGradientSaving(false);
+    }
+  }
+
   async function openProfileCard(entry) {
     if (!entry) return;
     const rank = resolveRank(entry);
     const isOwn = Boolean(userId && entry.userId && entry.userId === userId);
+    const email = String(entry.authorEmail || "").toLowerCase();
+    const username = String(entry.authorUsername || "").toLowerCase();
+    const authorName = String(entry.authorName || "").toLowerCase();
+    const isStaffUser = STAFF_EMAILS.has(email) || isStaffLabel(username) || isStaffLabel(authorName);
     let availableTitles = [];
     let selectedTitle = rank.label;
     let canToggleStaffBadge = false;
     let showStaffBadge = entry?.authorShowStaffBadge !== false;
+    let canToggleStaffGradient = false;
+    let showStaffGradient = entry?.authorShowStaffGradient !== false;
     if (isOwn && isSignedIn) {
       const settings = await loadOwnProfileTitleSettings();
       if (settings) {
@@ -1573,6 +1631,8 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
         selectedTitle = settings.selectedTitle || rank.label;
         canToggleStaffBadge = Boolean(settings.canToggleStaffBadge);
         showStaffBadge = settings.showStaffBadge !== false;
+        canToggleStaffGradient = Boolean(settings.canToggleStaffGradient);
+        showStaffGradient = settings.showStaffGradient !== false;
       }
     }
     if (isOwn && availableTitles.length === 0 && selectedTitle) {
@@ -1583,12 +1643,15 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
       name: String(entry.authorName || "User"),
       image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel: selectedTitle,
-      staff: rank.staff,
+      staff: isStaffUser && showStaffGradient,
       username: formatUsernameForDisplay(entry.authorUsername),
       isOwn,
+      isStaffUser,
       availableTitles,
       canToggleStaffBadge,
       showStaffBadge,
+      canToggleStaffGradient,
+      showStaffGradient,
     });
     setProfileOpen(true);
   }
@@ -1993,6 +2056,17 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
                       onChange=${(event) => updateOwnStaffBadgeVisibility(event.target.checked)}
                     />
                     <span>Show staff badge</span>
+                  </label>`
+                : html``}
+              ${profileUser.isOwn && profileUser.canToggleStaffGradient
+                ? html`<label className="profile-card-toggle">
+                    <input
+                      type="checkbox"
+                      checked=${profileUser.showStaffGradient !== false}
+                      disabled=${profileStaffGradientSaving}
+                      onChange=${(event) => updateOwnStaffGradientVisibility(event.target.checked)}
+                    />
+                    <span>Enable staff gradient</span>
                   </label>`
                 : html``}
               ${profileTitleStatus && profileUser.isOwn
