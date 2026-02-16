@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-16 (v1.3.20)
+- Added profile title selection on your own comment profile card (Registered/Hero/Legend/Mythic), persisted in Clerk metadata with unlock validation.
+- Gave staff full title access by default and added a staff-only profile toggle to show/hide the staff badge.
+- Fixed reply targeting so notifications go only to the replied user (never yourself), and added clickable reply references with author/snippet that jump to the target comment or reply.
+- Updated rank badge rendering so only STAFF keeps gradient while other ranks use per-rank colors; saved rank prefix mapping to `data/rank-prefixes.json`.
+- Improved Home panels with direct `View` buttons for news items, added a forum highlights mini-panel with deep links, and reserved a leaderstats placeholder for MMO Trees integration.
+
 ## 2026-02-14 (v1.3.19)
 - Fixed `/link` page runtime crash and kept six single-digit code inputs with URL prefill support (e.g. `?123456`).
 - Improved mobile comment/reply presentation: larger avatars, inline compact timestamp/edited metadata, and smart long-name scaling.

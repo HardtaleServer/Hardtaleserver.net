@@ -1,0 +1,8 @@
+{
+  "Unregistered": { "prefix": "7[New]" },
+  "Registered": { "prefix": "f[Registered]" },
+  "Hero": { "prefix": "6[Hero]" },
+  "Legend": { "prefix": "5[Legend]" },
+  "Mythic": { "prefix": "d[Mythic]" },
+  "Staff": { "prefix": "bl[STAFF]" }
+}

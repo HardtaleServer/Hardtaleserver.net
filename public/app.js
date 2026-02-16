@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { createPortal } from "react-dom";
 import htm from "htm";
@@ -59,7 +59,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.18";
+const VERSION = "1.3.20";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_EMAILS = new Set([
   "chashsmurfis@gmail.com",
@@ -133,6 +133,16 @@ const VOTE_SITES = [
 ];
 const CHANGELOG_ENTRIES = [
   {
+    version: "1.3.20",
+    date: "2026-02-16",
+    items: [
+      "Added profile title selection on your own comment profile card (Registered/Hero/Legend/Mythic), persisted in Clerk metadata with unlock validation.",
+      "Gave staff full title access by default and added staff-only profile toggle to show/hide the staff badge.",
+      "Fixed reply targeting so notifications go only to the replied user (never yourself), and added clickable reply references with author/snippet that jump to the target comment or reply.",
+      "Updated rank badge rendering so only STAFF keeps gradient while other ranks use per-rank colors; saved rank prefix mapping to data/rank-prefixes.json.",
+      "Improved Home panels with direct View buttons for news items, added a forum highlights mini-panel with deep links, and reserved a leaderstats placeholder for MMO Trees integration.",
+    ],
+  },  {
     version: "1.3.18",
     date: "2026-02-14",
     items: [
@@ -363,6 +373,14 @@ const RANK_TIER_ORDER = {
   "rank-mythic": 3,
 };
 const PROFILE_DISPLAY_TITLES = ["Registered", "Hero", "Legend", "Mythic"];
+const HOME_FORUM_PREVIEW_SECTIONS = [
+  "updates",
+  "bug-reports",
+  "help-feedback",
+  "suggestions",
+  "feature-requests",
+  "forum-help",
+];
 
 function buildCartFromIds(entries = []) {
   if (!Array.isArray(entries)) return [];
@@ -911,7 +929,7 @@ function PollPanel({ newsId }) {
           >
             <span className="poll-option-text">${option.text}</span>
             ${hasVoted
-              ? html`<span className="poll-option-meta">${option.count} · ${percent}%</span>`
+              ? html`<span className="poll-option-meta">${option.count} Â· ${percent}%</span>`
               : html``}
           </button>`;
         })}
@@ -1114,6 +1132,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
   const [profileUser, setProfileUser] = useState(null);
   const [profileTitleStatus, setProfileTitleStatus] = useState("");
   const [profileTitleSaving, setProfileTitleSaving] = useState(false);
+  const [profileStaffBadgeSaving, setProfileStaffBadgeSaving] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState([]);
   const [replyTargets, setReplyTargets] = useState({});
@@ -1295,6 +1314,32 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
     });
   }
 
+  function formatReplyReference(reply) {
+    const who = String(reply?.repliedToAuthorName || reply?.repliedToName || "comment").trim();
+    const snippet = String(reply?.repliedToSnippet || "").trim();
+    if (!snippet) return `Replying to ${who}`;
+    return `Replying to ${who}: "${snippet}"`;
+  }
+
+  function scrollToReplyReference(parentCommentId, reply) {
+    const targetCommentId = String(reply?.repliedToCommentId || parentCommentId || "");
+    const targetReplyId = String(reply?.repliedToReplyId || "");
+    if (targetCommentId) {
+      setOpenResponses((prev) => ({ ...prev, [targetCommentId]: true, [parentCommentId]: true }));
+    }
+    setOpen(true);
+    const selector = targetReplyId
+      ? `[data-reply-id="${targetReplyId}"]`
+      : `[data-comment-id="${targetCommentId}"]`;
+    window.setTimeout(() => {
+      const target = document.querySelector(selector);
+      if (!target) return;
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.classList.add("notif-focus-target");
+      window.setTimeout(() => target.classList.remove("notif-focus-target"), 1400);
+    }, 90);
+  }
+
   async function submitReply(comment, text, textarea) {
     if (commentsLocked) {
       setCommentActionStatus(comment.id, "Comments are locked for this post.");
@@ -1305,10 +1350,9 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
     const payload = { text };
     if (target?.type === "reply") {
       payload.repliedToReplyId = target.id;
-      payload.repliedToName = target.name;
+      payload.repliedToCommentId = comment.id;
     } else if (target?.type === "comment") {
       payload.repliedToCommentId = target.id;
-      payload.repliedToName = target.name;
     }
     const response = await apiFetchWithToken(getToken, true, `/api/comments/${comment.id}/replies`, {
       method: "POST",
@@ -1403,6 +1447,8 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
       return {
         availableTitles: availableTitles.length > 0 ? availableTitles : ["Registered"],
         selectedTitle: selectedTitle || ownedRank,
+        canToggleStaffBadge: Boolean(data?.canToggleStaffBadge),
+        showStaffBadge: data?.showStaffBadge !== false,
       };
     } catch {
       return null;
@@ -1462,17 +1508,64 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
     }
   }
 
+  async function updateOwnStaffBadgeVisibility(nextVisible) {
+    if (!profileUser?.isOwn || !profileUser?.canToggleStaffBadge || profileStaffBadgeSaving) return;
+    setProfileStaffBadgeSaving(true);
+    setProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/staff-badge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showStaffBadge: Boolean(nextVisible) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save staff badge.");
+      }
+      const data = await response.json();
+      const showStaffBadge = data?.showStaffBadge !== false;
+      setProfileUser((prev) => (prev ? { ...prev, showStaffBadge } : prev));
+      setComments((prev) =>
+        prev.map((comment) => {
+          if (!comment) return comment;
+          const nextComment =
+            comment.userId === userId ? { ...comment, authorShowStaffBadge: showStaffBadge } : comment;
+          const replies = Array.isArray(nextComment.replies) ? nextComment.replies : [];
+          if (replies.length === 0) return nextComment;
+          return {
+            ...nextComment,
+            replies: replies.map((reply) =>
+              reply?.userId === userId
+                ? { ...reply, authorShowStaffBadge: showStaffBadge }
+                : reply,
+            ),
+          };
+        }),
+      );
+      setProfileTitleStatus("Saved.");
+      setTimeout(() => setProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setProfileTitleStatus(error?.message || "Failed to save staff badge.");
+    } finally {
+      setProfileStaffBadgeSaving(false);
+    }
+  }
+
   async function openProfileCard(entry) {
     if (!entry) return;
     const rank = resolveRank(entry);
     const isOwn = Boolean(userId && entry.userId && entry.userId === userId);
     let availableTitles = [];
     let selectedTitle = rank.label;
+    let canToggleStaffBadge = false;
+    let showStaffBadge = entry?.authorShowStaffBadge !== false;
     if (isOwn && isSignedIn) {
       const settings = await loadOwnProfileTitleSettings();
       if (settings) {
         availableTitles = settings.availableTitles;
         selectedTitle = settings.selectedTitle || rank.label;
+        canToggleStaffBadge = Boolean(settings.canToggleStaffBadge);
+        showStaffBadge = settings.showStaffBadge !== false;
       }
     }
     if (isOwn && availableTitles.length === 0 && selectedTitle) {
@@ -1487,6 +1580,8 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
       username: formatUsernameForDisplay(entry.authorUsername),
       isOwn,
       availableTitles,
+      canToggleStaffBadge,
+      showStaffBadge,
     });
     setProfileOpen(true);
   }
@@ -1643,6 +1738,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
                                       type: "comment",
                                       id: comment.id,
                                       name: comment.authorName,
+                                      snippet: String(comment.body || "").trim().slice(0, 72),
                                     })}
                                 >
                                   Reply
@@ -1735,10 +1831,14 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
                                             </div>
                                           </div>`
                                         : html`<div>
-                                            ${reply.repliedToName
-                                              ? html`<div className="comment-replied-to">
-                                                  Replying to ${reply.repliedToName}
-                                                </div>`
+                                            ${(reply.repliedToName || reply.repliedToSnippet)
+                                              ? html`<button
+                                                  type="button"
+                                                  className="comment-replied-to comment-replied-link"
+                                                  onClick=${() => scrollToReplyReference(comment.id, reply)}
+                                                >
+                                                  ${formatReplyReference(reply)}
+                                                </button>`
                                               : html``}
                                             <p className=${`comment-text ${resolveRank(reply).staff ? "staff" : ""}`}>
                                               ${reply.body}
@@ -1775,6 +1875,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
                                                       type: "reply",
                                                       id: reply.id,
                                                       name: reply.authorName,
+                                                      snippet: String(reply.body || "").trim().slice(0, 72),
                                                     })}
                                                 >
                                                   Reply
@@ -1802,7 +1903,11 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
                                       <textarea
                                         rows="2"
                                         placeholder=${replyTargets[comment.id]
-                                          ? `Reply to ${replyTargets[comment.id].name}...`
+                                          ? `Reply to ${replyTargets[comment.id].name}${
+                                              replyTargets[comment.id].snippet
+                                                ? `: "${replyTargets[comment.id].snippet}"`
+                                                : ""
+                                            }...`
                                           : "Reply..."}
                                         onInput=${(event) => {
                                           const value = event.target.value;
@@ -1847,7 +1952,16 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
               ${profileUser.username
                 ? html`<div className="profile-card-username">@${profileUser.username}</div>`
                 : html``}
-              <div className=${`comment-rank ${profileUser.staff ? "staff" : ""}`}>${profileUser.rankLabel}</div>
+              <div
+                className=${`comment-rank ${
+                  profileUser.staff ? "staff" : ""
+                } rank-${String(profileUser.rankLabel || "Registered")
+                  .trim()
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, "-")}`.trim()}
+              >
+                ${profileUser.rankLabel}
+              </div>
               ${profileUser.isOwn
                 ? html`<label className="profile-card-title-picker">
                     <span className="muted">Display title</span>
@@ -1863,10 +1977,21 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
                     </select>
                   </label>`
                 : html``}
+              ${profileUser.isOwn && profileUser.canToggleStaffBadge
+                ? html`<label className="profile-card-toggle">
+                    <input
+                      type="checkbox"
+                      checked=${profileUser.showStaffBadge !== false}
+                      disabled=${profileStaffBadgeSaving}
+                      onChange=${(event) => updateOwnStaffBadgeVisibility(event.target.checked)}
+                    />
+                    <span>Show staff badge</span>
+                  </label>`
+                : html``}
               ${profileTitleStatus && profileUser.isOwn
                 ? html`<div className="muted profile-card-title-status">${profileTitleStatus}</div>`
                 : html``}
-              ${profileUser.staff
+              ${profileUser.staff && profileUser.showStaffBadge !== false
                 ? html`<div className="profile-card-badge">Hardtale Staff Member</div>`
                 : html``}
             </div>`
@@ -2296,7 +2421,7 @@ function AdminPanel({
                 <div className="news-header">
                   <div className="news-title-row">
                     ${item.featured
-                      ? html`<span className="news-star" title="Featured">★</span>`
+                      ? html`<span className="news-star" title="Featured">â˜…</span>`
                       : html``}
                     <h3>${item.title}</h3>
                   </div>
@@ -2367,7 +2492,7 @@ function AdminPanel({
                 <div className="news-header">
                   <div className="news-title-row">
                     ${item.featured
-                      ? html`<span className="news-star" title="Featured">★</span>`
+                      ? html`<span className="news-star" title="Featured">â˜…</span>`
                       : html``}
                     <h3>${item.title}</h3>
                   </div>
@@ -3596,7 +3721,7 @@ function SubscriptionsPage() {
           <div className="subscription-title">Billing</div>
           <div className="billing-row">
             <span className="muted">Payment method</span>
-            <span>Visa •••• 2384</span>
+            <span>Visa â€¢â€¢â€¢â€¢ 2384</span>
           </div>
           <div className="billing-row">
             <span className="muted">Billing email</span>
@@ -4087,7 +4212,7 @@ function NotificationsPanel({ notifications, onView }) {
       ${notifications.map(
         (item) => html`<div key=${item.id} className="notif-card">
           <div className="notif-title">
-            ${item.featured ? html`<span className="news-star mini" title="Featured">★</span>` : html``}
+            ${item.featured ? html`<span className="news-star mini" title="Featured">â˜…</span>` : html``}
             ${item.title}
           </div>
           <div className="notif-body">${item.message}</div>
@@ -4119,6 +4244,50 @@ function HomePage({
   onNewsClick,
   onHowClick,
 }) {
+  const navigate = useNavigate();
+  const [forumPreview, setForumPreview] = useState([]);
+  const [forumLoading, setForumLoading] = useState(true);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadForumPreview() {
+      setForumLoading(true);
+      try {
+        const results = await Promise.all(
+          HOME_FORUM_PREVIEW_SECTIONS.map(async (sectionId) => {
+            try {
+              const response = await fetch(
+                `/api/forum/posts?section=${encodeURIComponent(sectionId)}`,
+              );
+              if (!response.ok) return [];
+              const data = await response.json();
+              const posts = Array.isArray(data.posts) ? data.posts : [];
+              return posts.slice(0, 2);
+            } catch {
+              return [];
+            }
+          }),
+        );
+        if (!alive) return;
+        const merged = results
+          .flat()
+          .filter(Boolean)
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, 4);
+        setForumPreview(merged);
+      } catch {
+        if (!alive) return;
+        setForumPreview([]);
+      } finally {
+        if (alive) setForumLoading(false);
+      }
+    }
+    loadForumPreview();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   return html`
     <section className="home-stack">
       <div className="hero fade-in">
@@ -4237,7 +4406,7 @@ function HomePage({
       </section>
 
       <section className="home-split fade-in">
-        <div className="card news-sidebar full">
+        <div className="card news-sidebar">
           <div className="section-title">News & Updates</div>
           ${loading
             ? html`<p className="muted">Loading latest news...</p>`
@@ -4248,9 +4417,18 @@ function HomePage({
             : html`<div className="news-mini">
                 ${news.slice(0, 3).map(
                   (item) => html`<div key=${item.id} className="news-mini-row">
-                    <div className="news-mini-title">
-                      ${item.featured ? html`<span className="news-star mini" title="Featured">★</span>` : html``}
-                      ${item.title}
+                    <div className="mini-row-head">
+                      <div className="news-mini-title">
+                        ${item.featured ? html`<span className="news-star mini" title="Featured">*</span>` : html``}
+                        ${item.title}
+                      </div>
+                      <button
+                        className="button ghost-btn mini-view-btn"
+                        type="button"
+                        onClick=${() => navigate(`/news?newsId=${encodeURIComponent(item.id)}`)}
+                      >
+                        View
+                      </button>
                     </div>
                     <div className="news-mini-meta">
                       By ${item.author} · ${formatTimestamp(item.createdAt)}
@@ -4261,6 +4439,45 @@ function HomePage({
           <button className="button ghost-btn" onClick=${onNewsClick}>
             View all news
           </button>
+        </div>
+
+        <div className="card news-sidebar">
+          <div className="section-title">Forum Highlights</div>
+          ${forumLoading
+            ? html`<p className="muted">Loading forum highlights...</p>`
+            : forumPreview.length === 0
+            ? html`<p className="muted">No forum posts yet. Be the first to post.</p>`
+            : html`<div className="news-mini">
+                ${forumPreview.map(
+                  (post) => html`<div key=${post.id} className="news-mini-row">
+                    <div className="mini-row-head">
+                      <div className="news-mini-title">${post.title}</div>
+                      <button
+                        className="button ghost-btn mini-view-btn"
+                        type="button"
+                        onClick=${() =>
+                          navigate(
+                            `/forum?section=${encodeURIComponent(
+                              String(post.section || ""),
+                            )}&post=${encodeURIComponent(post.id)}`,
+                          )}
+                      >
+                        View
+                      </button>
+                    </div>
+                    <div className="news-mini-meta">
+                      By ${post.authorName || "User"} · ${formatTimestamp(post.createdAt)}
+                    </div>
+                  </div>`,
+                )}
+              </div>`}
+          <button className="button ghost-btn" type="button" onClick=${() => navigate("/forum")}>
+            View forum
+          </button>
+          <div className="home-leaderstats-note">
+            <div className="muted"><strong>Leaderstats</strong> (MMO Trees) integration coming soon.</div>
+            <div className="muted">Top player and progression highlights will appear here.</div>
+          </div>
         </div>
       </section>
     </section>
@@ -5145,7 +5362,7 @@ function Layout() {
             <button className="footer-link" type="button" onClick=${() => setShowChangelog(true)}>
               Version ${VERSION}
             </button>
-            <span>${`© ${year} Hardtale.net`}</span>
+            <span>${`Â© ${year} Hardtale.net`}</span>
           </div>
           <div className="footer-links">
             <${Link} className="footer-link" to="/">Home</${Link}>
@@ -5379,4 +5596,6 @@ root.render(
     <${App} />
   <//>`
 );
+
+
 

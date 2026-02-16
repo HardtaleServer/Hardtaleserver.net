@@ -1335,13 +1335,35 @@ body[data-theme="light"] .button.primary {
   gap: 4px;
 }
 
+.mini-row-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .news-mini-title {
   font-weight: 600;
+}
+
+.mini-view-btn {
+  font-size: 12px;
+  padding: 4px 10px;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .news-mini-meta {
   color: var(--muted);
   font-size: 13px;
+}
+
+.home-leaderstats-note {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--stroke);
+  display: grid;
+  gap: 6px;
 }
 
 .news-card {
@@ -1890,6 +1912,27 @@ emoji-picker.reaction-picker-panel {
   color: var(--muted);
 }
 
+.comment-rank.rank-unregistered {
+  color: #aaaaaa;
+}
+
+.comment-rank.rank-registered {
+  color: #ffffff;
+  text-shadow: 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+.comment-rank.rank-hero {
+  color: #ffaa00;
+}
+
+.comment-rank.rank-legend {
+  color: #aa00aa;
+}
+
+.comment-rank.rank-mythic {
+  color: #ff55ff;
+}
+
 .comment-rank.staff {
   background-image: linear-gradient(270deg, var(--accent-2), var(--accent));
   background-size: 220% 100%;
@@ -2004,6 +2047,16 @@ emoji-picker.reaction-picker-panel {
   font-size: 11px;
   color: var(--muted);
   font-weight: 600;
+}
+
+.comment-replied-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-style: dotted;
 }
 
 .comment-reply-target {
@@ -2199,6 +2252,14 @@ emoji-picker.reaction-picker-panel {
 
 .profile-card-title-status {
   font-size: 12px;
+}
+
+.profile-card-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .news-page {

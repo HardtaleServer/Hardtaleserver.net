@@ -233,6 +233,7 @@ function normalizeComment(doc) {
     ...rest,
     id: _id ? String(_id) : doc.id,
     authorUsername: formatUsernameForDisplay(rest.authorUsername, 80),
+    authorShowStaffBadge: rest.authorShowStaffBadge !== false,
   };
   if (
     normalized.authorName &&
@@ -245,7 +246,11 @@ function normalizeComment(doc) {
     normalized.replies = normalized.replies.map((reply) => {
       if (!reply) return reply;
       const replyUsername = formatUsernameForDisplay(reply.authorUsername, 80);
-      const nextReply = { ...reply, authorUsername: replyUsername };
+      const nextReply = {
+        ...reply,
+        authorUsername: replyUsername,
+        authorShowStaffBadge: reply.authorShowStaffBadge !== false,
+      };
       if (
         nextReply.authorName &&
         replyUsername &&
@@ -493,6 +498,10 @@ function getUserDisplayName(user) {
   );
 }
 
+function resolveStaffBadgeVisible(metadata = {}) {
+  return metadata?.showStaffBadge !== false;
+}
+
 async function getFreshAuthorSnapshot(userId, cache = new Map()) {
   const key = normalizeText(userId, 128);
   if (!key) return null;
@@ -509,6 +518,7 @@ async function getFreshAuthorSnapshot(userId, cache = new Map()) {
       authorEmail: getUserEmail(user),
       authorImage: user?.imageUrl || "",
       authorRank: rankInfo.displayRank,
+      authorShowStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
     };
     cache.set(key, snapshot);
     return snapshot;
@@ -525,7 +535,8 @@ function hasAuthorSnapshotChanged(entry, snapshot) {
     normalizeText(entry.authorUsername, 80) !== snapshot.authorUsername ||
     String(entry.authorEmail || "") !== String(snapshot.authorEmail || "") ||
     String(entry.authorImage || "") !== String(snapshot.authorImage || "") ||
-    String(entry.authorRank || "Registered") !== String(snapshot.authorRank || "Registered")
+    String(entry.authorRank || "Registered") !== String(snapshot.authorRank || "Registered") ||
+    Boolean(entry.authorShowStaffBadge) !== Boolean(snapshot.authorShowStaffBadge)
   );
 }
 
@@ -576,6 +587,7 @@ async function refreshCommentAuthorFields(comments = []) {
         setPayload.authorEmail = nextComment.authorEmail;
         setPayload.authorImage = nextComment.authorImage;
         setPayload.authorRank = nextComment.authorRank;
+        setPayload.authorShowStaffBadge = nextComment.authorShowStaffBadge;
       }
       if (repliesChanged) {
         setPayload.replies = nextComment.replies;
@@ -1012,14 +1024,48 @@ app.get("/api/profile/title", async (req, res) => {
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const user = await clerkClient.users.getUser(auth.userId);
+    const isStaff = isAdminUser(user);
     const { ownedRank, displayRank, availableTitles } = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
-      isAdminUser(user),
+      isStaff,
     );
-    return res.json({ ownedRank, selectedTitle: displayRank, availableTitles });
+    return res.json({
+      ownedRank,
+      selectedTitle: displayRank,
+      availableTitles,
+      canToggleStaffBadge: isStaff,
+      showStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
+    });
   } catch (error) {
     console.error("Failed to load profile title settings", error);
     return res.status(500).json({ error: "Failed to load profile title settings" });
+  }
+});
+
+app.post("/api/profile/staff-badge", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const user = await clerkClient.users.getUser(auth.userId);
+    if (!isAdminUser(user)) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+    const showStaffBadge = req.body?.showStaffBadge !== false;
+    await clerkClient.users.updateUserMetadata(auth.userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        showStaffBadge,
+      },
+    });
+    await commentsCollection.updateMany(
+      { userId: auth.userId, isDeleted: false },
+      { $set: { authorShowStaffBadge: showStaffBadge, updatedAt: new Date() } },
+    );
+    return res.json({ showStaffBadge });
+  } catch (error) {
+    console.error("Failed to update staff badge settings", error);
+    return res.status(500).json({ error: "Failed to update staff badge settings" });
   }
 });
 
@@ -1408,6 +1454,7 @@ app.post("/api/comments", async (req, res) => {
 
     const user = await clerkClient.users.getUser(auth.userId);
     const email = getUserEmail(user);
+    const showStaffBadge = resolveStaffBadgeVisible(user?.publicMetadata || {});
     const rank = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
       isAdminUser(user),
@@ -1423,6 +1470,7 @@ app.post("/api/comments", async (req, res) => {
       authorImage: user?.imageUrl || "",
       authorEmail: email,
       authorRank: rank,
+      authorShowStaffBadge: showStaffBadge,
       replies: [],
       isDeleted: false,
       createdAt: new Date(),
@@ -1506,8 +1554,6 @@ app.post("/api/comments/:id/replies", async (req, res) => {
     if (!auth) return;
     const body = normalizeText(req.body?.text, 276);
     const repliedToReplyId = normalizeText(req.body?.repliedToReplyId, 128);
-    const repliedToCommentId = normalizeText(req.body?.repliedToCommentId, 128);
-    const repliedToName = normalizeText(req.body?.repliedToName, 80);
     if (!body) {
       return res.status(400).json({ error: "Invalid reply" });
     }
@@ -1515,8 +1561,33 @@ app.post("/api/comments/:id/replies", async (req, res) => {
       return res.status(400).json({ error: "Invalid comment id" });
     }
 
+    const comment = await commentsCollection.findOne({
+      _id: new ObjectId(req.params.id),
+      isDeleted: false,
+    });
+    if (!comment) {
+      return res.status(404).json({ error: "Comment not found" });
+    }
+    if (await isNewsThreadLocked(comment.newsId)) {
+      return res.status(403).json({ error: "Comments are locked for this post" });
+    }
+
+    const replies = Array.isArray(comment.replies) ? comment.replies : [];
+    const targetReply =
+      repliedToReplyId ? replies.find((entry) => String(entry?.id || "") === repliedToReplyId) : null;
+    const targetCommentId = String(comment._id);
+    const effectiveRepliedToCommentId = targetCommentId;
+    const effectiveRepliedToReplyId = targetReply ? String(targetReply.id || "") : "";
+    const repliedToAuthorName = normalizeText(
+      targetReply?.authorName || comment.authorName,
+      80,
+    );
+    const repliedToSnippet = normalizeText(targetReply?.body || comment.body, 120);
+    const repliedToUserId = normalizeText(targetReply?.userId || comment.userId, 128);
+
     const user = await clerkClient.users.getUser(auth.userId);
     const email = getUserEmail(user);
+    const showStaffBadge = resolveStaffBadgeVisible(user?.publicMetadata || {});
     const rank = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
       isAdminUser(user),
@@ -1534,28 +1605,22 @@ app.post("/api/comments/:id/replies", async (req, res) => {
       authorImage: user?.imageUrl || "",
       authorEmail: email,
       authorRank: rank,
-      repliedToReplyId,
-      repliedToCommentId,
-      repliedToName,
+      authorShowStaffBadge: showStaffBadge,
+      repliedToReplyId: effectiveRepliedToReplyId,
+      repliedToCommentId: effectiveRepliedToCommentId,
+      repliedToName: repliedToAuthorName,
+      repliedToAuthorName,
+      repliedToSnippet,
+      repliedToUserId,
     };
 
-    const comment = await commentsCollection.findOne({
-      _id: new ObjectId(req.params.id),
-      isDeleted: false,
-    });
-    if (!comment) {
-      return res.status(404).json({ error: "Comment not found" });
-    }
-    if (await isNewsThreadLocked(comment.newsId)) {
-      return res.status(403).json({ error: "Comments are locked for this post" });
-    }
     const updatedReplies = [...(comment.replies || []), reply].slice(-50);
     await commentsCollection.updateOne(
       { _id: comment._id },
       { $set: { replies: updatedReplies, updatedAt: new Date() } },
     );
 
-    if (comment.userId && comment.userId !== auth.userId) {
+    if (repliedToUserId && repliedToUserId !== auth.userId) {
       let newsTitle = "";
       if (newsCollection && comment.newsId) {
         try {
@@ -1575,14 +1640,14 @@ app.post("/api/comments/:id/replies", async (req, res) => {
       const replyLink = `/news?newsId=${encodeURIComponent(String(comment.newsId || ""))}&commentId=${encodeURIComponent(targetCommentId)}&replyId=${encodeURIComponent(String(reply.id || ""))}`;
       await notificationsCollection.insertOne({
         id: crypto.randomUUID(),
-        title: newsTitle ? `New reply on ${newsTitle}` : "New reply to your comment",
-        message: `${authorLabel} replied: ${snippet}`,
+        title: newsTitle ? `New reply on ${newsTitle}` : "Someone replied to you",
+        message: `${authorLabel} replied to you: ${snippet}`,
         author: "System",
         featured: false,
         type: "reply",
-        targetUserId: comment.userId,
+        targetUserId: repliedToUserId,
         newsId: String(comment.newsId || ""),
-        commentId: targetCommentId,
+        commentId: String(effectiveRepliedToCommentId || targetCommentId),
         replyId: String(reply.id || ""),
         readMoreUrl: replyLink,
         isDeleted: false,
