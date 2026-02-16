@@ -58,7 +58,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.28";
+const VERSION = "1.3.29";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_EMAILS = new Set([
   "chashsmurfis@gmail.com",
@@ -131,6 +131,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.29",
+    date: "2026-02-16",
+    items: [
+      "Added forum post edit/delete APIs with owner-or-staff authorization checks.",
+      "Added forum UI controls so post owners and staff can edit or delete posts directly.",
+      "Added STAFF FORCED EDIT marking/glow on moderated posts and sent targeted notifications when staff edit/remove another user's post.",
+    ],
+  },
   {
     version: "1.3.28",
     date: "2026-02-16",
@@ -3633,7 +3642,7 @@ function SupportPage({ isAdmin }) {
   `;
 }
 
-function ForumPage() {
+function ForumPage({ isAdmin = false }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { isSignedIn, getToken, userId } = useAuth();
@@ -3694,6 +3703,11 @@ function ForumPage() {
   const [forumProfileUser, setForumProfileUser] = useState(null);
   const [forumProfileTitleStatus, setForumProfileTitleStatus] = useState("");
   const [forumProfileTitleSaving, setForumProfileTitleSaving] = useState(false);
+  const [editingPostId, setEditingPostId] = useState("");
+  const [editingPostTitle, setEditingPostTitle] = useState("");
+  const [editingPostBody, setEditingPostBody] = useState("");
+  const [editingPostStatus, setEditingPostStatus] = useState("");
+  const [deletingPostId, setDeletingPostId] = useState("");
 
   function getForumPreviewText(body, limit = 220) {
     const text = String(body || "").trim();
@@ -3707,6 +3721,20 @@ function ForumPage() {
       .trim()
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-");
+  }
+
+  function getForumPostAuthorUserId(post) {
+    return String(post?.authorUserId || post?.createdBy || "");
+  }
+
+  function canManageForumPost(post) {
+    if (!isSignedIn) return false;
+    const authorUserId = getForumPostAuthorUserId(post);
+    return Boolean((userId && authorUserId && String(userId) === authorUserId) || isAdmin);
+  }
+
+  function isForumPostForcedEdit(post) {
+    return Boolean(post?.staffForcedEdit);
   }
 
   async function loadOwnForumProfileTitleSettings() {
@@ -3957,6 +3985,95 @@ function ForumPage() {
     }
   }
 
+  function startEditPost(post) {
+    if (!post || !canManageForumPost(post)) return;
+    setEditingPostId(String(post.id || ""));
+    setEditingPostTitle(String(post.title || ""));
+    setEditingPostBody(String(post.body || ""));
+    setEditingPostStatus("");
+  }
+
+  function cancelEditPost() {
+    setEditingPostId("");
+    setEditingPostTitle("");
+    setEditingPostBody("");
+    setEditingPostStatus("");
+  }
+
+  async function saveEditedPost(post) {
+    if (!post || !editingPostId) return;
+    const postId = String(post.id || "");
+    if (!postId || postId !== editingPostId) return;
+    if (!editingPostTitle.trim() || !editingPostBody.trim()) {
+      setEditingPostStatus("Title and body are required.");
+      return;
+    }
+    setEditingPostStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(
+        getToken,
+        true,
+        `/api/forum/posts/${encodeURIComponent(postId)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: editingPostTitle,
+            body: editingPostBody,
+          }),
+        },
+      );
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to update post.");
+      }
+      const data = await response.json();
+      const updated = data?.post || null;
+      if (updated) {
+        setPosts((prev) => prev.map((entry) => (String(entry?.id || "") === postId ? updated : entry)));
+        setSelectedPost((prev) => (String(prev?.id || "") === postId ? updated : prev));
+      } else {
+        await loadSectionPosts(selectedSectionId);
+      }
+      cancelEditPost();
+    } catch (error) {
+      setEditingPostStatus(error?.message || "Failed to update post.");
+    }
+  }
+
+  async function deleteForumPost(post) {
+    if (!post || !canManageForumPost(post) || deletingPostId) return;
+    const postId = String(post.id || "");
+    if (!postId) return;
+    const confirmed = window.confirm("Delete this forum post?");
+    if (!confirmed) return;
+    setDeletingPostId(postId);
+    try {
+      const response = await apiFetchWithToken(
+        getToken,
+        true,
+        `/api/forum/posts/${encodeURIComponent(postId)}`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to delete post.");
+      }
+      setPosts((prev) => prev.filter((entry) => String(entry?.id || "") !== postId));
+      if (String(selectedPost?.id || "") === postId) {
+        setSelectedPost(null);
+        navigate(`/forum?section=${encodeURIComponent(selectedSectionId)}`);
+      }
+      if (editingPostId === postId) {
+        cancelEditPost();
+      }
+    } catch (error) {
+      setPostsStatus(error?.message || "Failed to delete post.");
+    } finally {
+      setDeletingPostId("");
+    }
+  }
+
   if (selectedSection) {
     if (selectedPostId) {
       return html`
@@ -3978,7 +4095,7 @@ function ForumPage() {
               ? html`<p className="muted">Loading post...</p>`
               : !selectedPost
               ? html`<p className="muted">Post not found in this section.</p>`
-              : html`<article className="news-card forum-post-card">
+              : html`<article className=${`news-card forum-post-card ${isForumPostForcedEdit(selectedPost) ? "forum-post-forced-edit" : ""}`.trim()}>
                   <div className="forum-post-author-row">
                     <button
                       className="forum-post-author-trigger"
@@ -4024,7 +4141,70 @@ function ForumPage() {
                       <h3>${selectedPost.title}</h3>
                     </div>
                   </div>
-                  <p className="news-body-paragraph">${selectedPost.body}</p>
+                  ${editingPostId === String(selectedPost.id || "")
+                    ? html`<form
+                        className="forum-edit-form"
+                        onSubmit=${(event) => {
+                          event.preventDefault();
+                          saveEditedPost(selectedPost);
+                        }}
+                      >
+                        <input
+                          value=${editingPostTitle}
+                          maxLength="140"
+                          onInput=${(event) => setEditingPostTitle(event.target.value)}
+                          required
+                        />
+                        <textarea
+                          rows="6"
+                          value=${editingPostBody}
+                          maxLength="4000"
+                          onInput=${(event) => setEditingPostBody(event.target.value)}
+                          required
+                        ></textarea>
+                        <div className="comment-actions right">
+                          <button className="button primary" type="submit">Save</button>
+                          <button className="button ghost-btn" type="button" onClick=${cancelEditPost}>
+                            Cancel
+                          </button>
+                        </div>
+                        ${editingPostStatus ? html`<div className="muted">${editingPostStatus}</div>` : html``}
+                      </form>`
+                    : html`<p className=${`news-body-paragraph ${isForumPostForcedEdit(selectedPost) ? "forum-post-forced-body" : ""}`.trim()}>
+                        ${isForumPostForcedEdit(selectedPost)
+                          ? html`<strong>(STAFF FORCED EDIT): </strong>`
+                          : html``}${selectedPost.body}
+                      </p>`}
+                  <div className="forum-post-status-row">
+                    ${(selectedPost.editCount || 0) > 0
+                      ? html`<span className=${`muted forum-post-edited-note ${isForumPostForcedEdit(selectedPost) ? "forced" : ""}`.trim()}>
+                          Edited${selectedPost.editedByName ? ` by ${selectedPost.editedByName}` : ""}
+                        </span>`
+                      : html``}
+                    ${isForumPostForcedEdit(selectedPost)
+                      ? html`<span className="forum-post-forced-pill">STAFF FORCED EDIT</span>`
+                      : html``}
+                  </div>
+                  ${canManageForumPost(selectedPost)
+                    ? html`<div className="forum-post-actions-row">
+                        <button
+                          className="ghost-btn"
+                          type="button"
+                          onClick=${() => startEditPost(selectedPost)}
+                          disabled=${deletingPostId === String(selectedPost.id || "")}
+                        >
+                          Edit Post
+                        </button>
+                        <button
+                          className="ghost-btn"
+                          type="button"
+                          onClick=${() => deleteForumPost(selectedPost)}
+                          disabled=${deletingPostId === String(selectedPost.id || "")}
+                        >
+                          ${deletingPostId === String(selectedPost.id || "") ? "Deleting..." : "Delete Post"}
+                        </button>
+                      </div>`
+                    : html``}
                     <${CommentThread}
                       newsId=${`forum:${selectedPost.id}`}
                       autoOpen=${true}
@@ -4087,7 +4267,10 @@ function ForumPage() {
             ? html`<p className="muted">No posts yet. Be the first to start this section.</p>`
             : html`<div className="news-list">
                 ${posts.map(
-                  (post) => html`<article key=${post.id} className="news-card forum-post-card">
+                  (post) => html`<article
+                    key=${post.id}
+                    className=${`news-card forum-post-card ${isForumPostForcedEdit(post) ? "forum-post-forced-edit" : ""}`.trim()}
+                  >
                     <div className="forum-post-author-row">
                       <button
                         className="forum-post-author-trigger"
@@ -4137,8 +4320,71 @@ function ForumPage() {
                           <h3>${post.title}</h3>
                         </div>
                       </div>
-                      <p className="news-body-paragraph forum-post-preview">${getForumPreviewText(post.body)}</p>
+                      <p className=${`news-body-paragraph forum-post-preview ${isForumPostForcedEdit(post) ? "forum-post-forced-body" : ""}`.trim()}>
+                        ${isForumPostForcedEdit(post) ? html`<strong>(STAFF FORCED EDIT): </strong>` : html``}
+                        ${getForumPreviewText(post.body)}
+                      </p>
                     </${Link}>
+                    <div className="forum-post-status-row">
+                      ${(post.editCount || 0) > 0
+                        ? html`<span className=${`muted forum-post-edited-note ${isForumPostForcedEdit(post) ? "forced" : ""}`.trim()}>
+                            Edited${post.editedByName ? ` by ${post.editedByName}` : ""}
+                          </span>`
+                        : html``}
+                      ${isForumPostForcedEdit(post)
+                        ? html`<span className="forum-post-forced-pill">STAFF FORCED EDIT</span>`
+                        : html``}
+                    </div>
+                    ${canManageForumPost(post)
+                      ? html`<div className="forum-post-actions-row">
+                          <button
+                            className="ghost-btn"
+                            type="button"
+                            onClick=${() => startEditPost(post)}
+                            disabled=${deletingPostId === String(post.id || "")}
+                          >
+                            Edit Post
+                          </button>
+                          <button
+                            className="ghost-btn"
+                            type="button"
+                            onClick=${() => deleteForumPost(post)}
+                            disabled=${deletingPostId === String(post.id || "")}
+                          >
+                            ${deletingPostId === String(post.id || "") ? "Deleting..." : "Delete Post"}
+                          </button>
+                        </div>`
+                      : html``}
+                    ${editingPostId === String(post.id || "")
+                      ? html`<form
+                          className="forum-edit-form"
+                          onSubmit=${(event) => {
+                            event.preventDefault();
+                            saveEditedPost(post);
+                          }}
+                        >
+                          <input
+                            value=${editingPostTitle}
+                            maxLength="140"
+                            onInput=${(event) => setEditingPostTitle(event.target.value)}
+                            required
+                          />
+                          <textarea
+                            rows="5"
+                            value=${editingPostBody}
+                            maxLength="4000"
+                            onInput=${(event) => setEditingPostBody(event.target.value)}
+                            required
+                          ></textarea>
+                          <div className="comment-actions right">
+                            <button className="button primary" type="submit">Save</button>
+                            <button className="button ghost-btn" type="button" onClick=${cancelEditPost}>
+                              Cancel
+                            </button>
+                          </div>
+                          ${editingPostStatus ? html`<div className="muted">${editingPostStatus}</div>` : html``}
+                        </form>`
+                      : html``}
                   </article>`,
                 )}
               </div>`}

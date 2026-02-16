@@ -66,7 +66,7 @@ export default function AppRoutes({
       />
       <${Route} path="/store" element=${html`<${StorePage} onAdd=${addToCart} />`} />
       <${Route} path="/vote" element=${html`<${VotePage} />`} />
-      <${Route} path="/forum" element=${html`<${ForumPage} />`} />
+      <${Route} path="/forum" element=${html`<${ForumPage} isAdmin=${isAdmin} />`} />
       <${Route} path="/subscriptions" element=${html`<${SubscriptionsPage} />`} />
       <${Route} path="/link" element=${html`<${LinkPage} />`} />
       <${Route}

@@ -1164,6 +1164,13 @@ function normalizeForumPost(doc) {
     authorUserId: normalizeText(stripped.authorUserId, 128),
     authorUsername,
     authorImage: String(stripped.authorImage || ""),
+    editCount: Number.isFinite(Number(stripped.editCount)) ? Number(stripped.editCount) : 0,
+    editedAt: stripped.editedAt || "",
+    editedByUserId: normalizeText(stripped.editedByUserId, 128),
+    editedByName: normalizeText(stripped.editedByName, 80),
+    staffForcedEdit: Boolean(stripped.staffForcedEdit),
+    staffForcedEditBy: normalizeText(stripped.staffForcedEditBy, 80),
+    staffForcedEditAt: stripped.staffForcedEditAt || "",
     createdAt: stripped.createdAt || new Date().toISOString(),
     updatedAt: stripped.updatedAt || stripped.createdAt || new Date().toISOString(),
   };
@@ -2782,6 +2789,166 @@ app.post("/api/forum/posts", async (req, res) => {
   } catch (error) {
     console.error("Failed to create forum post", error);
     return res.status(500).json({ error: "Failed to create forum post" });
+  }
+});
+
+app.patch("/api/forum/posts/:id", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const postId = normalizeText(req.params.id, 128);
+    if (!postId) {
+      return res.status(400).json({ error: "Invalid forum post id" });
+    }
+
+    const doc = await forumPostsCollection.findOne({ id: postId, isDeleted: false });
+    if (!doc) {
+      return res.status(404).json({ error: "Forum post not found" });
+    }
+
+    const user = await clerkClient.users.getUser(auth.userId);
+    const isStaff = isAdminUser(user);
+    const isOwner = String(doc.createdBy || "") === auth.userId;
+    if (!isOwner && !isStaff) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    const nextTitle = normalizeForumTitle(req.body?.title);
+    const nextBody = normalizeForumBody(req.body?.body);
+    if (!nextTitle || !nextBody) {
+      return res.status(400).json({ error: "Missing or invalid forum post fields" });
+    }
+
+    const now = new Date().toISOString();
+    const forcedEdit = isStaff && !isOwner;
+    const editorName = getUserDisplayName(user);
+    await forumPostsCollection.updateOne(
+      { id: postId, isDeleted: false },
+      {
+        $set: {
+          title: nextTitle,
+          body: nextBody,
+          updatedAt: now,
+          editedAt: now,
+          editedByUserId: auth.userId,
+          editedByName: editorName,
+          staffForcedEdit: forcedEdit,
+          staffForcedEditBy: forcedEdit ? editorName : "",
+          staffForcedEditAt: forcedEdit ? now : "",
+        },
+        $inc: { editCount: 1 },
+      },
+    );
+
+    if (forcedEdit && doc.createdBy && doc.createdBy !== auth.userId) {
+      await notificationsCollection.insertOne({
+        id: crypto.randomUUID(),
+        title: "Forum Post Edited by Staff",
+        message: `${editorName} edited your forum post: ${String(doc.title || "Untitled Post")}`,
+        author: editorName,
+        authorName: editorName,
+        authorUserId: auth.userId,
+        authorUsername: formatUsernameForDisplay(user?.username, 80),
+        authorImage: user?.imageUrl || "",
+        authorRank: resolveDisplayRankFromMetadata(
+          user?.publicMetadata || {},
+          isStaff,
+        ).displayRank,
+        featured: false,
+        type: "forum_post_staff_edit",
+        targetUserId: doc.createdBy,
+        readMoreUrl: `/forum?section=${encodeURIComponent(String(doc.section || ""))}&post=${encodeURIComponent(postId)}`,
+        isDeleted: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await pruneCollection(notificationsCollection, 120);
+    }
+
+    const updatedRaw = await forumPostsCollection.findOne({ id: postId, isDeleted: false });
+    if (!updatedRaw) {
+      return res.status(404).json({ error: "Forum post not found" });
+    }
+    const [updated] = await refreshForumPostAuthorFields([updatedRaw]);
+    return res.json({ post: normalizeForumPost(updated) });
+  } catch (error) {
+    console.error("Failed to update forum post", error);
+    return res.status(500).json({ error: "Failed to update forum post" });
+  }
+});
+
+app.delete("/api/forum/posts/:id", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+
+    const postId = normalizeText(req.params.id, 128);
+    if (!postId) {
+      return res.status(400).json({ error: "Invalid forum post id" });
+    }
+
+    const doc = await forumPostsCollection.findOne({ id: postId, isDeleted: false });
+    if (!doc) {
+      return res.status(404).json({ error: "Forum post not found" });
+    }
+
+    const user = await clerkClient.users.getUser(auth.userId);
+    const isStaff = isAdminUser(user);
+    const isOwner = String(doc.createdBy || "") === auth.userId;
+    if (!isOwner && !isStaff) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    const now = new Date().toISOString();
+    await forumPostsCollection.updateOne(
+      { id: postId, isDeleted: false },
+      {
+        $set: {
+          isDeleted: true,
+          deletedAt: now,
+          deletedBy: auth.userId,
+          updatedAt: now,
+        },
+      },
+    );
+
+    if (isStaff && !isOwner && doc.createdBy) {
+      const editorName = getUserDisplayName(user);
+      await notificationsCollection.insertOne({
+        id: crypto.randomUUID(),
+        title: "Forum Post Removed by Staff",
+        message: `${editorName} removed your forum post: ${String(doc.title || "Untitled Post")}`,
+        author: editorName,
+        authorName: editorName,
+        authorUserId: auth.userId,
+        authorUsername: formatUsernameForDisplay(user?.username, 80),
+        authorImage: user?.imageUrl || "",
+        authorRank: resolveDisplayRankFromMetadata(
+          user?.publicMetadata || {},
+          isStaff,
+        ).displayRank,
+        featured: false,
+        type: "forum_post_staff_delete",
+        targetUserId: doc.createdBy,
+        readMoreUrl: `/forum?section=${encodeURIComponent(String(doc.section || ""))}`,
+        isDeleted: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await pruneCollection(notificationsCollection, 120);
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("Failed to delete forum post", error);
+    return res.status(500).json({ error: "Failed to delete forum post" });
   }
 });
 

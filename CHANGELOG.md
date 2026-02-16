@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-16 (v1.3.29)
+- Added forum post `PATCH`/`DELETE` APIs with owner-or-staff authorization checks.
+- Added forum post edit/delete controls in the UI for post owners and staff/admin users.
+- Added `(STAFF FORCED EDIT):` rendering and glow styling for staff-forced edits on other users' posts.
+- Added targeted notifications to users when staff edit or remove their forum post, including profile-card metadata and a `View` deep-link.
+
 ## 2026-02-16 (v1.3.28)
 - Added self-rank title settings to forum profile cards when viewing your own profile.
 - Saving your title from the forum profile card now updates rank labels immediately in forum list and post views.
