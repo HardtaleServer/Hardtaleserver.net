@@ -4182,6 +4182,19 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
     grid-template-columns: 1fr;
   }
 
+  .notif-author {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    text-align: right;
+    margin-left: auto;
+    width: 100%;
+  }
+
+  .notif-author span {
+    text-align: right;
+  }
+
   .news-hero {
     grid-template-columns: 1fr;
   }

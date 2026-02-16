@@ -2,6 +2,9 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-16 (v1.3.21)
+- Updated mobile notifications layout so timestamp and author line are right-aligned within each notification card.
+
 ## 2026-02-16 (v1.3.20)
 - Added profile title selection on your own comment profile card (Registered/Hero/Legend/Mythic), persisted in Clerk metadata with unlock validation.
 - Gave staff full title access by default and added a staff-only profile toggle to show/hide the staff badge.
