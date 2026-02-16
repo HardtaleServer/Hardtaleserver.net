@@ -826,6 +826,11 @@ body[data-theme="light"] .settings-icon {
   color: var(--text);
 }
 
+.forum-author-rank {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
 .forum-post-author-row .notification-timestamp {
   margin-left: auto;
   text-align: right;

@@ -3840,6 +3840,20 @@ function ForumPage() {
                     />
                     <span className="muted">By</span>
                     <${AuthorName} value=${selectedPost.authorName || "User"} isStaffLabel=${isStaffLabel} />
+                    <span
+                      className=${`comment-rank forum-author-rank rank-${String(
+                        selectedPost.authorRank || "Unregistered",
+                      )
+                        .trim()
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]+/g, "-")}`.trim()}
+                    >
+                      ${(() => {
+                        const iconType = getRankIconType(selectedPost.authorRank || "");
+                        return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                          <span>${selectedPost.authorRank || "Unregistered"}</span>`;
+                      })()}
+                    </span>
                     <span className="forum-post-op">OP</span>
                     <${TimestampText} value=${selectedPost.createdAt} formatTimestamp=${formatTimestamp} />
                   </div>
@@ -3918,6 +3932,20 @@ function ForumPage() {
                         />
                         <span className="muted">By</span>
                         <${AuthorName} value=${post.authorName || "User"} isStaffLabel=${isStaffLabel} />
+                        <span
+                          className=${`comment-rank forum-author-rank rank-${String(
+                            post.authorRank || "Unregistered",
+                          )
+                            .trim()
+                            .toLowerCase()
+                            .replace(/[^a-z0-9]+/g, "-")}`.trim()}
+                        >
+                          ${(() => {
+                            const iconType = getRankIconType(post.authorRank || "");
+                            return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                              <span>${post.authorRank || "Unregistered"}</span>`;
+                          })()}
+                        </span>
                         <span className="forum-post-op">OP</span>
                         <${TimestampText} value=${post.createdAt} formatTimestamp=${formatTimestamp} />
                       </div>

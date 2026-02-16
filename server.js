@@ -1160,6 +1160,7 @@ function normalizeForumPost(doc) {
     body: normalizeForumBody(stripped.body),
     createdBy: normalizeText(stripped.createdBy, 128),
     authorName,
+    authorRank: normalizeText(stripped.authorRank, 20) || "Unregistered",
     authorUserId: normalizeText(stripped.authorUserId, 128),
     authorUsername,
     authorImage: String(stripped.authorImage || ""),
@@ -1184,13 +1185,15 @@ async function refreshForumPostAuthorFields(posts = []) {
         const authorChanged =
           normalizeText(item.authorName, 80) !== snapshot.authorName ||
           normalizeText(item.authorUsername, 80) !== snapshot.authorUsername ||
-          String(item.authorImage || "") !== String(snapshot.authorImage || "");
+          String(item.authorImage || "") !== String(snapshot.authorImage || "") ||
+          String(item.authorRank || "Unregistered") !== String(snapshot.authorRank || "Unregistered");
         if (authorChanged) {
           nextItem = {
             ...nextItem,
             authorName: snapshot.authorName,
             authorUsername: snapshot.authorUsername,
             authorImage: snapshot.authorImage,
+            authorRank: snapshot.authorRank || "Unregistered",
           };
           if (item._id) {
             ops.push({
@@ -1201,6 +1204,7 @@ async function refreshForumPostAuthorFields(posts = []) {
                     authorName: nextItem.authorName,
                     authorUsername: nextItem.authorUsername,
                     authorImage: nextItem.authorImage,
+                    authorRank: nextItem.authorRank,
                     updatedAt: new Date().toISOString(),
                   },
                 },
@@ -2743,6 +2747,10 @@ app.post("/api/forum/posts", async (req, res) => {
     }
 
     const user = await clerkClient.users.getUser(auth.userId);
+    const authorRank = resolveDisplayRankFromMetadata(
+      user?.publicMetadata || {},
+      isAdminUser(user),
+    ).displayRank;
     const now = new Date().toISOString();
     const post = {
       id: crypto.randomUUID(),
@@ -2751,6 +2759,7 @@ app.post("/api/forum/posts", async (req, res) => {
       body,
       createdBy: auth.userId,
       authorName: getUserDisplayName(user),
+      authorRank,
       authorUserId: auth.userId,
       authorUsername: formatUsernameForDisplay(user?.username, 80),
       authorImage: user?.imageUrl || "",
