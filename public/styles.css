@@ -3512,6 +3512,7 @@ emoji-picker.reaction-picker-panel {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+  margin-top: 5px;
 }
 
 .store-owned-badge {
@@ -3548,6 +3549,10 @@ emoji-picker.reaction-picker-panel {
 
 .store-profile-preview-card {
   min-width: min(360px, 100%);
+}
+
+.store-profile-preview-card .profile-card-badges-row {
+  margin-top: 5px;
 }
 
 .store-desc {

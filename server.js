@@ -611,6 +611,26 @@ function parseJsonSafely(raw) {
   }
 }
 
+function normalizeLinkServiceErrorCode(code, status) {
+  const normalized = normalizeText(code || "", 80)
+    .toUpperCase()
+    .replace(/[^A-Z0-9_]/g, "");
+
+  if (normalized === "INVALID_CODE") return "INVALID_CODE";
+  if (normalized === "CODE_EXPIRED" || normalized === "EXPIRED_CODE") return "EXPIRED_CODE";
+  if (normalized === "CODE_USED" || normalized === "ALREADY_USED") return "ALREADY_USED";
+  if (normalized === "CODE_LOCKED" || normalized === "RATE_LIMITED") return "RATE_LIMITED";
+  if (normalized === "CODE_REJECTED") return "INVALID_CODE";
+  if (normalized === "ALREADY_LINKED") return "ALREADY_LINKED";
+  if (normalized === "SERVER_UNAVAILABLE") return "SERVER_UNAVAILABLE";
+
+  if (status === 429) return "RATE_LIMITED";
+  if (status >= 500) return "SERVER_UNAVAILABLE";
+  if (status === 400) return "INVALID_CODE";
+  if (status === 409) return "ALREADY_USED";
+  return normalized || "";
+}
+
 async function redeemLinkCodeWithGameServer({ code, webUserId, idempotencyKey }) {
   if (!LINK_SERVICE_BASE_URL) {
     return { ok: false, status: 503, code: "SERVER_UNAVAILABLE", error: "Link service base URL is not configured" };
@@ -639,10 +659,11 @@ async function redeemLinkCodeWithGameServer({ code, webUserId, idempotencyKey })
     const rawBody = await response.text();
     const parsedBody = parseJsonSafely(rawBody);
     if (!response.ok) {
+      const mappedCode = normalizeLinkServiceErrorCode(parsedBody?.code, response.status);
       return {
         ok: false,
         status: response.status,
-        code: normalizeText(parsedBody?.code || "", 60),
+        code: mappedCode,
         error:
           normalizeText(parsedBody?.error || parsedBody?.message || rawBody || "Redeem failed", 200) ||
           "Redeem failed",

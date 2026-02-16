@@ -66,10 +66,11 @@ const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
 const LINKED_STATUS_ICON_SVG = "/Images/SVGs/LINKED.svg";
 const UNLINKED_STATUS_ICON_SVG = "/Images/SVGs/UNLINKED.svg";
+const DEFAULT_PROFILE_AVATAR_SVG = "/Images/SVGs/DEFAULT_PROFILE_AVATAR.svg";
 const STORE_RANK_ICON_SVG = {
-  star: "/Images/SVGs/RANK_MYTHIC.svg",
+  star: "/Images/SVGs/RANK_HERO.svg",
   crown: "/Images/SVGs/RANK_LEGEND.svg",
-  shield: "/Images/SVGs/RANK_HERO.svg",
+  shield: "/Images/SVGs/RANK_MYTHIC.svg",
 };
 const STAFF_EMAILS = new Set([
   "chashsmurfis@gmail.com",
@@ -3643,9 +3644,11 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
   const { user } = useUser();
   const { isSignedIn } = useAuth();
   const email = getUserEmail(user);
-  const storePreviewName = getUserDisplayName(user);
-  const storePreviewImage = String(user?.imageUrl || "/assets/HardTale_H_GreyScale.png");
-  const storePreviewUsername = formatUsernameForDisplay(user?.username);
+  const storePreviewName = isSignedIn ? getUserDisplayName(user) : "Guest";
+  const storePreviewImage = String(
+    isSignedIn ? user?.imageUrl || "/assets/HardTale_H_GreyScale.png" : DEFAULT_PROFILE_AVATAR_SVG,
+  );
+  const storePreviewUsername = isSignedIn ? formatUsernameForDisplay(user?.username) : "";
   const previewItem = SAMPLE_STORE.find((item) => item.id === previewItemId) || null;
   const canPurchase = Boolean(isSignedIn && isLinkedAccount);
   const cartItems = Array.isArray(cart) ? cart : [];
@@ -6829,17 +6832,22 @@ function LinkPage() {
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         const errorCode = String(data?.code || "").toUpperCase();
-        if (errorCode === "INVALID_CODE" || errorCode === "EXPIRED_CODE") {
+        if (
+          errorCode === "INVALID_CODE" ||
+          errorCode === "EXPIRED_CODE" ||
+          errorCode === "CODE_EXPIRED" ||
+          errorCode === "CODE_REJECTED"
+        ) {
           setStatusType("error");
           setStatusMessage("Invalid or expired code. Run /link in-game again for a fresh code.");
           return;
         }
-        if (errorCode === "ALREADY_USED" || errorCode === "ALREADY_LINKED") {
+        if (errorCode === "ALREADY_USED" || errorCode === "ALREADY_LINKED" || errorCode === "CODE_USED") {
           setStatusType("error");
           setStatusMessage("This code or game account was already used for linking.");
           return;
         }
-        if (errorCode === "RATE_LIMITED" || response.status === 429) {
+        if (errorCode === "RATE_LIMITED" || errorCode === "CODE_LOCKED" || response.status === 429) {
           setStatusType("error");
           setStatusMessage("Too many attempts. Please wait and try again.");
           return;
