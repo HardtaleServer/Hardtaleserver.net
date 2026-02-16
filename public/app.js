@@ -132,6 +132,14 @@ const VOTE_SITES = [
 ];
 const CHANGELOG_ENTRIES = [
   {
+    version: "1.3.23",
+    date: "2026-02-16",
+    items: [
+      "Updated Registered rank color to #479284.",
+      "Reworked Mythic rank visuals to a more distinct rare/cosmic cyan palette so it no longer closely matches Legend.",
+    ],
+  },
+  {
     version: "1.3.22",
     date: "2026-02-16",
     items: [

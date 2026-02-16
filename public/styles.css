@@ -1842,9 +1842,9 @@ emoji-picker.reaction-picker-panel {
 .comment-avatar.avatar-rank-mythic:not(.avatar-vfx-off),
 .profile-card-avatar.avatar-rank-mythic:not(.avatar-vfx-off) {
   box-shadow:
-    0 0 0 1px rgba(255, 130, 255, 0.55),
-    0 0 18px rgba(212, 120, 255, 0.34),
-    0 0 28px rgba(130, 105, 255, 0.22);
+    0 0 0 1px rgba(110, 235, 255, 0.55),
+    0 0 18px rgba(90, 195, 255, 0.34),
+    0 0 28px rgba(120, 125, 255, 0.22);
   animation: avatarMythicPulse 5.6s ease-in-out infinite;
 }
 
@@ -1952,8 +1952,13 @@ emoji-picker.reaction-picker-panel {
 }
 
 .comment-rank.rank-registered {
-  color: #ffffff;
+  color: #479284;
   text-shadow: 0 0 1px rgba(0, 0, 0, 0.45);
+}
+
+.comment-author.rank-registered,
+.profile-card-name.rank-registered {
+  color: #479284;
 }
 
 .comment-rank.rank-hero {
@@ -1965,7 +1970,7 @@ emoji-picker.reaction-picker-panel {
 }
 
 .comment-rank.rank-mythic {
-  color: #ff55ff;
+  color: #3fe8ff;
 }
 
 .comment-author.rank-hero,
@@ -2026,10 +2031,11 @@ emoji-picker.reaction-picker-panel {
 .comment-rank.rank-mythic,
 .profile-card-name.rank-mythic {
   position: relative;
+  color: #3fe8ff;
   text-shadow:
-    0 0 5px rgba(255, 85, 255, 0.35),
-    0 0 14px rgba(255, 120, 255, 0.24),
-    0 0 20px rgba(150, 80, 255, 0.2);
+    0 0 6px rgba(70, 235, 255, 0.4),
+    0 0 14px rgba(70, 190, 255, 0.28),
+    0 0 22px rgba(115, 140, 255, 0.2);
 }
 
 .comment-author.rank-mythic::after,
@@ -2040,8 +2046,8 @@ emoji-picker.reaction-picker-panel {
   inset: -3px -5px;
   border-radius: 10px;
   background:
-    radial-gradient(circle at 25% 30%, rgba(255, 175, 255, 0.32), transparent 55%),
-    radial-gradient(circle at 75% 70%, rgba(165, 120, 255, 0.3), transparent 55%);
+    radial-gradient(circle at 25% 30%, rgba(145, 255, 255, 0.34), transparent 55%),
+    radial-gradient(circle at 75% 70%, rgba(90, 168, 255, 0.3), transparent 55%);
   filter: blur(6px);
   opacity: 0.5;
   z-index: -1;
@@ -2114,15 +2120,15 @@ emoji-picker.reaction-picker-panel {
   0%,
   100% {
     box-shadow:
-      0 0 0 1px rgba(240, 130, 255, 0.48),
-      0 0 14px rgba(205, 120, 255, 0.32),
-      0 0 22px rgba(130, 105, 255, 0.18);
+      0 0 0 1px rgba(102, 232, 255, 0.48),
+      0 0 14px rgba(90, 192, 255, 0.32),
+      0 0 22px rgba(120, 125, 255, 0.18);
   }
   50% {
     box-shadow:
-      0 0 0 1px rgba(255, 158, 255, 0.66),
-      0 0 22px rgba(225, 140, 255, 0.44),
-      0 0 34px rgba(148, 125, 255, 0.27);
+      0 0 0 1px rgba(148, 250, 255, 0.66),
+      0 0 22px rgba(120, 220, 255, 0.44),
+      0 0 34px rgba(140, 150, 255, 0.27);
   }
 }
 

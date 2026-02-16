@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-16 (v1.3.23)
+- Updated `Registered` rank color to `#479284`.
+- Reworked `Mythic` rank visuals to a more distinct rare/cosmic cyan palette so it no longer closely matches `Legend`.
+
 ## 2026-02-16 (v1.3.21)
 - Updated mobile notifications layout so timestamp and author line are right-aligned within each notification card.
 
