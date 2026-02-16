@@ -58,7 +58,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.27";
+const VERSION = "1.3.28";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_EMAILS = new Set([
   "chashsmurfis@gmail.com",
@@ -131,6 +131,14 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.28",
+    date: "2026-02-16",
+    items: [
+      "Forum profile cards now include self-service display title settings when you open your own profile.",
+      "Applied rank-title updates immediately across forum post list and selected post views after saving.",
+    ],
+  },
   {
     version: "1.3.27",
     date: "2026-02-16",
@@ -3628,7 +3636,7 @@ function SupportPage({ isAdmin }) {
 function ForumPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { isSignedIn, getToken } = useAuth();
+  const { isSignedIn, getToken, userId } = useAuth();
   const { openSignIn } = useClerk();
   const { user } = useUser();
   const sections = [
@@ -3684,6 +3692,8 @@ function ForumPage() {
   const [selectedPostLoading, setSelectedPostLoading] = useState(false);
   const [forumProfileOpen, setForumProfileOpen] = useState(false);
   const [forumProfileUser, setForumProfileUser] = useState(null);
+  const [forumProfileTitleStatus, setForumProfileTitleStatus] = useState("");
+  const [forumProfileTitleSaving, setForumProfileTitleSaving] = useState(false);
 
   function getForumPreviewText(body, limit = 220) {
     const text = String(body || "").trim();
@@ -3699,20 +3709,155 @@ function ForumPage() {
       .replace(/[^a-z0-9]+/g, "-");
   }
 
-  function openForumProfileCard(entry) {
+  async function loadOwnForumProfileTitleSettings() {
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/title");
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      const availableRaw = Array.isArray(data.availableTitles) ? data.availableTitles : [];
+      const availableTitles = PROFILE_DISPLAY_TITLES.filter((title) => availableRaw.includes(title));
+      const selectedTitle = String(data.selectedTitle || "");
+      const ownedRank = String(data.ownedRank || "Unregistered");
+      const fallbackTitles = ownedRank === "Unregistered" ? ["Unregistered"] : ["Registered"];
+      return {
+        availableTitles: availableTitles.length > 0 ? availableTitles : fallbackTitles,
+        selectedTitle: selectedTitle || ownedRank || "Unregistered",
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async function openForumProfileCard(entry) {
     if (!entry) return;
     const rankLabel = String(entry.authorRank || "Unregistered");
     const authorName = String(entry.authorName || "User");
     const authorUsername = String(entry.authorUsername || "");
+    const authorUserId = String(entry.authorUserId || entry.createdBy || "");
+    const isOwn = Boolean(userId && authorUserId && String(userId) === authorUserId);
     const staff = isStaffLabel(authorName) || isStaffLabel(authorUsername);
+    let availableTitles = [];
+    let selectedTitle = rankLabel;
+    if (isOwn && isSignedIn) {
+      const settings = await loadOwnForumProfileTitleSettings();
+      if (settings) {
+        availableTitles = settings.availableTitles;
+        selectedTitle = settings.selectedTitle || rankLabel;
+      }
+    }
+    if (isOwn && availableTitles.length === 0 && selectedTitle) {
+      availableTitles = [selectedTitle];
+    }
+    setForumProfileTitleStatus("");
     setForumProfileUser({
       name: authorName,
       username: formatUsernameForDisplay(authorUsername),
       image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
-      rankLabel,
+      rankLabel: selectedTitle,
       staff,
+      isOwn,
+      availableTitles,
+      authorUserId,
     });
     setForumProfileOpen(true);
+  }
+
+  async function updateOwnForumDisplayTitle(nextTitle) {
+    if (!forumProfileUser?.isOwn || !nextTitle || forumProfileTitleSaving) return;
+    const current = String(forumProfileUser.rankLabel || "");
+    if (nextTitle === current) return;
+    setForumProfileTitleSaving(true);
+    setForumProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/title", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: nextTitle }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save title.");
+      }
+      const data = await response.json();
+      const selectedTitle = String(data?.selectedTitle || nextTitle);
+      const availableRaw = Array.isArray(data?.availableTitles) ? data.availableTitles : [];
+      const availableTitles = PROFILE_DISPLAY_TITLES.filter((title) => availableRaw.includes(title));
+      setForumProfileUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              rankLabel: selectedTitle,
+              availableTitles: availableTitles.length > 0 ? availableTitles : prev.availableTitles,
+            }
+          : prev,
+      );
+      setPosts((prev) =>
+        prev.map((post) => {
+          const postAuthorUserId = String(post?.authorUserId || post?.createdBy || "");
+          return postAuthorUserId === String(userId || "")
+            ? { ...post, authorRank: selectedTitle }
+            : post;
+        }),
+      );
+      setSelectedPost((prev) => {
+        if (!prev) return prev;
+        const postAuthorUserId = String(prev?.authorUserId || prev?.createdBy || "");
+        return postAuthorUserId === String(userId || "")
+          ? { ...prev, authorRank: selectedTitle }
+          : prev;
+      });
+      setForumProfileTitleStatus("Saved.");
+      setTimeout(() => setForumProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setForumProfileTitleStatus(error?.message || "Failed to save title.");
+    } finally {
+      setForumProfileTitleSaving(false);
+    }
+  }
+
+  function renderForumProfileCard() {
+    if (!forumProfileUser) return html``;
+    return html`<div className="profile-card">
+      <img
+        className=${`profile-card-avatar avatar-rank-${rankSlug(
+          forumProfileUser.rankLabel || "Unregistered",
+        )}`.trim()}
+        src=${forumProfileUser.image}
+        alt=${forumProfileUser.name}
+      />
+      <div className=${`profile-card-name rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}>
+        ${forumProfileUser.name}
+      </div>
+      ${forumProfileUser.username
+        ? html`<div className="profile-card-username">@${forumProfileUser.username}</div>`
+        : html``}
+      <div className=${`comment-rank profile-card-rank rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}>
+        ${(() => {
+          const iconType = getRankIconType(forumProfileUser.rankLabel || "");
+          return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+            <span>${forumProfileUser.rankLabel || "Unregistered"}</span>`;
+        })()}
+      </div>
+      ${forumProfileUser.isOwn
+        ? html`<label className="profile-card-title-picker">
+            <span className="muted">Display title</span>
+            <select
+              value=${forumProfileUser.rankLabel}
+              disabled=${forumProfileTitleSaving}
+              onChange=${(event) => updateOwnForumDisplayTitle(event.target.value)}
+            >
+              ${(Array.isArray(forumProfileUser.availableTitles)
+                ? forumProfileUser.availableTitles
+                : ["Unregistered"]
+              ).map((title) => html`<option value=${title}>${title}</option>`)}
+            </select>
+          </label>`
+        : html``}
+      ${forumProfileTitleStatus && forumProfileUser.isOwn
+        ? html`<div className="muted profile-card-title-status">${forumProfileTitleStatus}</div>`
+        : html``}
+      ${forumProfileUser.staff ? html`<div className="profile-card-badge">Hardtale Staff Member</div>` : html``}
+    </div>`;
   }
 
   async function loadSectionPosts(sectionId) {
@@ -3892,31 +4037,7 @@ function ForumPage() {
             onClose=${() => setForumProfileOpen(false)}
             title="Profile Card"
           >
-            ${forumProfileUser
-              ? html`<div className="profile-card">
-                  <img
-                    className=${`profile-card-avatar avatar-rank-${rankSlug(
-                      forumProfileUser.rankLabel || "Unregistered",
-                    )}`.trim()}
-                    src=${forumProfileUser.image}
-                    alt=${forumProfileUser.name}
-                  />
-                  <div className=${`profile-card-name rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}>
-                    ${forumProfileUser.name}
-                  </div>
-                  ${forumProfileUser.username
-                    ? html`<div className="profile-card-username">@${forumProfileUser.username}</div>`
-                    : html``}
-                  <div className=${`comment-rank profile-card-rank rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}>
-                    ${(() => {
-                      const iconType = getRankIconType(forumProfileUser.rankLabel || "");
-                      return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
-                        <span>${forumProfileUser.rankLabel || "Unregistered"}</span>`;
-                    })()}
-                  </div>
-                  ${forumProfileUser.staff ? html`<div className="profile-card-badge">Hardtale Staff Member</div>` : html``}
-                </div>`
-              : html``}
+            ${renderForumProfileCard()}
           <//>
         </section>
       `;
@@ -4028,31 +4149,7 @@ function ForumPage() {
           onClose=${() => setForumProfileOpen(false)}
           title="Profile Card"
         >
-          ${forumProfileUser
-            ? html`<div className="profile-card">
-                <img
-                  className=${`profile-card-avatar avatar-rank-${rankSlug(
-                    forumProfileUser.rankLabel || "Unregistered",
-                  )}`.trim()}
-                  src=${forumProfileUser.image}
-                  alt=${forumProfileUser.name}
-                />
-                <div className=${`profile-card-name rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}>
-                  ${forumProfileUser.name}
-                </div>
-                ${forumProfileUser.username
-                  ? html`<div className="profile-card-username">@${forumProfileUser.username}</div>`
-                  : html``}
-                <div className=${`comment-rank profile-card-rank rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}>
-                  ${(() => {
-                    const iconType = getRankIconType(forumProfileUser.rankLabel || "");
-                    return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
-                      <span>${forumProfileUser.rankLabel || "Unregistered"}</span>`;
-                  })()}
-                </div>
-                ${forumProfileUser.staff ? html`<div className="profile-card-badge">Hardtale Staff Member</div>` : html``}
-              </div>`
-            : html``}
+          ${renderForumProfileCard()}
         <//>
 
         <${PopUp}

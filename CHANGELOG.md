@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-16 (v1.3.28)
+- Added self-rank title settings to forum profile cards when viewing your own profile.
+- Saving your title from the forum profile card now updates rank labels immediately in forum list and post views.
+
 ## 2026-02-16 (v1.3.27)
 - Reply notifications now store and display the real replying user metadata (name/userId/username/avatar/rank) instead of `System`.
 - Added notification-panel profile peek so recipients can open the replying user's profile card directly from the bell popup.
