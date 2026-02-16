@@ -1813,11 +1813,46 @@ emoji-picker.reaction-picker-panel {
   border-radius: 999px;
   object-fit: cover;
   background: var(--bg-soft);
+  border: 1px solid var(--stroke);
+  transition: box-shadow 0.25s ease, filter 0.25s ease, transform 0.25s ease;
 }
 
 .comment-avatar.small {
   width: 28px;
   height: 28px;
+}
+
+.comment-avatar.avatar-rank-hero:not(.avatar-vfx-off),
+.profile-card-avatar.avatar-rank-hero:not(.avatar-vfx-off) {
+  box-shadow:
+    0 0 0 1px rgba(255, 191, 80, 0.5),
+    0 0 14px rgba(255, 181, 64, 0.36);
+  animation: avatarHeroGlow 3.2s ease-in-out infinite;
+}
+
+.comment-avatar.avatar-rank-legend:not(.avatar-vfx-off),
+.profile-card-avatar.avatar-rank-legend:not(.avatar-vfx-off) {
+  box-shadow:
+    0 0 0 1px rgba(170, 80, 220, 0.55),
+    0 0 16px rgba(165, 95, 235, 0.32);
+  filter: saturate(1.08);
+  animation: avatarLegendShift 4.4s ease-in-out infinite;
+}
+
+.comment-avatar.avatar-rank-mythic:not(.avatar-vfx-off),
+.profile-card-avatar.avatar-rank-mythic:not(.avatar-vfx-off) {
+  box-shadow:
+    0 0 0 1px rgba(255, 130, 255, 0.55),
+    0 0 18px rgba(212, 120, 255, 0.34),
+    0 0 28px rgba(130, 105, 255, 0.22);
+  animation: avatarMythicPulse 5.6s ease-in-out infinite;
+}
+
+.comment-avatar.avatar-vfx-off,
+.profile-card-avatar.avatar-vfx-off {
+  box-shadow: none !important;
+  filter: none !important;
+  animation: none !important;
 }
 
 .comment-avatar-trigger {
@@ -1913,7 +1948,7 @@ emoji-picker.reaction-picker-panel {
 }
 
 .comment-rank.rank-unregistered {
-  color: #aaaaaa;
+  color: #6f6f6f;
 }
 
 .comment-rank.rank-registered {
@@ -1931,6 +1966,201 @@ emoji-picker.reaction-picker-panel {
 
 .comment-rank.rank-mythic {
   color: #ff55ff;
+}
+
+.comment-author.rank-hero,
+.comment-rank.rank-hero,
+.profile-card-name.rank-hero {
+  position: relative;
+  text-shadow:
+    0 0 6px rgba(255, 170, 0, 0.32),
+    0 0 12px rgba(255, 212, 120, 0.22);
+}
+
+.comment-author.rank-hero::after,
+.comment-rank.rank-hero::after,
+.profile-card-name.rank-hero::after {
+  content: "";
+  position: absolute;
+  inset: -2px -4px;
+  border-radius: 8px;
+  background: radial-gradient(circle at 20% 50%, rgba(255, 208, 110, 0.28), transparent 60%);
+  filter: blur(5px);
+  opacity: 0.42;
+  z-index: -1;
+  pointer-events: none;
+  animation: rankHeroPulse 3.2s ease-in-out infinite;
+}
+
+.comment-author.rank-legend,
+.comment-rank.rank-legend,
+.profile-card-name.rank-legend {
+  position: relative;
+  text-shadow:
+    0 0 7px rgba(170, 0, 170, 0.36),
+    0 0 16px rgba(210, 90, 255, 0.22);
+}
+
+.comment-author.rank-legend::after,
+.comment-rank.rank-legend::after,
+.profile-card-name.rank-legend::after {
+  content: "";
+  position: absolute;
+  inset: -2px -4px;
+  border-radius: 8px;
+  background: linear-gradient(
+    110deg,
+    rgba(120, 20, 200, 0.06) 0%,
+    rgba(210, 90, 255, 0.22) 45%,
+    rgba(120, 20, 200, 0.06) 100%
+  );
+  background-size: 220% 100%;
+  filter: blur(4px);
+  opacity: 0.5;
+  z-index: -1;
+  pointer-events: none;
+  animation: rankLegendSweep 4.4s linear infinite;
+}
+
+.comment-author.rank-mythic,
+.comment-rank.rank-mythic,
+.profile-card-name.rank-mythic {
+  position: relative;
+  text-shadow:
+    0 0 5px rgba(255, 85, 255, 0.35),
+    0 0 14px rgba(255, 120, 255, 0.24),
+    0 0 20px rgba(150, 80, 255, 0.2);
+}
+
+.comment-author.rank-mythic::after,
+.comment-rank.rank-mythic::after,
+.profile-card-name.rank-mythic::after {
+  content: "";
+  position: absolute;
+  inset: -3px -5px;
+  border-radius: 10px;
+  background:
+    radial-gradient(circle at 25% 30%, rgba(255, 175, 255, 0.32), transparent 55%),
+    radial-gradient(circle at 75% 70%, rgba(165, 120, 255, 0.3), transparent 55%);
+  filter: blur(6px);
+  opacity: 0.5;
+  z-index: -1;
+  pointer-events: none;
+  animation: rankMythicOrbit 5.4s ease-in-out infinite;
+}
+
+.comment-author.rank-effects-off.rank-hero,
+.comment-author.rank-effects-off.rank-legend,
+.comment-author.rank-effects-off.rank-mythic,
+.comment-rank.rank-effects-off.rank-hero,
+.comment-rank.rank-effects-off.rank-legend,
+.comment-rank.rank-effects-off.rank-mythic,
+.profile-card-name.rank-effects-off.rank-hero,
+.profile-card-name.rank-effects-off.rank-legend,
+.profile-card-name.rank-effects-off.rank-mythic,
+.profile-card-rank.rank-effects-off.rank-hero,
+.profile-card-rank.rank-effects-off.rank-legend,
+.profile-card-rank.rank-effects-off.rank-mythic {
+  text-shadow: none;
+}
+
+.comment-author.rank-effects-off.rank-hero::after,
+.comment-author.rank-effects-off.rank-legend::after,
+.comment-author.rank-effects-off.rank-mythic::after,
+.comment-rank.rank-effects-off.rank-hero::after,
+.comment-rank.rank-effects-off.rank-legend::after,
+.comment-rank.rank-effects-off.rank-mythic::after,
+.profile-card-name.rank-effects-off.rank-hero::after,
+.profile-card-name.rank-effects-off.rank-legend::after,
+.profile-card-name.rank-effects-off.rank-mythic::after,
+.profile-card-rank.rank-effects-off.rank-hero::after,
+.profile-card-rank.rank-effects-off.rank-legend::after,
+.profile-card-rank.rank-effects-off.rank-mythic::after {
+  content: none;
+  animation: none;
+}
+
+@keyframes avatarHeroGlow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(255, 191, 80, 0.45),
+      0 0 10px rgba(255, 181, 64, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(255, 205, 110, 0.62),
+      0 0 18px rgba(255, 195, 92, 0.45);
+  }
+}
+
+@keyframes avatarLegendShift {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(155, 85, 215, 0.46),
+      0 0 12px rgba(158, 88, 225, 0.28);
+    filter: saturate(1.02);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(182, 95, 238, 0.62),
+      0 0 18px rgba(174, 110, 238, 0.42);
+    filter: saturate(1.12);
+  }
+}
+
+@keyframes avatarMythicPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px rgba(240, 130, 255, 0.48),
+      0 0 14px rgba(205, 120, 255, 0.32),
+      0 0 22px rgba(130, 105, 255, 0.18);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(255, 158, 255, 0.66),
+      0 0 22px rgba(225, 140, 255, 0.44),
+      0 0 34px rgba(148, 125, 255, 0.27);
+  }
+}
+
+@keyframes rankHeroPulse {
+  0%,
+  100% {
+    opacity: 0.34;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.02);
+  }
+}
+
+@keyframes rankLegendSweep {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -40% 0;
+  }
+}
+
+@keyframes rankMythicOrbit {
+  0%,
+  100% {
+    opacity: 0.44;
+    transform: translate(0, 0);
+  }
+  33% {
+    opacity: 0.58;
+    transform: translate(0.5px, -0.5px);
+  }
+  66% {
+    opacity: 0.5;
+    transform: translate(-0.5px, 0.5px);
+  }
 }
 
 .comment-rank.staff {

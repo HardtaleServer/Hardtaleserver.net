@@ -70,6 +70,7 @@ const STORE_PRODUCT_IDS = new Set(Object.keys(STORE_RANK_PRODUCTS));
 const STORE_RANK_BY_LABEL = { Hero: 1, Legend: 2, Mythic: 3 };
 const DISPLAY_TITLES = ["Registered", "Hero", "Legend", "Mythic"];
 const DISPLAY_TITLE_TIER = { Registered: 0, Hero: 1, Legend: 2, Mythic: 3 };
+const OWNED_RANKS = ["Unregistered", "Registered", "Hero", "Legend", "Mythic"];
 const MONGO_URI = process.env.MONGO_URI || "";
 const MONGO_DB_NAME = process.env.MONGO_DB || "hardtaledb";
 
@@ -235,6 +236,8 @@ function normalizeComment(doc) {
     authorUsername: formatUsernameForDisplay(rest.authorUsername, 80),
     authorShowStaffBadge: rest.authorShowStaffBadge !== false,
     authorShowStaffGradient: rest.authorShowStaffGradient !== false,
+    authorShowRankEffects: rest.authorShowRankEffects !== false,
+    authorShowAvatarVfx: rest.authorShowAvatarVfx !== false,
   };
   if (
     normalized.authorName &&
@@ -252,6 +255,8 @@ function normalizeComment(doc) {
         authorUsername: replyUsername,
         authorShowStaffBadge: reply.authorShowStaffBadge !== false,
         authorShowStaffGradient: reply.authorShowStaffGradient !== false,
+        authorShowRankEffects: reply.authorShowRankEffects !== false,
+        authorShowAvatarVfx: reply.authorShowAvatarVfx !== false,
       };
       if (
         nextReply.authorName &&
@@ -508,6 +513,14 @@ function resolveStaffGradientVisible(metadata = {}) {
   return metadata?.showStaffGradient !== false;
 }
 
+function resolveRankEffectsVisible(metadata = {}) {
+  return metadata?.showRankEffects !== false;
+}
+
+function resolveAvatarVfxVisible(metadata = {}) {
+  return metadata?.showAvatarVfx !== false;
+}
+
 async function getFreshAuthorSnapshot(userId, cache = new Map()) {
   const key = normalizeText(userId, 128);
   if (!key) return null;
@@ -526,6 +539,8 @@ async function getFreshAuthorSnapshot(userId, cache = new Map()) {
       authorRank: rankInfo.displayRank,
       authorShowStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
       authorShowStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
+      authorShowRankEffects: resolveRankEffectsVisible(user?.publicMetadata || {}),
+      authorShowAvatarVfx: resolveAvatarVfxVisible(user?.publicMetadata || {}),
     };
     cache.set(key, snapshot);
     return snapshot;
@@ -542,9 +557,11 @@ function hasAuthorSnapshotChanged(entry, snapshot) {
     normalizeText(entry.authorUsername, 80) !== snapshot.authorUsername ||
     String(entry.authorEmail || "") !== String(snapshot.authorEmail || "") ||
     String(entry.authorImage || "") !== String(snapshot.authorImage || "") ||
-    String(entry.authorRank || "Registered") !== String(snapshot.authorRank || "Registered") ||
+    String(entry.authorRank || "Unregistered") !== String(snapshot.authorRank || "Unregistered") ||
     Boolean(entry.authorShowStaffBadge) !== Boolean(snapshot.authorShowStaffBadge) ||
-    Boolean(entry.authorShowStaffGradient) !== Boolean(snapshot.authorShowStaffGradient)
+    Boolean(entry.authorShowStaffGradient) !== Boolean(snapshot.authorShowStaffGradient) ||
+    Boolean(entry.authorShowRankEffects) !== Boolean(snapshot.authorShowRankEffects) ||
+    Boolean(entry.authorShowAvatarVfx) !== Boolean(snapshot.authorShowAvatarVfx)
   );
 }
 
@@ -597,6 +614,8 @@ async function refreshCommentAuthorFields(comments = []) {
         setPayload.authorRank = nextComment.authorRank;
         setPayload.authorShowStaffBadge = nextComment.authorShowStaffBadge;
         setPayload.authorShowStaffGradient = nextComment.authorShowStaffGradient;
+        setPayload.authorShowRankEffects = nextComment.authorShowRankEffects;
+        setPayload.authorShowAvatarVfx = nextComment.authorShowAvatarVfx;
       }
       if (repliesChanged) {
         setPayload.replies = nextComment.replies;
@@ -739,17 +758,28 @@ function normalizeDisplayTitle(value) {
   return DISPLAY_TITLES.includes(title) ? title : "";
 }
 
+function normalizeOwnedRank(value) {
+  const rank = normalizeText(value, 20);
+  return OWNED_RANKS.includes(rank) ? rank : "";
+}
+
 function getUnlockedDisplayTitles(ownedRank) {
-  const normalizedOwned = normalizeDisplayTitle(ownedRank) || "Registered";
+  const normalizedOwned = normalizeOwnedRank(ownedRank) || "Unregistered";
+  if (normalizedOwned === "Unregistered") return [];
   const maxTier = DISPLAY_TITLE_TIER[normalizedOwned] ?? 0;
   return DISPLAY_TITLES.filter((title) => (DISPLAY_TITLE_TIER[title] ?? 0) <= maxTier);
 }
 
 function resolveDisplayRankFromMetadata(metadata = {}, includeAllTitles = false) {
-  const ownedRank = normalizeDisplayTitle(metadata?.rank) || "Registered";
+  const ownedRank = normalizeOwnedRank(metadata?.rank) || "Unregistered";
   const availableTitles = includeAllTitles ? [...DISPLAY_TITLES] : getUnlockedDisplayTitles(ownedRank);
   const preferred = normalizeDisplayTitle(metadata?.displayRank);
-  const displayRank = preferred && availableTitles.includes(preferred) ? preferred : ownedRank;
+  const displayRank =
+    preferred && availableTitles.includes(preferred)
+      ? preferred
+      : ownedRank === "Unregistered"
+      ? "Unregistered"
+      : ownedRank;
   return { ownedRank, displayRank, availableTitles };
 }
 
@@ -1046,6 +1076,10 @@ app.get("/api/profile/title", async (req, res) => {
       showStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
       canToggleStaffGradient: isStaff,
       showStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
+      canToggleRankEffects: isStaff || ownedRank !== "Unregistered",
+      showRankEffects: resolveRankEffectsVisible(user?.publicMetadata || {}),
+      canToggleAvatarVfx: isStaff || ownedRank !== "Unregistered",
+      showAvatarVfx: resolveAvatarVfxVisible(user?.publicMetadata || {}),
     });
   } catch (error) {
     console.error("Failed to load profile title settings", error);
@@ -1104,6 +1138,64 @@ app.post("/api/profile/staff-gradient", async (req, res) => {
   } catch (error) {
     console.error("Failed to update staff gradient settings", error);
     return res.status(500).json({ error: "Failed to update staff gradient settings" });
+  }
+});
+
+app.post("/api/profile/rank-effects", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const user = await clerkClient.users.getUser(auth.userId);
+    const isStaff = isAdminUser(user);
+    const rankInfo = resolveDisplayRankFromMetadata(user?.publicMetadata || {}, isStaff);
+    if (!isStaff && rankInfo.ownedRank === "Unregistered") {
+      return res.status(400).json({ error: "Rank effects unavailable for Unregistered" });
+    }
+    const showRankEffects = req.body?.showRankEffects !== false;
+    await clerkClient.users.updateUserMetadata(auth.userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        showRankEffects,
+      },
+    });
+    await commentsCollection.updateMany(
+      { userId: auth.userId, isDeleted: false },
+      { $set: { authorShowRankEffects: showRankEffects, updatedAt: new Date() } },
+    );
+    return res.json({ showRankEffects });
+  } catch (error) {
+    console.error("Failed to update rank effects settings", error);
+    return res.status(500).json({ error: "Failed to update rank effects settings" });
+  }
+});
+
+app.post("/api/profile/avatar-vfx", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const user = await clerkClient.users.getUser(auth.userId);
+    const isStaff = isAdminUser(user);
+    const rankInfo = resolveDisplayRankFromMetadata(user?.publicMetadata || {}, isStaff);
+    if (!isStaff && rankInfo.ownedRank === "Unregistered") {
+      return res.status(400).json({ error: "Avatar VFX unavailable for Unregistered" });
+    }
+    const showAvatarVfx = req.body?.showAvatarVfx !== false;
+    await clerkClient.users.updateUserMetadata(auth.userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        showAvatarVfx,
+      },
+    });
+    await commentsCollection.updateMany(
+      { userId: auth.userId, isDeleted: false },
+      { $set: { authorShowAvatarVfx: showAvatarVfx, updatedAt: new Date() } },
+    );
+    return res.json({ showAvatarVfx });
+  } catch (error) {
+    console.error("Failed to update avatar VFX settings", error);
+    return res.status(500).json({ error: "Failed to update avatar VFX settings" });
   }
 });
 
@@ -1494,6 +1586,8 @@ app.post("/api/comments", async (req, res) => {
     const email = getUserEmail(user);
     const showStaffBadge = resolveStaffBadgeVisible(user?.publicMetadata || {});
     const showStaffGradient = resolveStaffGradientVisible(user?.publicMetadata || {});
+    const showRankEffects = resolveRankEffectsVisible(user?.publicMetadata || {});
+    const showAvatarVfx = resolveAvatarVfxVisible(user?.publicMetadata || {});
     const rank = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
       isAdminUser(user),
@@ -1511,6 +1605,8 @@ app.post("/api/comments", async (req, res) => {
       authorRank: rank,
       authorShowStaffBadge: showStaffBadge,
       authorShowStaffGradient: showStaffGradient,
+      authorShowRankEffects: showRankEffects,
+      authorShowAvatarVfx: showAvatarVfx,
       replies: [],
       isDeleted: false,
       createdAt: new Date(),
@@ -1629,6 +1725,8 @@ app.post("/api/comments/:id/replies", async (req, res) => {
     const email = getUserEmail(user);
     const showStaffBadge = resolveStaffBadgeVisible(user?.publicMetadata || {});
     const showStaffGradient = resolveStaffGradientVisible(user?.publicMetadata || {});
+    const showRankEffects = resolveRankEffectsVisible(user?.publicMetadata || {});
+    const showAvatarVfx = resolveAvatarVfxVisible(user?.publicMetadata || {});
     const rank = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
       isAdminUser(user),
@@ -1648,6 +1746,8 @@ app.post("/api/comments/:id/replies", async (req, res) => {
       authorRank: rank,
       authorShowStaffBadge: showStaffBadge,
       authorShowStaffGradient: showStaffGradient,
+      authorShowRankEffects: showRankEffects,
+      authorShowAvatarVfx: showAvatarVfx,
       repliedToReplyId: effectiveRepliedToReplyId,
       repliedToCommentId: effectiveRepliedToCommentId,
       repliedToName: repliedToAuthorName,
@@ -2191,7 +2291,7 @@ app.post("/api/cart/checkout", async (req, res) => {
     let awardedRank = "";
     if (purchasedHighestRank) {
       const user = await clerkClient.users.getUser(auth.userId);
-      const currentRank = String(user?.publicMetadata?.rank || "Registered");
+      const currentRank = String(user?.publicMetadata?.rank || "Unregistered");
       awardedRank = maxRankLabel(currentRank, purchasedHighestRank);
       if (awardedRank !== currentRank) {
         const nextMetadata = {

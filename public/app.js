@@ -1141,6 +1141,8 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
   const [profileTitleSaving, setProfileTitleSaving] = useState(false);
   const [profileStaffBadgeSaving, setProfileStaffBadgeSaving] = useState(false);
   const [profileStaffGradientSaving, setProfileStaffGradientSaving] = useState(false);
+  const [profileRankEffectsSaving, setProfileRankEffectsSaving] = useState(false);
+  const [profileAvatarVfxSaving, setProfileAvatarVfxSaving] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState([]);
   const [replyTargets, setReplyTargets] = useState({});
@@ -1205,8 +1207,27 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
     if (staffIdentity && showStaffGradient) {
       return { label: "STAFF", staff: true };
     }
-    const rank = comment.authorRank || "Registered";
+    const rank = comment.authorRank || "Unregistered";
     return { label: rank, staff: false };
+  }
+
+  function rankClassSlug(value) {
+    return String(value || "Unregistered")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-");
+  }
+
+  function avatarClassName(entry, isSmall = false) {
+    const rankLabel = resolveRank(entry).label;
+    return [
+      "comment-avatar",
+      isSmall ? "small" : "",
+      `avatar-rank-${rankClassSlug(rankLabel)}`,
+      entry?.authorShowAvatarVfx === false ? "avatar-vfx-off" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
   }
 
   function authorSizeClass(value) {
@@ -1453,14 +1474,19 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
       const availableRaw = Array.isArray(data.availableTitles) ? data.availableTitles : [];
       const availableTitles = PROFILE_DISPLAY_TITLES.filter((title) => availableRaw.includes(title));
       const selectedTitle = String(data.selectedTitle || "");
-      const ownedRank = String(data.ownedRank || "Registered");
+      const ownedRank = String(data.ownedRank || "Unregistered");
+      const fallbackTitles = ownedRank === "Unregistered" ? ["Unregistered"] : ["Registered"];
       return {
-        availableTitles: availableTitles.length > 0 ? availableTitles : ["Registered"],
-        selectedTitle: selectedTitle || ownedRank,
+        availableTitles: availableTitles.length > 0 ? availableTitles : fallbackTitles,
+        selectedTitle: selectedTitle || ownedRank || "Unregistered",
         canToggleStaffBadge: Boolean(data?.canToggleStaffBadge),
         showStaffBadge: data?.showStaffBadge !== false,
         canToggleStaffGradient: Boolean(data?.canToggleStaffGradient),
         showStaffGradient: data?.showStaffGradient !== false,
+        canToggleRankEffects: Boolean(data?.canToggleRankEffects),
+        showRankEffects: data?.showRankEffects !== false,
+        canToggleAvatarVfx: Boolean(data?.canToggleAvatarVfx),
+        showAvatarVfx: data?.showAvatarVfx !== false,
       };
     } catch {
       return null;
@@ -1610,6 +1636,92 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
     }
   }
 
+  async function updateOwnRankEffectsVisibility(nextVisible) {
+    if (!profileUser?.isOwn || !profileUser?.canToggleRankEffects || profileRankEffectsSaving) return;
+    setProfileRankEffectsSaving(true);
+    setProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/rank-effects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showRankEffects: Boolean(nextVisible) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save rank effects.");
+      }
+      const data = await response.json();
+      const showRankEffects = data?.showRankEffects !== false;
+      setProfileUser((prev) => (prev ? { ...prev, showRankEffects } : prev));
+      setComments((prev) =>
+        prev.map((comment) => {
+          if (!comment) return comment;
+          const nextComment =
+            comment.userId === userId ? { ...comment, authorShowRankEffects: showRankEffects } : comment;
+          const replies = Array.isArray(nextComment.replies) ? nextComment.replies : [];
+          if (replies.length === 0) return nextComment;
+          return {
+            ...nextComment,
+            replies: replies.map((reply) =>
+              reply?.userId === userId
+                ? { ...reply, authorShowRankEffects: showRankEffects }
+                : reply,
+            ),
+          };
+        }),
+      );
+      setProfileTitleStatus("Saved.");
+      setTimeout(() => setProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setProfileTitleStatus(error?.message || "Failed to save rank effects.");
+    } finally {
+      setProfileRankEffectsSaving(false);
+    }
+  }
+
+  async function updateOwnAvatarVfxVisibility(nextVisible) {
+    if (!profileUser?.isOwn || !profileUser?.canToggleAvatarVfx || profileAvatarVfxSaving) return;
+    setProfileAvatarVfxSaving(true);
+    setProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/avatar-vfx", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showAvatarVfx: Boolean(nextVisible) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save avatar effects.");
+      }
+      const data = await response.json();
+      const showAvatarVfx = data?.showAvatarVfx !== false;
+      setProfileUser((prev) => (prev ? { ...prev, showAvatarVfx } : prev));
+      setComments((prev) =>
+        prev.map((comment) => {
+          if (!comment) return comment;
+          const nextComment =
+            comment.userId === userId ? { ...comment, authorShowAvatarVfx: showAvatarVfx } : comment;
+          const replies = Array.isArray(nextComment.replies) ? nextComment.replies : [];
+          if (replies.length === 0) return nextComment;
+          return {
+            ...nextComment,
+            replies: replies.map((reply) =>
+              reply?.userId === userId
+                ? { ...reply, authorShowAvatarVfx: showAvatarVfx }
+                : reply,
+            ),
+          };
+        }),
+      );
+      setProfileTitleStatus("Saved.");
+      setTimeout(() => setProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setProfileTitleStatus(error?.message || "Failed to save avatar effects.");
+    } finally {
+      setProfileAvatarVfxSaving(false);
+    }
+  }
+
   async function openProfileCard(entry) {
     if (!entry) return;
     const rank = resolveRank(entry);
@@ -1624,6 +1736,10 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
     let showStaffBadge = entry?.authorShowStaffBadge !== false;
     let canToggleStaffGradient = false;
     let showStaffGradient = entry?.authorShowStaffGradient !== false;
+    let canToggleRankEffects = false;
+    let showRankEffects = entry?.authorShowRankEffects !== false;
+    let canToggleAvatarVfx = false;
+    let showAvatarVfx = entry?.authorShowAvatarVfx !== false;
     if (isOwn && isSignedIn) {
       const settings = await loadOwnProfileTitleSettings();
       if (settings) {
@@ -1633,6 +1749,10 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
         showStaffBadge = settings.showStaffBadge !== false;
         canToggleStaffGradient = Boolean(settings.canToggleStaffGradient);
         showStaffGradient = settings.showStaffGradient !== false;
+        canToggleRankEffects = Boolean(settings.canToggleRankEffects);
+        showRankEffects = settings.showRankEffects !== false;
+        canToggleAvatarVfx = Boolean(settings.canToggleAvatarVfx);
+        showAvatarVfx = settings.showAvatarVfx !== false;
       }
     }
     if (isOwn && availableTitles.length === 0 && selectedTitle) {
@@ -1652,6 +1772,10 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
       showStaffBadge,
       canToggleStaffGradient,
       showStaffGradient,
+      canToggleRankEffects,
+      showRankEffects,
+      canToggleAvatarVfx,
+      showAvatarVfx,
     });
     setProfileOpen(true);
   }
@@ -1710,7 +1834,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
                         title="Open profile card"
                       >
                         <img
-                          className="comment-avatar"
+                          className=${avatarClassName(comment, false)}
                           src=${comment.authorImage || "/assets/HardTale_H_GreyScale.png"}
                           alt=${comment.authorName}
                         />
@@ -1847,7 +1971,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
                                         title="Open profile card"
                                       >
                                         <img
-                                          className="comment-avatar small"
+                                          className=${avatarClassName(reply, true)}
                                           src=${reply.authorImage || "/assets/HardTale_H_GreyScale.png"}
                                           alt=${reply.authorName}
                                         />
@@ -2017,15 +2141,32 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
       >
         ${profileUser
           ? html`<div className="profile-card">
-              <img className="profile-card-avatar" src=${profileUser.image} alt=${profileUser.name} />
-              <div className="profile-card-name">${profileUser.name}</div>
+              <img
+                className=${`profile-card-avatar avatar-rank-${rankClassSlug(
+                  profileUser.rankLabel || "Unregistered",
+                )} ${profileUser.showAvatarVfx === false ? "avatar-vfx-off" : ""}`.trim()}
+                src=${profileUser.image}
+                alt=${profileUser.name}
+              />
+              <div
+                className=${`profile-card-name ${
+                  profileUser.showRankEffects === false ? "rank-effects-off" : ""
+                } rank-${String(profileUser.rankLabel || "Unregistered")
+                  .trim()
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, "-")}`.trim()}
+              >
+                ${profileUser.name}
+              </div>
               ${profileUser.username
                 ? html`<div className="profile-card-username">@${profileUser.username}</div>`
                 : html``}
               <div
                 className=${`comment-rank ${
                   profileUser.staff ? "staff" : ""
-                } rank-${String(profileUser.rankLabel || "Registered")
+                } profile-card-rank ${
+                  profileUser.showRankEffects === false ? "rank-effects-off" : ""
+                } rank-${String(profileUser.rankLabel || "Unregistered")
                   .trim()
                   .toLowerCase()
                   .replace(/[^a-z0-9]+/g, "-")}`.trim()}
@@ -2042,9 +2183,31 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
                     >
                       ${(Array.isArray(profileUser.availableTitles)
                         ? profileUser.availableTitles
-                        : ["Registered"]
+                        : ["Unregistered"]
                       ).map((title) => html`<option value=${title}>${title}</option>`)}
                     </select>
+                  </label>`
+                : html``}
+              ${profileUser.isOwn && profileUser.canToggleRankEffects
+                ? html`<label className="profile-card-toggle">
+                    <input
+                      type="checkbox"
+                      checked=${profileUser.showRankEffects !== false}
+                      disabled=${profileRankEffectsSaving}
+                      onChange=${(event) => updateOwnRankEffectsVisibility(event.target.checked)}
+                    />
+                    <span>Enable rank effects</span>
+                  </label>`
+                : html``}
+              ${profileUser.isOwn && profileUser.canToggleAvatarVfx
+                ? html`<label className="profile-card-toggle">
+                    <input
+                      type="checkbox"
+                      checked=${profileUser.showAvatarVfx !== false}
+                      disabled=${profileAvatarVfxSaving}
+                      onChange=${(event) => updateOwnAvatarVfxVisibility(event.target.checked)}
+                    />
+                    <span>Enable avatar effects</span>
                   </label>`
                 : html``}
               ${profileUser.isOwn && profileUser.canToggleStaffBadge
@@ -2072,7 +2235,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
               ${profileTitleStatus && profileUser.isOwn
                 ? html`<div className="muted profile-card-title-status">${profileTitleStatus}</div>`
                 : html``}
-              ${profileUser.staff && profileUser.showStaffBadge !== false
+              ${profileUser.isStaffUser && profileUser.showStaffBadge !== false
                 ? html`<div className="profile-card-badge">Hardtale Staff Member</div>`
                 : html``}
             </div>`
