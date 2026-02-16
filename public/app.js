@@ -6857,6 +6857,12 @@ function Layout() {
   }, []);
 
   useEffect(() => {
+    if (!isMobile) {
+      setShowMobileNav(false);
+    }
+  }, [isMobile]);
+
+  useEffect(() => {
     if (appHydrated) return undefined;
 
     // Keep initial loader up until auth, news bootstrap, and critical images are ready.
@@ -7348,51 +7354,53 @@ function Layout() {
   return html`
     <div className=${`page ${showMobileNav ? "drawer-open" : ""} ${mobileNavStyle === "solid" ? "nav-solid" : "nav-transparent"} ${isMobile && !showMobileIsland ? "hide-mobile-island" : ""}`}>
       <${LoadingScreen} show=${showLoader} variant=${loaderVariant} />
-        <div
-          className=${`mobile-nav-bar ${mobileNavStyle === "solid" ? "nav-solid" : "nav-transparent"} ${menuSide === "left" ? "nav-left" : "nav-right"} ${mobileNavStyle === "solid" ? "with-mini-logo" : ""}`}
-          aria-hidden="true"
-        >
-          ${mobileNavStyle === "solid"
-            ? html`<div className=${`mobile-nav-logo-wrap ${menuSide === "left" ? "logo-right" : ""}`}>
-                <img
-                  className=${`mobile-nav-logo ${
-                    mobileLogoStyle.startsWith("icon")
-                      ? `icon ${mobileLogoStyle === "icon-ht" ? "ht" : ""}`.trim()
-                      : "logo"
-                  }`}
-                  src=${MOBILE_LOGO_MAP[mobileLogoStyle] || MOBILE_LOGO_MAP["logo-greyscale"]}
-                  alt="Hardtale"
-                />
-              </div>`
-            : html``}
-          <div className=${`mobile-top-actions ${menuSide === "left" ? "menu-left" : "menu-right"}`}>
-            ${menuSide === "left"
-              ? html`
-                  <button
-                    className="settings-button mobile-menu"
-                    title="Menu"
-                    onClick=${() => setShowMobileNav(true)}
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />
-                    </svg>
-                  </button>
-                  ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
-                `
-              : html`
-                  ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
-                  <button
-                    className="settings-button mobile-menu"
-                    title="Menu"
-                    onClick=${() => setShowMobileNav(true)}
-                  >
-                    <svg viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />
-                    </svg>
-                  </button>
-                `}
-          </div>
-        </div>
+        ${isMobile
+          ? html`<div
+              className=${`mobile-nav-bar ${mobileNavStyle === "solid" ? "nav-solid" : "nav-transparent"} ${menuSide === "left" ? "nav-left" : "nav-right"} ${mobileNavStyle === "solid" ? "with-mini-logo" : ""}`}
+              aria-hidden="true"
+            >
+              ${mobileNavStyle === "solid"
+                ? html`<div className=${`mobile-nav-logo-wrap ${menuSide === "left" ? "logo-right" : ""}`}>
+                    <img
+                      className=${`mobile-nav-logo ${
+                        mobileLogoStyle.startsWith("icon")
+                          ? `icon ${mobileLogoStyle === "icon-ht" ? "ht" : ""}`.trim()
+                          : "logo"
+                      }`}
+                      src=${MOBILE_LOGO_MAP[mobileLogoStyle] || MOBILE_LOGO_MAP["logo-greyscale"]}
+                      alt="Hardtale"
+                    />
+                  </div>`
+                : html``}
+              <div className=${`mobile-top-actions ${menuSide === "left" ? "menu-left" : "menu-right"}`}>
+                ${menuSide === "left"
+                  ? html`
+                      <button
+                        className="settings-button mobile-menu"
+                        title="Menu"
+                        onClick=${() => setShowMobileNav(true)}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />
+                        </svg>
+                      </button>
+                      ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
+                    `
+                  : html`
+                      ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
+                      <button
+                        className="settings-button mobile-menu"
+                        title="Menu"
+                        onClick=${() => setShowMobileNav(true)}
+                      >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />
+                        </svg>
+                      </button>
+                    `}
+              </div>
+            </div>`
+          : html``}
         ${desktopStickyVisible ? html`<${DesktopStickyBar} />` : html``}
       <div className="glow"></div>
       <div className="sparks"></div>
@@ -7467,7 +7475,8 @@ function Layout() {
         </footer>
       </div>
 
-      <div className=${`mobile-drawer ${menuSide === "left" ? "drawer-left" : "drawer-right"} ${showMobileNav ? "open" : ""}`}>
+      ${isMobile
+        ? html`<div className=${`mobile-drawer ${menuSide === "left" ? "drawer-left" : "drawer-right"} ${showMobileNav ? "open" : ""}`}>
         <div className="mobile-drawer-backdrop" onClick=${() => setShowMobileNav(false)}></div>
         <div className="mobile-drawer-panel">
           <div className="mobile-drawer-header">
@@ -7581,6 +7590,8 @@ function Layout() {
           </div>
         </div>
       </div>
+      `
+        : html``}
 
       <${PopUp} show=${showCart} onClose=${() => setShowCart(false)} title="Checkout">
         ${cart.length === 0
