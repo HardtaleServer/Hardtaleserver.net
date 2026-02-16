@@ -3358,6 +3358,12 @@ emoji-picker.reaction-picker-panel {
   font-size: 12px;
 }
 
+.store-rank-title {
+  justify-content: flex-start;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .store-name {
   font-weight: 700;
 }
@@ -3382,6 +3388,30 @@ emoji-picker.reaction-picker-panel {
 
 .store-owned-badge {
   font-size: 10px;
+  border-color: color-mix(in srgb, currentColor 36%, var(--stroke));
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.store-owned-badge.rank-hero {
+  color: var(--rank-hero);
+}
+
+.store-owned-badge.rank-legend {
+  color: var(--rank-legend);
+}
+
+.store-owned-badge.rank-mythic {
+  color: var(--rank-mythic);
+}
+
+.store-owned-badge.rank-linked,
+.store-owned-badge.rank-registered {
+  color: var(--rank-registered);
+}
+
+.store-owned-badge.rank-unlinked,
+.store-owned-badge.rank-unregistered {
+  color: var(--muted);
 }
 
 .store-preview-note {
@@ -3441,6 +3471,10 @@ body[data-theme="dark"] .store-cta {
 
 .store-support-note {
   margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 .store-support-rank {

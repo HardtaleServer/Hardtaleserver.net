@@ -16,6 +16,7 @@ import PageHero from "./components/PageHero.js";
 import SupportTicketForm from "./components/SupportTicketForm.js";
 import SupportTicketThread from "./components/SupportTicketThread.js";
 import AppRoutes from "./components/AppRoutes.js";
+import RankBadge from "./components/RankBadge.js";
 import { getRankDisplayLabel, getRankIconType } from "./components/rankConfig.js";
 import {
   BrowserRouter,
@@ -3754,19 +3755,20 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
                       <span>${getStoreRankLabel(item)}</span>`;
                   })()}
                 </div>
+                <div className=${`comment-rank store-rank-title rank-${getStoreRankSlug(item)}`.trim()}>
+                  ${(() => {
+                    const iconType = getRankIconType(getStoreRankLabel(item));
+                    return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                      <span>${item.name}</span>`;
+                  })()}
+                </div>
+                <div className="store-badge-preview-row">
+                  ${getStorePreviewBadges(item).map(
+                    (label) => html`<${RankBadge} label=${label} className="store-owned-badge" />`,
+                  )}
+                </div>
               </div>
             </button>
-            <div className=${`store-name rank-${getStoreRankSlug(item)}`.trim()}>${item.name}</div>
-            <div className="store-badge-preview-row">
-              ${getStorePreviewBadges(item).map((label) => {
-                const iconType = getRankIconType(label);
-                const slug = String(label).toLowerCase();
-                return html`<span className=${`profile-owned-badge store-owned-badge rank-${slug}`.trim()}>
-                  ${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
-                  <span>${getRankDisplayLabel(label)}</span>
-                </span>`;
-              })}
-            </div>
             <div className="store-preview-note muted">
               Titles unlocked: ${(STORE_PREVIEW_TITLES_BY_ID[item.id] || []).join(", ")}
             </div>
@@ -3791,21 +3793,10 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
         )}
       </div>
       <p className="muted store-support-note">
-        Support the server and become a local
-        <span className="profile-owned-badge store-owned-badge rank-hero">
-          <span className="rank-icon">${renderRankIcon("shield")}</span>
-          <span>Hero</span>
-        </span>
-        ,
-        <span className="profile-owned-badge store-owned-badge rank-legend">
-          <span className="rank-icon">${renderRankIcon("crown")}</span>
-          <span>Legend</span>
-        </span>
-        , or
-        <span className="profile-owned-badge store-owned-badge rank-mythic">
-          <span className="rank-icon">${renderRankIcon("star")}</span>
-          <span>Mythic</span>
-        </span>
+        Support the server and become a local:
+        <${RankBadge} label="Hero" className="store-owned-badge" />
+        <${RankBadge} label="Legend" className="store-owned-badge" />
+        <${RankBadge} label="Mythic" className="store-owned-badge" />
         by giving global boosts to the entire server.
       </p>
     </section>
@@ -3891,17 +3882,19 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
                   <span>${getStoreRankLabel(previewItem)}</span>`;
               })()}
             </div>
+            <div className=${`comment-rank store-rank-title rank-${getStoreRankSlug(previewItem)}`.trim()}>
+              ${(() => {
+                const iconType = getRankIconType(getStoreRankLabel(previewItem));
+                return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                  <span>${previewItem.name}</span>`;
+              })()}
+            </div>
             <div className="profile-card-badges-block">
               <div className="profile-card-badges-title">Badges</div>
               <div className="profile-card-badges-row">
-                ${getStorePreviewBadges(previewItem).map((label) => {
-                  const iconType = getRankIconType(label);
-                  const slug = String(label).trim().toLowerCase();
-                  return html`<span className=${`profile-owned-badge store-owned-badge rank-${slug}`.trim()}>
-                    ${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
-                    <span>${getRankDisplayLabel(label)}</span>
-                  </span>`;
-                })}
+                ${getStorePreviewBadges(previewItem).map(
+                  (label) => html`<${RankBadge} label=${label} className="store-owned-badge" />`,
+                )}
               </div>
             </div>
           </div>`
