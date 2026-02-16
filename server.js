@@ -262,6 +262,7 @@ function normalizeComment(doc) {
     ...rest,
     id: _id ? String(_id) : doc.id,
     authorUsername: formatUsernameForDisplay(rest.authorUsername, 80),
+    authorOwnedRank: normalizeOwnedRank(rest.authorOwnedRank) || "Unregistered",
     authorIsStaff: Boolean(rest.authorIsStaff),
     authorShowStaffBadge: rest.authorShowStaffBadge !== false,
     authorShowStaffBadgeIcon: rest.authorShowStaffBadgeIcon !== false,
@@ -283,6 +284,7 @@ function normalizeComment(doc) {
       const nextReply = {
         ...reply,
         authorUsername: replyUsername,
+        authorOwnedRank: normalizeOwnedRank(reply.authorOwnedRank) || "Unregistered",
         authorIsStaff: Boolean(reply.authorIsStaff),
         authorShowStaffBadge: reply.authorShowStaffBadge !== false,
         authorShowStaffBadgeIcon: reply.authorShowStaffBadgeIcon !== false,
@@ -687,6 +689,7 @@ async function getFreshAuthorSnapshot(userId, cache = new Map()) {
       authorEmail: getUserEmail(user),
       authorImage: user?.imageUrl || "",
       authorRank: rankInfo.displayRank,
+      authorOwnedRank: rankInfo.ownedRank,
       authorIsStaff: isStaffUser,
       authorShowStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
       authorShowStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
@@ -710,6 +713,8 @@ function hasAuthorSnapshotChanged(entry, snapshot) {
     String(entry.authorEmail || "") !== String(snapshot.authorEmail || "") ||
     String(entry.authorImage || "") !== String(snapshot.authorImage || "") ||
     String(entry.authorRank || "Unregistered") !== String(snapshot.authorRank || "Unregistered") ||
+    String(entry.authorOwnedRank || "Unregistered") !==
+      String(snapshot.authorOwnedRank || "Unregistered") ||
     Boolean(entry.authorIsStaff) !== Boolean(snapshot.authorIsStaff) ||
     Boolean(entry.authorShowStaffBadge) !== Boolean(snapshot.authorShowStaffBadge) ||
     Boolean(entry.authorShowStaffBadgeIcon) !== Boolean(snapshot.authorShowStaffBadgeIcon) ||
@@ -766,6 +771,7 @@ async function refreshCommentAuthorFields(comments = []) {
         setPayload.authorEmail = nextComment.authorEmail;
         setPayload.authorImage = nextComment.authorImage;
         setPayload.authorRank = nextComment.authorRank;
+        setPayload.authorOwnedRank = nextComment.authorOwnedRank;
         setPayload.authorShowStaffBadge = nextComment.authorShowStaffBadge;
         setPayload.authorShowStaffBadgeIcon = nextComment.authorShowStaffBadgeIcon;
         setPayload.authorShowStaffGradient = nextComment.authorShowStaffGradient;
@@ -1183,6 +1189,7 @@ function normalizeForumPost(doc) {
     createdBy: normalizeText(stripped.createdBy, 128),
     authorName,
     authorRank: normalizeText(stripped.authorRank, 20) || "Unregistered",
+    authorOwnedRank: normalizeOwnedRank(stripped.authorOwnedRank) || "Unregistered",
     authorIsStaff: Boolean(stripped.authorIsStaff),
     authorUserId: normalizeText(stripped.authorUserId, 128),
     authorUsername,
@@ -1220,6 +1227,8 @@ async function refreshForumPostAuthorFields(posts = []) {
           normalizeText(item.authorUsername, 80) !== snapshot.authorUsername ||
           String(item.authorImage || "") !== String(snapshot.authorImage || "") ||
           String(item.authorRank || "Unregistered") !== String(snapshot.authorRank || "Unregistered") ||
+          String(item.authorOwnedRank || "Unregistered") !==
+            String(snapshot.authorOwnedRank || "Unregistered") ||
           Boolean(item.authorIsStaff) !== Boolean(snapshot.authorIsStaff) ||
           Boolean(item.authorShowStaffBadge) !== Boolean(snapshot.authorShowStaffBadge) ||
           Boolean(item.authorShowStaffBadgeIcon) !== Boolean(snapshot.authorShowStaffBadgeIcon) ||
@@ -1231,6 +1240,7 @@ async function refreshForumPostAuthorFields(posts = []) {
             authorUsername: snapshot.authorUsername,
             authorImage: snapshot.authorImage,
             authorRank: snapshot.authorRank || "Unregistered",
+            authorOwnedRank: snapshot.authorOwnedRank || "Unregistered",
             authorIsStaff: snapshot.authorIsStaff,
             authorShowStaffBadge: snapshot.authorShowStaffBadge,
             authorShowStaffBadgeIcon: snapshot.authorShowStaffBadgeIcon,
@@ -1246,6 +1256,7 @@ async function refreshForumPostAuthorFields(posts = []) {
                     authorUsername: nextItem.authorUsername,
                     authorImage: nextItem.authorImage,
                     authorRank: nextItem.authorRank,
+                    authorOwnedRank: nextItem.authorOwnedRank,
                     authorIsStaff: nextItem.authorIsStaff,
                     authorShowStaffBadge: nextItem.authorShowStaffBadge,
                     authorShowStaffBadgeIcon: nextItem.authorShowStaffBadgeIcon,
@@ -1919,10 +1930,11 @@ app.post("/api/comments", async (req, res) => {
     const authorIsStaff = isAdminUser(user);
     const showRankEffects = resolveRankEffectsVisible(user?.publicMetadata || {});
     const showAvatarVfx = resolveAvatarVfxVisible(user?.publicMetadata || {});
-    const rank = resolveDisplayRankFromMetadata(
+    const rankInfo = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
       isAdminUser(user),
-    ).displayRank;
+    );
+    const rank = rankInfo.displayRank;
     const authorUsername = formatUsernameForDisplay(user?.username, 80);
     await commentsCollection.insertOne({
       newsId,
@@ -1934,6 +1946,7 @@ app.post("/api/comments", async (req, res) => {
       authorImage: user?.imageUrl || "",
       authorEmail: email,
       authorRank: rank,
+      authorOwnedRank: rankInfo.ownedRank,
       authorShowStaffBadge: showStaffBadge,
       authorShowStaffBadgeIcon: showStaffBadgeIcon,
       authorShowStaffGradient: showStaffGradient,
@@ -2060,10 +2073,11 @@ app.post("/api/comments/:id/replies", async (req, res) => {
     const showStaffGradient = resolveStaffGradientVisible(user?.publicMetadata || {});
     const showRankEffects = resolveRankEffectsVisible(user?.publicMetadata || {});
     const showAvatarVfx = resolveAvatarVfxVisible(user?.publicMetadata || {});
-    const rank = resolveDisplayRankFromMetadata(
+    const rankInfo = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
       isAdminUser(user),
-    ).displayRank;
+    );
+    const rank = rankInfo.displayRank;
     const authorUsername = formatUsernameForDisplay(user?.username, 80);
     const reply = {
       id: crypto.randomUUID(),
@@ -2077,6 +2091,7 @@ app.post("/api/comments/:id/replies", async (req, res) => {
       authorImage: user?.imageUrl || "",
       authorEmail: email,
       authorRank: rank,
+      authorOwnedRank: rankInfo.ownedRank,
       authorShowStaffBadge: showStaffBadge,
       authorShowStaffBadgeIcon: showStaffBadgeIcon,
       authorShowStaffGradient: showStaffGradient,
@@ -2125,6 +2140,7 @@ app.post("/api/comments/:id/replies", async (req, res) => {
         authorUsername,
         authorImage: user?.imageUrl || "",
         authorRank: rank,
+        authorOwnedRank: rankInfo.ownedRank,
         authorShowStaffBadge: showStaffBadge,
         authorShowStaffBadgeIcon: showStaffBadgeIcon,
         authorShowStaffGradient: showStaffGradient,
@@ -2880,10 +2896,12 @@ app.post("/api/forum/posts", async (req, res) => {
     }
 
     const user = await clerkClient.users.getUser(auth.userId);
-    const authorRank = resolveDisplayRankFromMetadata(
+    const rankInfo = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
       isAdminUser(user),
-    ).displayRank;
+    );
+    const authorRank = rankInfo.displayRank;
+    const authorIsStaff = isAdminUser(user);
     const showStaffBadge = resolveStaffBadgeVisible(user?.publicMetadata || {});
     const showStaffBadgeIcon = resolveStaffBadgeIconVisible(user?.publicMetadata || {});
     const showStaffGradient = resolveStaffGradientVisible(user?.publicMetadata || {});
@@ -2896,6 +2914,7 @@ app.post("/api/forum/posts", async (req, res) => {
       createdBy: auth.userId,
       authorName: getUserDisplayName(user),
       authorRank,
+      authorOwnedRank: rankInfo.ownedRank,
       authorIsStaff,
       authorUserId: auth.userId,
       authorUsername: formatUsernameForDisplay(user?.username, 80),

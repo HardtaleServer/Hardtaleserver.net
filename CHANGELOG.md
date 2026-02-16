@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here.
 
-## 2026-02-16 (v1.3.31)
+## 2026-02-16 (v1.3.32)
 - Expanded forum profile cards for your own profile to include all rank controls: display title, rank effects toggle, avatar effects toggle, and staff-gradient toggle (staff-only).
 - Added per-rank hover glow effects to forum rank icons (Registered/Hero/Legend/Mythic/Staff) on forum author rows.
 - Fixed a recurring desktop sticky-navbar issue where hovering Home/Forum nav buttons could cause the Settings button to visually glitch.
@@ -12,6 +12,10 @@ All notable changes to this project are documented here.
 - Added staff-only profile badge options to show/hide badge and choose `STAFF` or `ICON STAFF` (HT icon), with badge gradient following staff gradient animation settings.
 - Added `HardTale_H_HT.png` as a selectable logo icon option in mobile and desktop logo pickers.
 - Wired staff rank chips to use the `ht_staff` SVG icon asset for STAFF rank icon rendering.
+- Reworked desktop sticky navbar swap behavior to prevent duplicate nav/settings/auth mounts and reduce logo/nav flicker while scrolling and hovering.
+- Added owned-rank badge pills to profile cards under a dedicated `Badges` section, including staff users who own store ranks.
+- Reworked Store rank cards to use clickable Clerk-avatar profile previews with per-tier badge progression and unlocked title previews.
+- Note: `Unregistered` title remains a reserved default state pending `/link` UUID authentication gating.
 
 ## 2026-02-16 (v1.3.29)
 - Added forum post `PATCH`/`DELETE` APIs with owner-or-staff authorization checks.

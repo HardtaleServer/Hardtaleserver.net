@@ -140,7 +140,7 @@ const VOTE_SITES = [
 ];
 const CHANGELOG_ENTRIES = [
   {
-    version: "1.3.31",
+    version: "1.3.32",
     date: "2026-02-16",
     items: [
       "Expanded forum profile cards for your own user to include rank effects, avatar effects, and staff-gradient toggles (staff-only where applicable).",
@@ -152,6 +152,10 @@ const CHANGELOG_ENTRIES = [
       "Added staff-only profile badge options to show/hide badge and choose STAFF text-only vs ICON STAFF (HT icon), with gradient behavior tied to staff gradient animation.",
       "Added HardTale_H_HT icon as a selectable mobile/desktop logo option.",
       "Updated STAFF rank icon rendering to use the ht_staff SVG asset across rank chips.",
+      "Reworked desktop sticky navbar swap behavior to prevent duplicate nav/settings/auth mounts and reduce logo/nav flicker while scrolling and hovering.",
+      "Added owned-rank badge pills under a Badges section on profile cards, including staff users who own store ranks.",
+      "Reworked Store rank cards with clickable Clerk-avatar profile previews, tier badge progression, and unlocked title previews.",
+      "Noted Unregistered title as a reserved default pending /link UUID authentication gating implementation.",
     ],
   },
   {
@@ -473,6 +477,19 @@ const RANK_TIER_ORDER = {
   "rank-mythic": 3,
 };
 const PROFILE_DISPLAY_TITLES = ["Staff", "Registered", "Hero", "Legend", "Mythic"];
+const OWNED_RANK_ORDER = ["Hero", "Legend", "Mythic"];
+const OWNED_RANK_TIER = {
+  Unregistered: 0,
+  Registered: 0,
+  Hero: 1,
+  Legend: 2,
+  Mythic: 3,
+};
+const STORE_PREVIEW_TITLES_BY_ID = {
+  "rank-hero": ["Unregistered", "Registered", "Hero"],
+  "rank-legend": ["Registered", "Hero", "Legend"],
+  "rank-mythic": ["Registered", "Hero", "Legend", "Mythic"],
+};
 const HOME_FORUM_PREVIEW_SECTIONS = [
   "updates",
   "bug-reports",
@@ -516,6 +533,16 @@ function applyRankTierRules(cart = [], nextItem) {
   const hasHigherTier = filtered.some((entry) => (RANK_TIER_ORDER[entry.id] || 0) > nextRankTier);
   if (hasHigherTier) return filtered;
   return [...filtered.filter((entry) => entry.id !== nextItem.id), nextItem];
+}
+
+function normalizeOwnedRankLabel(value) {
+  const label = String(value || "").trim();
+  return Object.prototype.hasOwnProperty.call(OWNED_RANK_TIER, label) ? label : "Unregistered";
+}
+
+function buildOwnedRankBadges(ownedRank) {
+  const tier = OWNED_RANK_TIER[normalizeOwnedRankLabel(ownedRank)] || 0;
+  return OWNED_RANK_ORDER.filter((rank) => (OWNED_RANK_TIER[rank] || 0) <= tier);
 }
 
 function applyTheme(value) {
@@ -1597,6 +1624,7 @@ function CommentThread({
       const ownedRank = String(data.ownedRank || "Unregistered");
       const fallbackTitles = ownedRank === "Unregistered" ? ["Unregistered"] : ["Registered"];
       return {
+        ownedRank,
         availableTitles: availableTitles.length > 0 ? availableTitles : fallbackTitles,
         selectedTitle: selectedTitle || ownedRank || "Unregistered",
         canToggleStaffBadge: Boolean(data?.canToggleStaffBadge),
@@ -1939,6 +1967,7 @@ function CommentThread({
       isStaffLabel(rank.label);
     let availableTitles = [];
     let selectedTitle = rank.label;
+    let ownedRank = normalizeOwnedRankLabel(entry?.authorOwnedRank || rank.label);
     let canToggleStaffBadge = false;
     let showStaffBadge = entry?.authorShowStaffBadge !== false;
     let showStaffBadgeIcon = entry?.authorShowStaffBadgeIcon !== false;
@@ -1951,6 +1980,7 @@ function CommentThread({
     if (isOwn && isSignedIn) {
       const settings = await loadOwnProfileTitleSettings();
       if (settings) {
+        ownedRank = normalizeOwnedRankLabel(settings.ownedRank);
         availableTitles = settings.availableTitles;
         selectedTitle = settings.selectedTitle || rank.label;
         canToggleStaffBadge = Boolean(settings.canToggleStaffBadge);
@@ -1973,6 +2003,7 @@ function CommentThread({
       name: String(entry.authorName || "User"),
       image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel: selectedTitle,
+      ownedRank,
       staff: isStaffUser && showStaffBadge,
       username: formatUsernameForDisplay(entry.authorUsername),
       isOwn,
@@ -2474,6 +2505,7 @@ function CommentThread({
                 ? html`<div className="muted profile-card-title-status">${profileTitleStatus}</div>`
                 : html``}
               ${renderStaffBadge(profileUser)}
+              ${renderOwnedRankBadges(profileUser)}
             </div>`
           : html``}
       <//>
@@ -3398,6 +3430,7 @@ function LoadingScreen({ show, variant }) {
 
 function StorePage({ onAdd }) {
   const [showTicket, setShowTicket] = useState(false);
+  const [previewItemId, setPreviewItemId] = useState("");
   const [message, setMessage] = useState("");
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [cooldownLeft, setCooldownLeft] = useState(0);
@@ -3405,6 +3438,10 @@ function StorePage({ onAdd }) {
   const location = useLocation();
   const { user } = useUser();
   const email = getUserEmail(user);
+  const storePreviewName = getUserDisplayName(user);
+  const storePreviewImage = String(user?.imageUrl || "/assets/HardTale_H_GreyScale.png");
+  const storePreviewUsername = formatUsernameForDisplay(user?.username);
+  const previewItem = SAMPLE_STORE.find((item) => item.id === previewItemId) || null;
 
   useEffect(() => {
     const stored = Number(localStorage.getItem(TICKET_COOLDOWN_KEY) || 0);
@@ -3459,16 +3496,61 @@ function StorePage({ onAdd }) {
     setTicketSent(true);
   }
 
+  function getStoreRankLabel(item) {
+    return String(item?.name || "").replace(/\s*Rank$/i, "").trim() || "Registered";
+  }
+
+  function getStoreRankSlug(item) {
+    return getStoreRankLabel(item).toLowerCase().replace(/[^a-z0-9]+/g, "-");
+  }
+
+  function getStorePreviewBadges(item) {
+    if (!item?.id) return [];
+    const maxTier = RANK_TIER_ORDER[item.id] || 0;
+    return OWNED_RANK_ORDER.filter((label) => (OWNED_RANK_TIER[label] || 0) <= maxTier);
+  }
+
   return html`
     <section className="card fade-in">
       <div className="section-title">Hardtale Store</div>
       <div className="store-grid">
         ${SAMPLE_STORE.map(
-          (item) => html`<div key=${item.id} className="store-card">
-            <div className="store-icon">
-              ${renderStoreIcon(item.icon)}
+          (item) => html`<div key=${item.id} className=${`store-card rank-preview-${getStoreRankSlug(item)}`.trim()}>
+            <button
+              type="button"
+              className="store-profile-preview"
+              onClick=${() => setPreviewItemId(item.id)}
+              title="Open profile preview"
+            >
+              <img className="store-profile-avatar" src=${storePreviewImage} alt=${storePreviewName} />
+              <div className="store-profile-meta">
+                <div className="store-profile-name">${storePreviewName}</div>
+                ${storePreviewUsername
+                  ? html`<div className="store-profile-username">@${storePreviewUsername}</div>`
+                  : html``}
+                <div className=${`comment-rank store-profile-rank rank-${getStoreRankSlug(item)}`.trim()}>
+                  ${(() => {
+                    const iconType = getRankIconType(getStoreRankLabel(item));
+                    return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                      <span>${getStoreRankLabel(item)}</span>`;
+                  })()}
+                </div>
+              </div>
+            </button>
+            <div className=${`store-name rank-${getStoreRankSlug(item)}`.trim()}>${item.name}</div>
+            <div className="store-badge-preview-row">
+              ${getStorePreviewBadges(item).map((label) => {
+                const iconType = getRankIconType(label);
+                const slug = String(label).toLowerCase();
+                return html`<span className=${`profile-owned-badge store-owned-badge rank-${slug}`.trim()}>
+                  ${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                  <span>${label}</span>
+                </span>`;
+              })}
             </div>
-            <div className="store-name">${item.name}</div>
+            <div className="store-preview-note muted">
+              Titles unlocked: ${(STORE_PREVIEW_TITLES_BY_ID[item.id] || []).join(", ")}
+            </div>
             <div className="store-desc">
               <div className="store-perks">
                 ${perkBullets(item.blurb).map(
@@ -3547,6 +3629,34 @@ function StorePage({ onAdd }) {
         </p>
       </div>
     </section>
+    <${PopUp}
+      show=${Boolean(previewItem)}
+      onClose=${() => setPreviewItemId("")}
+      title=${previewItem ? `${previewItem.name} Profile Preview` : "Rank Profile Preview"}
+      className="store-profile-preview-overlay"
+    >
+      ${previewItem
+        ? html`<div className="profile-card store-profile-preview-card">
+            <img className="profile-card-avatar" src=${storePreviewImage} alt=${storePreviewName} />
+            <div className=${`profile-card-name rank-${getStoreRankSlug(previewItem)}`.trim()}>
+              ${storePreviewName}
+            </div>
+            ${storePreviewUsername
+              ? html`<div className="profile-card-username">@${storePreviewUsername}</div>`
+              : html``}
+            <div className=${`comment-rank profile-card-rank rank-${getStoreRankSlug(previewItem)}`.trim()}>
+              ${(() => {
+                const iconType = getRankIconType(getStoreRankLabel(previewItem));
+                return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                  <span>${getStoreRankLabel(previewItem)}</span>`;
+              })()}
+            </div>
+            ${renderOwnedRankBadges({
+              ownedRank: getStoreRankLabel(previewItem),
+            })}
+          </div>`
+        : html``}
+    <//>
     <${PopUp} show=${showTicket} onClose=${() => setShowTicket(false)} title="Send a Ticket">
       <${SignedOut}>
         <p className="muted">Please sign in to send a ticket.</p>
@@ -3978,6 +4088,7 @@ function ForumPage({ isAdmin = false }) {
       const ownedRank = String(data.ownedRank || "Unregistered");
       const fallbackTitles = ownedRank === "Unregistered" ? ["Unregistered"] : ["Registered"];
       return {
+        ownedRank,
         availableTitles: availableTitles.length > 0 ? availableTitles : fallbackTitles,
         selectedTitle: selectedTitle || ownedRank || "Unregistered",
         canToggleStaffBadge: Boolean(data?.canToggleStaffBadge),
@@ -4009,6 +4120,7 @@ function ForumPage({ isAdmin = false }) {
       isStaffLabel(rankLabel);
     let availableTitles = [];
     let selectedTitle = rankLabel;
+    let ownedRank = normalizeOwnedRankLabel(entry?.authorOwnedRank || rankLabel);
     let canToggleStaffBadge = false;
     let showStaffBadge = entry?.authorShowStaffBadge !== false;
     let showStaffBadgeIcon = entry?.authorShowStaffBadgeIcon !== false;
@@ -4021,6 +4133,7 @@ function ForumPage({ isAdmin = false }) {
     if (isOwn && isSignedIn) {
       const settings = await loadOwnForumProfileTitleSettings();
       if (settings) {
+        ownedRank = normalizeOwnedRankLabel(settings.ownedRank);
         availableTitles = settings.availableTitles;
         selectedTitle = settings.selectedTitle || rankLabel;
         canToggleStaffBadge = Boolean(settings.canToggleStaffBadge);
@@ -4044,6 +4157,7 @@ function ForumPage({ isAdmin = false }) {
       username: formatUsernameForDisplay(authorUsername),
       image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel: selectedTitle,
+      ownedRank,
       staff: isStaffUser && showStaffBadge,
       isStaffUser,
       isOwn,
@@ -4415,6 +4529,7 @@ function ForumPage({ isAdmin = false }) {
         ? html`<div className="muted profile-card-title-status">${forumProfileTitleStatus}</div>`
         : html``}
       ${renderStaffBadge(forumProfileUser)}
+      ${renderOwnedRankBadges(forumProfileUser)}
     </div>`;
   }
 
@@ -5628,6 +5743,26 @@ function renderStaffBadge(entry) {
   </div>`;
 }
 
+function renderOwnedRankBadges(entry) {
+  if (!entry) return html``;
+  const badges = buildOwnedRankBadges(entry.ownedRank);
+  return html`<div className="profile-card-badges-block">
+    <div className="profile-card-badges-title">Badges</div>
+    ${badges.length > 0
+      ? html`<div className="profile-card-badges-row">
+          ${badges.map((label) => {
+            const iconType = getRankIconType(label);
+            const slug = String(label).trim().toLowerCase();
+            return html`<span className=${`profile-owned-badge rank-${slug}`.trim()}>
+              ${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+              <span>${label}</span>
+            </span>`;
+          })}
+        </div>`
+      : html`<div className="muted profile-card-badges-empty">No store rank badges yet.</div>`}
+  </div>`;
+}
+
 function NotificationsPanel({ notifications, onView, onOpenProfile }) {
   if (!notifications.length) {
     return html`<p className="muted">No notifications yet.</p>`;
@@ -6375,6 +6510,8 @@ function Layout() {
   const shellRef = useRef(null);
   const topbarRef = useRef(null);
   const playRef = useRef(null);
+  const hideLogoRef = useRef(false);
+  const scrollRafRef = useRef(0);
   const initialLoaderStartRef = useRef(Date.now());
   const previousSignedInRef = useRef(null);
   const cartCount = useMemo(() => cart.length, [cart]);
@@ -6468,12 +6605,35 @@ function Layout() {
 
 
   useEffect(() => {
-    function onScroll() {
-      setHideLogo(window.scrollY > 80);
+    const STICKY_ENTER_Y = 96;
+    const STICKY_EXIT_Y = 56;
+
+    function applyStickyState() {
+      scrollRafRef.current = 0;
+      const y = window.scrollY || 0;
+      const nextHidden = hideLogoRef.current
+        ? y > STICKY_EXIT_Y
+        : y > STICKY_ENTER_Y;
+      if (nextHidden !== hideLogoRef.current) {
+        hideLogoRef.current = nextHidden;
+        setHideLogo(nextHidden);
+      }
     }
-    onScroll();
+
+    function onScroll() {
+      if (scrollRafRef.current) return;
+      scrollRafRef.current = window.requestAnimationFrame(applyStickyState);
+    }
+
+    applyStickyState();
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (scrollRafRef.current) {
+        window.cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = 0;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -6987,8 +7147,12 @@ function Layout() {
               onError=${handleLogoError}
             />
           <//>
-          <${DesktopNavShell} />
-          <${DesktopAuthButtonsBlock} />
+          ${desktopStickyVisible
+            ? html``
+            : html`
+                <${DesktopNavShell} />
+                <${DesktopAuthButtonsBlock} />
+              `}
         </header>
 
         <${AppRoutes}

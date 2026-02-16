@@ -2702,6 +2702,51 @@ emoji-picker.reaction-picker-panel {
   display: block;
 }
 
+.profile-card-badges-block {
+  width: 100%;
+  display: grid;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.profile-card-badges-title {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.profile-card-badges-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+}
+
+.profile-owned-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--stroke);
+  background: var(--bg-soft);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.profile-owned-badge .rank-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.profile-card-badges-empty {
+  font-size: 12px;
+}
+
 .profile-card-title-picker {
   display: grid;
   gap: 6px;
@@ -3167,8 +3212,86 @@ emoji-picker.reaction-picker-panel {
   display: block;
 }
 
+.store-profile-preview {
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.08));
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+  text-align: left;
+  padding: 10px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.store-profile-preview:hover {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--stroke));
+  transform: translateY(-1px);
+}
+
+.store-profile-avatar {
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid var(--stroke);
+}
+
+.store-profile-meta {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.store-profile-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.store-profile-username {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.store-profile-rank {
+  justify-content: flex-start;
+  font-size: 12px;
+}
+
 .store-name {
   font-weight: 700;
+}
+
+.store-name.rank-hero {
+  color: #ffaa00;
+}
+
+.store-name.rank-legend {
+  color: #aa00aa;
+}
+
+.store-name.rank-mythic {
+  color: #ff621d;
+}
+
+.store-badge-preview-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.store-owned-badge {
+  font-size: 10px;
+}
+
+.store-preview-note {
+  font-size: 12px;
+}
+
+.store-profile-preview-card {
+  min-width: min(360px, 100%);
 }
 
 .store-desc {
