@@ -58,10 +58,9 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.30";
+const VERSION = "1.3.31";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
-const STAFF_RANK_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
 const STORE_RANK_ICON_SVG = {
   star: "/Images/SVGs/RANK_HERO.svg",
   crown: "/Images/SVGs/RANK_LEGEND.svg",
@@ -141,7 +140,7 @@ const VOTE_SITES = [
 ];
 const CHANGELOG_ENTRIES = [
   {
-    version: "1.3.30",
+    version: "1.3.31",
     date: "2026-02-16",
     items: [
       "Expanded forum profile cards for your own user to include rank effects, avatar effects, and staff-gradient toggles (staff-only where applicable).",
@@ -816,6 +815,7 @@ function triggerFlash(buttonEl) {
 function isStaffLabel(label = "") {
   const text = String(label || "").trim().toLowerCase();
   if (!text) return false;
+  if (text === "staff") return true;
   if (STAFF_EMAILS.has(text)) return true;
   const key = text.replace(/[\s_-]+/g, "");
   return STAFF_USERNAME_KEYS.has(key);
@@ -1311,8 +1311,9 @@ function CommentThread({
       isStaffLabel(username) ||
       isStaffLabel(authorName) ||
       isStaffLabel(authorRank);
+    const showStaffBadge = comment?.authorShowStaffBadge !== false;
     const animateStaffGradient = comment?.authorShowStaffGradient !== false;
-    if (staffIdentity) {
+    if (staffIdentity && showStaffBadge) {
       return { label: "STAFF", staff: true, animateStaffGradient };
     }
     const rank = authorRank || "Unregistered";
@@ -1744,7 +1745,15 @@ function CommentThread({
       }
       const data = await response.json();
       const showStaffBadge = data?.showStaffBadge !== false;
-      setProfileUser((prev) => (prev ? { ...prev, showStaffBadge } : prev));
+      setProfileUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              showStaffBadge,
+              staff: prev.isStaffUser && showStaffBadge,
+            }
+          : prev,
+      );
       setComments((prev) =>
         prev.map((comment) => {
           if (!comment) return comment;
@@ -1964,7 +1973,7 @@ function CommentThread({
       name: String(entry.authorName || "User"),
       image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel: selectedTitle,
-      staff: isStaffUser,
+      staff: isStaffUser && showStaffBadge,
       username: formatUsernameForDisplay(entry.authorUsername),
       isOwn,
       isStaffUser,
@@ -3892,6 +3901,9 @@ function ForumPage({ isAdmin = false }) {
   const [editingPostBody, setEditingPostBody] = useState("");
   const [editingPostStatus, setEditingPostStatus] = useState("");
   const [deletingPostId, setDeletingPostId] = useState("");
+  const [forumHistoryOpen, setForumHistoryOpen] = useState(false);
+  const [forumHistoryItems, setForumHistoryItems] = useState([]);
+  const [forumHistoryTitle, setForumHistoryTitle] = useState("Post Edit History");
 
   function getForumPreviewText(body, limit = 220) {
     const text = String(body || "").trim();
@@ -3909,10 +3921,13 @@ function ForumPage({ isAdmin = false }) {
 
   function forumRankClassName(entry) {
     const slug = rankSlug(entry?.authorRank || "Unregistered");
+    const showStaffBadge = entry?.authorShowStaffBadge !== false;
     const isStaffRank =
-      isStaffLabel(entry?.authorRank || "") ||
-      isStaffLabel(entry?.authorName || "") ||
-      isStaffLabel(entry?.authorUsername || "");
+      showStaffBadge &&
+      (Boolean(entry?.authorIsStaff) ||
+        isStaffLabel(entry?.authorRank || "") ||
+        isStaffLabel(entry?.authorName || "") ||
+        isStaffLabel(entry?.authorUsername || ""));
     const staffClass = isStaffRank
       ? entry?.authorShowStaffGradient === false
         ? "staff staff-static"
@@ -3933,6 +3948,23 @@ function ForumPage({ isAdmin = false }) {
 
   function isForumPostForcedEdit(post) {
     return Boolean(post?.staffForcedEdit);
+  }
+
+  async function openForumPostHistory(post) {
+    const postId = String(post?.id || "");
+    if (!postId) return;
+    try {
+      const response = await fetch(`/api/forum/posts/${encodeURIComponent(postId)}/history`);
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      setForumHistoryItems(Array.isArray(data?.history) ? data.history : []);
+      setForumHistoryTitle(`Past Edits - ${String(post?.title || "Forum Post")}`);
+      setForumHistoryOpen(true);
+    } catch {
+      setForumHistoryItems([]);
+      setForumHistoryTitle(`Past Edits - ${String(post?.title || "Forum Post")}`);
+      setForumHistoryOpen(true);
+    }
   }
 
   async function loadOwnForumProfileTitleSettings() {
@@ -3971,6 +4003,7 @@ function ForumPage({ isAdmin = false }) {
     const authorUserId = String(entry.authorUserId || entry.createdBy || "");
     const isOwn = Boolean(userId && authorUserId && String(userId) === authorUserId);
     let isStaffUser =
+      Boolean(entry?.authorIsStaff) ||
       isStaffLabel(authorName) ||
       isStaffLabel(authorUsername) ||
       isStaffLabel(rankLabel);
@@ -4011,7 +4044,7 @@ function ForumPage({ isAdmin = false }) {
       username: formatUsernameForDisplay(authorUsername),
       image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel: selectedTitle,
-      staff: isStaffUser,
+      staff: isStaffUser && showStaffBadge,
       isStaffUser,
       isOwn,
       availableTitles,
@@ -4147,7 +4180,15 @@ function ForumPage({ isAdmin = false }) {
       }
       const data = await response.json();
       const showStaffBadge = data?.showStaffBadge !== false;
-      setForumProfileUser((prev) => (prev ? { ...prev, showStaffBadge } : prev));
+      setForumProfileUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              showStaffBadge,
+              staff: prev.isStaffUser && showStaffBadge,
+            }
+          : prev,
+      );
       setPosts((prev) =>
         prev.map((post) => {
           const postAuthorUserId = String(post?.authorUserId || post?.createdBy || "");
@@ -4616,6 +4657,21 @@ function ForumPage({ isAdmin = false }) {
                     </span>
                     <span className="forum-post-op">OP</span>
                     <${TimestampText} value=${selectedPost.createdAt} formatTimestamp=${formatTimestamp} />
+                    ${(selectedPost.editCount || 0) > 0
+                      ? html`<span className="muted forum-post-edited-inline">
+                          Edited${selectedPost.editedByName ? ` by ${selectedPost.editedByName}` : ""}
+                        </span>
+                        <button
+                          className="ghost-btn forum-post-history-btn"
+                          type="button"
+                          onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                          onClick=${() => openForumPostHistory(selectedPost)}
+                          title="View past edits"
+                        >
+                          <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
+                          Past edits
+                        </button>`
+                      : html``}
                   </div>
                   <div className="forum-post-header-divider"></div>
                   <div className="news-header">
@@ -4657,12 +4713,7 @@ function ForumPage({ isAdmin = false }) {
                           ? html`<strong>(STAFF FORCED EDIT): </strong>`
                           : html``}${selectedPost.body}
                       </p>`}
-                  <div className="forum-post-status-row">
-                    ${(selectedPost.editCount || 0) > 0
-                      ? html`<span className=${`muted forum-post-edited-note ${isForumPostForcedEdit(selectedPost) ? "forced" : ""}`.trim()}>
-                          Edited${selectedPost.editedByName ? ` by ${selectedPost.editedByName}` : ""}
-                        </span>`
-                      : html``}
+                    <div className="forum-post-status-row">
                     ${isForumPostForcedEdit(selectedPost)
                       ? html`<span className="forum-post-forced-pill">STAFF FORCED EDIT</span>`
                       : html``}
@@ -4700,6 +4751,42 @@ function ForumPage({ isAdmin = false }) {
             title="Profile Card"
           >
             ${renderForumProfileCard()}
+          <//>
+          <${PopUp}
+            show=${forumHistoryOpen}
+            onClose=${() => setForumHistoryOpen(false)}
+            title=${forumHistoryTitle}
+            className="comment-history-overlay"
+          >
+            ${forumHistoryItems.length === 0
+              ? html`<p className="muted">No revisions yet.</p>`
+              : html`<div className="comment-history">
+                  ${forumHistoryItems.map(
+                    (entry, index) => html`<div key=${entry.id || `${entry.createdAt || ""}-${index}`} className="comment-history-item">
+                      <div className="comment-history-meta">
+                        <img
+                          className="comment-avatar small"
+                          src=${entry.editorImage || "/assets/HardTale_H_GreyScale.png"}
+                          alt=${entry.editorName || "Editor"}
+                        />
+                        <div>
+                          <div className="comment-author">${entry.editorName || "Editor"}</div>
+                          <div className="muted">${formatTimestamp(entry.createdAt)}</div>
+                        </div>
+                      </div>
+                      <div className="comment-history-body">
+                        <div className="muted">Before title</div>
+                        <p>${entry.oldTitle || ""}</p>
+                        <div className="muted">After title</div>
+                        <p>${entry.newTitle || ""}</p>
+                        <div className="muted">Before body</div>
+                        <p>${entry.oldBody || ""}</p>
+                        <div className="muted">After body</div>
+                        <p>${entry.newBody || ""}</p>
+                      </div>
+                    </div>`,
+                  )}
+                </div>`}
           <//>
         </section>
       `;
@@ -4784,6 +4871,21 @@ function ForumPage({ isAdmin = false }) {
                       </span>
                       <span className="forum-post-op">OP</span>
                       <${TimestampText} value=${post.createdAt} formatTimestamp=${formatTimestamp} />
+                      ${(post.editCount || 0) > 0
+                        ? html`<span className="muted forum-post-edited-inline">
+                            Edited${post.editedByName ? ` by ${post.editedByName}` : ""}
+                          </span>
+                          <button
+                            className="ghost-btn forum-post-history-btn"
+                            type="button"
+                            onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                            onClick=${() => openForumPostHistory(post)}
+                            title="View past edits"
+                          >
+                            <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
+                            Past edits
+                          </button>`
+                        : html``}
                     </div>
                     <${Link}
                       className="forum-post-link"
@@ -4801,11 +4903,6 @@ function ForumPage({ isAdmin = false }) {
                       </p>
                     </${Link}>
                     <div className="forum-post-status-row">
-                      ${(post.editCount || 0) > 0
-                        ? html`<span className=${`muted forum-post-edited-note ${isForumPostForcedEdit(post) ? "forced" : ""}`.trim()}>
-                            Edited${post.editedByName ? ` by ${post.editedByName}` : ""}
-                          </span>`
-                        : html``}
                       ${isForumPostForcedEdit(post)
                         ? html`<span className="forum-post-forced-pill">STAFF FORCED EDIT</span>`
                         : html``}
@@ -4871,6 +4968,42 @@ function ForumPage({ isAdmin = false }) {
           title="Profile Card"
         >
           ${renderForumProfileCard()}
+        <//>
+        <${PopUp}
+          show=${forumHistoryOpen}
+          onClose=${() => setForumHistoryOpen(false)}
+          title=${forumHistoryTitle}
+          className="comment-history-overlay"
+        >
+          ${forumHistoryItems.length === 0
+            ? html`<p className="muted">No revisions yet.</p>`
+            : html`<div className="comment-history">
+                ${forumHistoryItems.map(
+                  (entry, index) => html`<div key=${entry.id || `${entry.createdAt || ""}-${index}`} className="comment-history-item">
+                    <div className="comment-history-meta">
+                      <img
+                        className="comment-avatar small"
+                        src=${entry.editorImage || "/assets/HardTale_H_GreyScale.png"}
+                        alt=${entry.editorName || "Editor"}
+                      />
+                      <div>
+                        <div className="comment-author">${entry.editorName || "Editor"}</div>
+                        <div className="muted">${formatTimestamp(entry.createdAt)}</div>
+                      </div>
+                    </div>
+                    <div className="comment-history-body">
+                      <div className="muted">Before title</div>
+                      <p>${entry.oldTitle || ""}</p>
+                      <div className="muted">After title</div>
+                      <p>${entry.newTitle || ""}</p>
+                      <div className="muted">Before body</div>
+                      <p>${entry.oldBody || ""}</p>
+                      <div className="muted">After body</div>
+                      <p>${entry.newBody || ""}</p>
+                    </div>
+                  </div>`,
+                )}
+              </div>`}
         <//>
 
         <${PopUp}
@@ -5454,7 +5587,6 @@ function renderStoreIcon(type) {
 
 function getRankIconType(label) {
   const normalized = String(label || "").trim().toLowerCase();
-  if (normalized === "staff") return "staff";
   if (normalized === "hero") return "star";
   if (normalized === "legend") return "crown";
   if (normalized === "mythic") return "shield";
@@ -5463,8 +5595,6 @@ function getRankIconType(label) {
 
 function renderRankIcon(type) {
   switch (type) {
-    case "staff":
-      return html`<img className="rank-icon-image" src=${STAFF_RANK_ICON_SVG} alt="" aria-hidden="true" />`;
     case "crown":
       return html`<svg viewBox="0 0 24 24" aria-hidden="true">
         <path fill="currentColor" d="M3 7l4 3 5-6 5 6 4-3-2 12H5L3 7zm4 12h10l.3-2H6.7l.3 2z" />
@@ -6671,7 +6801,7 @@ function Layout() {
     : LOGO_SRC;
   const desktopStickyLogoClass = desktopStickyWide
     ? desktopStickyLogoStyle.startsWith("icon")
-      ? "icon"
+      ? `icon ${desktopStickyLogoStyle === "icon-ht" ? "ht" : ""}`.trim()
       : "logo"
     : "island";
 
@@ -6797,7 +6927,11 @@ function Layout() {
           ${mobileNavStyle === "solid"
             ? html`<div className=${`mobile-nav-logo-wrap ${menuSide === "left" ? "logo-right" : ""}`}>
                 <img
-                  className=${`mobile-nav-logo ${mobileLogoStyle.startsWith("icon") ? "icon" : "logo"}`}
+                  className=${`mobile-nav-logo ${
+                    mobileLogoStyle.startsWith("icon")
+                      ? `icon ${mobileLogoStyle === "icon-ht" ? "ht" : ""}`.trim()
+                      : "logo"
+                  }`}
                   src=${MOBILE_LOGO_MAP[mobileLogoStyle] || MOBILE_LOGO_MAP["logo-greyscale"]}
                   alt="Hardtale"
                 />

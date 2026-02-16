@@ -109,6 +109,7 @@ let mongoClient = null;
 let mongoDb = null;
 let commentsCollection = null;
 let commentRevisionsCollection = null;
+let forumPostRevisionsCollection = null;
 let reactionsCollection = null;
 let newsCollection = null;
 let notificationsCollection = null;
@@ -128,6 +129,7 @@ function resetMongoState() {
   mongoDb = null;
   commentsCollection = null;
   commentRevisionsCollection = null;
+  forumPostRevisionsCollection = null;
   reactionsCollection = null;
   newsCollection = null;
   notificationsCollection = null;
@@ -162,6 +164,7 @@ async function connectMongo() {
   if (
     commentsCollection &&
     commentRevisionsCollection &&
+    forumPostRevisionsCollection &&
     reactionsCollection &&
     newsCollection &&
     notificationsCollection &&
@@ -194,6 +197,7 @@ async function connectMongo() {
       mongoDb = mongoClient.db(MONGO_DB_NAME);
       commentsCollection = mongoDb.collection("comments");
       commentRevisionsCollection = mongoDb.collection("comment_revisions");
+      forumPostRevisionsCollection = mongoDb.collection("forum_post_revisions");
       reactionsCollection = mongoDb.collection("reactions");
       newsCollection = mongoDb.collection("news");
       notificationsCollection = mongoDb.collection("notifications");
@@ -206,6 +210,7 @@ async function connectMongo() {
       await commentsCollection.createIndex({ newsId: 1, createdAt: 1 });
       await commentsCollection.createIndex({ userId: 1 });
       await commentRevisionsCollection.createIndex({ commentId: 1, createdAt: 1 });
+      await forumPostRevisionsCollection.createIndex({ postId: 1, createdAt: 1 });
       await reactionsCollection.createIndex({ itemType: 1, itemId: 1, emoji: 1, userId: 1 }, { unique: true });
       await reactionsCollection.createIndex({ itemType: 1, itemId: 1 });
       await reactionsCollection.createIndex({ itemType: 1, itemId: 1, userId: 1 });
@@ -257,6 +262,7 @@ function normalizeComment(doc) {
     ...rest,
     id: _id ? String(_id) : doc.id,
     authorUsername: formatUsernameForDisplay(rest.authorUsername, 80),
+    authorIsStaff: Boolean(rest.authorIsStaff),
     authorShowStaffBadge: rest.authorShowStaffBadge !== false,
     authorShowStaffBadgeIcon: rest.authorShowStaffBadgeIcon !== false,
     authorShowStaffGradient: rest.authorShowStaffGradient !== false,
@@ -277,6 +283,7 @@ function normalizeComment(doc) {
       const nextReply = {
         ...reply,
         authorUsername: replyUsername,
+        authorIsStaff: Boolean(reply.authorIsStaff),
         authorShowStaffBadge: reply.authorShowStaffBadge !== false,
         authorShowStaffBadgeIcon: reply.authorShowStaffBadgeIcon !== false,
         authorShowStaffGradient: reply.authorShowStaffGradient !== false,
@@ -341,6 +348,8 @@ async function requireMongoReady(res) {
     !cartsCollection ||
     !purchasesCollection ||
     !supportTicketsCollection ||
+    !forumPostsCollection ||
+    !forumPostRevisionsCollection ||
     !linkedAccountsCollection
   ) {
     try {
@@ -360,6 +369,8 @@ async function requireMongoReady(res) {
     !cartsCollection ||
     !purchasesCollection ||
     !supportTicketsCollection ||
+    !forumPostsCollection ||
+    !forumPostRevisionsCollection ||
     !linkedAccountsCollection
   ) {
     res.status(503).json({
@@ -669,12 +680,14 @@ async function getFreshAuthorSnapshot(userId, cache = new Map()) {
       user?.publicMetadata || {},
       isAdminUser(user),
     );
+    const isStaffUser = isAdminUser(user);
     const snapshot = {
       authorName: getUserDisplayName(user),
       authorUsername: formatUsernameForDisplay(user?.username, 80),
       authorEmail: getUserEmail(user),
       authorImage: user?.imageUrl || "",
       authorRank: rankInfo.displayRank,
+      authorIsStaff: isStaffUser,
       authorShowStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
       authorShowStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
       authorShowStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
@@ -697,6 +710,7 @@ function hasAuthorSnapshotChanged(entry, snapshot) {
     String(entry.authorEmail || "") !== String(snapshot.authorEmail || "") ||
     String(entry.authorImage || "") !== String(snapshot.authorImage || "") ||
     String(entry.authorRank || "Unregistered") !== String(snapshot.authorRank || "Unregistered") ||
+    Boolean(entry.authorIsStaff) !== Boolean(snapshot.authorIsStaff) ||
     Boolean(entry.authorShowStaffBadge) !== Boolean(snapshot.authorShowStaffBadge) ||
     Boolean(entry.authorShowStaffBadgeIcon) !== Boolean(snapshot.authorShowStaffBadgeIcon) ||
     Boolean(entry.authorShowStaffGradient) !== Boolean(snapshot.authorShowStaffGradient) ||
@@ -1169,6 +1183,7 @@ function normalizeForumPost(doc) {
     createdBy: normalizeText(stripped.createdBy, 128),
     authorName,
     authorRank: normalizeText(stripped.authorRank, 20) || "Unregistered",
+    authorIsStaff: Boolean(stripped.authorIsStaff),
     authorUserId: normalizeText(stripped.authorUserId, 128),
     authorUsername,
     authorImage: String(stripped.authorImage || ""),
@@ -1205,6 +1220,7 @@ async function refreshForumPostAuthorFields(posts = []) {
           normalizeText(item.authorUsername, 80) !== snapshot.authorUsername ||
           String(item.authorImage || "") !== String(snapshot.authorImage || "") ||
           String(item.authorRank || "Unregistered") !== String(snapshot.authorRank || "Unregistered") ||
+          Boolean(item.authorIsStaff) !== Boolean(snapshot.authorIsStaff) ||
           Boolean(item.authorShowStaffBadge) !== Boolean(snapshot.authorShowStaffBadge) ||
           Boolean(item.authorShowStaffBadgeIcon) !== Boolean(snapshot.authorShowStaffBadgeIcon) ||
           Boolean(item.authorShowStaffGradient) !== Boolean(snapshot.authorShowStaffGradient);
@@ -1215,6 +1231,7 @@ async function refreshForumPostAuthorFields(posts = []) {
             authorUsername: snapshot.authorUsername,
             authorImage: snapshot.authorImage,
             authorRank: snapshot.authorRank || "Unregistered",
+            authorIsStaff: snapshot.authorIsStaff,
             authorShowStaffBadge: snapshot.authorShowStaffBadge,
             authorShowStaffBadgeIcon: snapshot.authorShowStaffBadgeIcon,
             authorShowStaffGradient: snapshot.authorShowStaffGradient,
@@ -1229,6 +1246,7 @@ async function refreshForumPostAuthorFields(posts = []) {
                     authorUsername: nextItem.authorUsername,
                     authorImage: nextItem.authorImage,
                     authorRank: nextItem.authorRank,
+                    authorIsStaff: nextItem.authorIsStaff,
                     authorShowStaffBadge: nextItem.authorShowStaffBadge,
                     authorShowStaffBadgeIcon: nextItem.authorShowStaffBadgeIcon,
                     authorShowStaffGradient: nextItem.authorShowStaffGradient,
@@ -1898,6 +1916,7 @@ app.post("/api/comments", async (req, res) => {
     const showStaffBadge = resolveStaffBadgeVisible(user?.publicMetadata || {});
     const showStaffBadgeIcon = resolveStaffBadgeIconVisible(user?.publicMetadata || {});
     const showStaffGradient = resolveStaffGradientVisible(user?.publicMetadata || {});
+    const authorIsStaff = isAdminUser(user);
     const showRankEffects = resolveRankEffectsVisible(user?.publicMetadata || {});
     const showAvatarVfx = resolveAvatarVfxVisible(user?.publicMetadata || {});
     const rank = resolveDisplayRankFromMetadata(
@@ -2091,14 +2110,15 @@ app.post("/api/comments/:id/replies", async (req, res) => {
         }
       }
 
-      const authorLabel = getUserDisplayName(user);
+      const authorLabel =
+        formatUsernameForDisplay(user?.username, 80) || getUserDisplayName(user);
       const snippet = normalizeText(body, 140);
       const targetCommentId = String(comment._id);
       const replyLink = `/news?newsId=${encodeURIComponent(String(comment.newsId || ""))}&commentId=${encodeURIComponent(targetCommentId)}&replyId=${encodeURIComponent(String(reply.id || ""))}`;
       await notificationsCollection.insertOne({
         id: crypto.randomUUID(),
         title: newsTitle ? `New reply on ${newsTitle}` : "Someone replied to you",
-        message: `${authorLabel} replied to you: ${snippet}`,
+        message: `${authorLabel} replied: ${snippet}`,
         author: authorLabel,
         authorName: authorLabel,
         authorUserId: auth.userId,
@@ -2827,6 +2847,24 @@ app.get("/api/forum/posts/:id", async (req, res) => {
   }
 });
 
+app.get("/api/forum/posts/:id/history", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const postId = normalizeText(req.params.id, 128);
+    if (!postId) {
+      return res.status(400).json({ error: "Invalid forum post id" });
+    }
+    const history = await forumPostRevisionsCollection
+      .find({ postId })
+      .sort({ createdAt: 1 })
+      .toArray();
+    return res.json({ postId, history: stripMongoIdList(history) });
+  } catch (error) {
+    console.error("Failed to load forum post history", error);
+    return res.status(500).json({ error: "Failed to load forum post history" });
+  }
+});
+
 app.post("/api/forum/posts", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
@@ -2858,6 +2896,7 @@ app.post("/api/forum/posts", async (req, res) => {
       createdBy: auth.userId,
       authorName: getUserDisplayName(user),
       authorRank,
+      authorIsStaff,
       authorUserId: auth.userId,
       authorUsername: formatUsernameForDisplay(user?.username, 80),
       authorImage: user?.imageUrl || "",
@@ -2912,6 +2951,24 @@ app.patch("/api/forum/posts/:id", async (req, res) => {
     const now = new Date().toISOString();
     const forcedEdit = isStaff && !isOwner;
     const editorName = getUserDisplayName(user);
+    const previousTitle = String(doc.title || "");
+    const previousBody = String(doc.body || "");
+    const nextTitleValue = String(nextTitle || "");
+    const nextBodyValue = String(nextBody || "");
+    if (previousTitle !== nextTitleValue || previousBody !== nextBodyValue) {
+      await forumPostRevisionsCollection.insertOne({
+        postId,
+        editedBy: auth.userId,
+        editorName,
+        editorImage: user?.imageUrl || "",
+        oldTitle: previousTitle,
+        oldBody: previousBody,
+        newTitle: nextTitleValue,
+        newBody: nextBodyValue,
+        forcedEdit,
+        createdAt: now,
+      });
+    }
     await forumPostsCollection.updateOne(
       { id: postId, isDeleted: false },
       {

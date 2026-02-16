@@ -340,6 +340,11 @@ body[data-theme="dark"] {
   height: 45px;
 }
 
+.desktop-sticky-logo.icon.ht {
+  width: 60px;
+  height: 45px;
+}
+
 .desktop-sticky-logo.logo {
   width: 140px;
   height: 50px;
@@ -902,6 +907,18 @@ body[data-theme="light"] .settings-icon {
 .forum-post-author-row .notification-timestamp {
   margin-left: auto;
   text-align: right;
+}
+
+.forum-post-edited-inline {
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+.forum-post-history-btn {
+  padding: 4px 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .forum-post-header-divider {
@@ -4492,6 +4509,11 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   .mobile-nav-logo.icon {
     height: 45px;
     width: 45px;
+  }
+
+  .mobile-nav-logo.icon.ht {
+    height: 45px;
+    width: 60px;
   }
 
   .mobile-nav-logo.logo {

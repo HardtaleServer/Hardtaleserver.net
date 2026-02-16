@@ -5,7 +5,6 @@ const html = htm.bind(React.createElement);
 
 function getRankIconType(label) {
   const normalized = String(label || "").trim().toLowerCase();
-  if (normalized === "staff") return "staff";
   if (normalized === "hero") return "star";
   if (normalized === "legend") return "crown";
   if (normalized === "mythic") return "shield";
@@ -14,8 +13,6 @@ function getRankIconType(label) {
 
 function renderRankIcon(type) {
   switch (type) {
-    case "staff":
-      return html`<img className="rank-icon-image" src="/Images/SVGs/ht_staff_badge.svg" alt="" aria-hidden="true" />`;
     case "crown":
       return html`<svg viewBox="0 0 24 24" aria-hidden="true">
         <path fill="currentColor" d="M3 7l4 3 5-6 5 6 4-3-2 12H5L3 7zm4 12h10l.3-2H6.7l.3 2z" />

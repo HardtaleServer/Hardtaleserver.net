@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here.
 
-## 2026-02-16 (v1.3.30)
+## 2026-02-16 (v1.3.31)
 - Expanded forum profile cards for your own profile to include all rank controls: display title, rank effects toggle, avatar effects toggle, and staff-gradient toggle (staff-only).
 - Added per-rank hover glow effects to forum rank icons (Registered/Hero/Legend/Mythic/Staff) on forum author rows.
 - Fixed a recurring desktop sticky-navbar issue where hovering Home/Forum nav buttons could cause the Settings button to visually glitch.
