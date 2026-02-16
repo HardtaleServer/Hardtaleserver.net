@@ -58,7 +58,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.26";
+const VERSION = "1.3.27";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_EMAILS = new Set([
   "chashsmurfis@gmail.com",
@@ -131,6 +131,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.27",
+    date: "2026-02-16",
+    items: [
+      "Reply notifications now show the actual replying user and carry their profile metadata.",
+      "Added notification-panel profile peek action so recipients can open the replier's profile card directly from the bell popup.",
+      "Kept reply notification deep-link behavior intact for quick jump to the exact thread location.",
+    ],
+  },
   {
     version: "1.3.26",
     date: "2026-02-16",
@@ -1882,22 +1891,6 @@ function CommentThread({
                             showOpBadge=${isOriginalPoster(comment)}
                           />
                         </div>
-                        ${isForumThread
-                          ? html`<button
-                              className="comment-profile-peek"
-                              type="button"
-                              onClick=${() => openProfileCard(comment)}
-                              title="Open profile card"
-                              aria-label="Open profile card"
-                            >
-                              <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path
-                                  fill="currentColor"
-                                  d="M12 3a5 5 0 100 10 5 5 0 000-10zm0 12c-4.2 0-7.5 2.2-8.6 5.4-.2.6.3 1.1.9 1.1h15.4c.6 0 1.1-.6.9-1.1C19.5 17.2 16.2 15 12 15z"
-                                />
-                              </svg>
-                            </button>`
-                          : html``}
                       </div>
                       <${CommentMeta}
                         entry=${comment}
@@ -2039,22 +2032,6 @@ function CommentThread({
                                             showOpBadge=${isOriginalPoster(reply)}
                                           />
                                         </div>
-                                        ${isForumThread
-                                          ? html`<button
-                                              className="comment-profile-peek"
-                                              type="button"
-                                              onClick=${() => openProfileCard(reply)}
-                                              title="Open profile card"
-                                              aria-label="Open profile card"
-                                            >
-                                              <svg viewBox="0 0 24 24" aria-hidden="true">
-                                                <path
-                                                  fill="currentColor"
-                                                  d="M12 3a5 5 0 100 10 5 5 0 000-10zm0 12c-4.2 0-7.5 2.2-8.6 5.4-.2.6.3 1.1.9 1.1h15.4c.6 0 1.1-.6.9-1.1C19.5 17.2 16.2 15 12 15z"
-                                                />
-                                              </svg>
-                                            </button>`
-                                          : html``}
                                       </div>
                                       <${CommentMeta}
                                         entry=${reply}
@@ -3705,12 +3682,37 @@ function ForumPage() {
   const [newPostBody, setNewPostBody] = useState("");
   const [selectedPost, setSelectedPost] = useState(null);
   const [selectedPostLoading, setSelectedPostLoading] = useState(false);
+  const [forumProfileOpen, setForumProfileOpen] = useState(false);
+  const [forumProfileUser, setForumProfileUser] = useState(null);
 
   function getForumPreviewText(body, limit = 220) {
     const text = String(body || "").trim();
     if (!text) return "";
     if (text.length <= limit) return text;
     return `${text.slice(0, limit).trimEnd()}...`;
+  }
+
+  function rankSlug(value) {
+    return String(value || "Unregistered")
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-");
+  }
+
+  function openForumProfileCard(entry) {
+    if (!entry) return;
+    const rankLabel = String(entry.authorRank || "Unregistered");
+    const authorName = String(entry.authorName || "User");
+    const authorUsername = String(entry.authorUsername || "");
+    const staff = isStaffLabel(authorName) || isStaffLabel(authorUsername);
+    setForumProfileUser({
+      name: authorName,
+      username: formatUsernameForDisplay(authorUsername),
+      image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
+      rankLabel,
+      staff,
+    });
+    setForumProfileOpen(true);
   }
 
   async function loadSectionPosts(sectionId) {
@@ -3833,13 +3835,27 @@ function ForumPage() {
               ? html`<p className="muted">Post not found in this section.</p>`
               : html`<article className="news-card forum-post-card">
                   <div className="forum-post-author-row">
-                    <img
-                      className="forum-post-author-avatar"
-                      src=${selectedPost.authorImage || "/assets/HardTale_H_GreyScale.png"}
-                      alt=${selectedPost.authorName || "User"}
-                    />
+                    <button
+                      className="forum-post-author-trigger"
+                      type="button"
+                      onClick=${() => openForumProfileCard(selectedPost)}
+                      title="Open profile card"
+                      aria-label="Open profile card"
+                    >
+                      <img
+                        className="forum-post-author-avatar"
+                        src=${selectedPost.authorImage || "/assets/HardTale_H_GreyScale.png"}
+                        alt=${selectedPost.authorName || "User"}
+                      />
+                    </button>
                     <span className="muted">By</span>
-                    <${AuthorName} value=${selectedPost.authorName || "User"} isStaffLabel=${isStaffLabel} />
+                    <button
+                      className="forum-post-author-name-btn"
+                      type="button"
+                      onClick=${() => openForumProfileCard(selectedPost)}
+                    >
+                      <${AuthorName} value=${selectedPost.authorName || "User"} isStaffLabel=${isStaffLabel} />
+                    </button>
                     <span
                       className=${`comment-rank forum-author-rank rank-${String(
                         selectedPost.authorRank || "Unregistered",
@@ -3864,13 +3880,44 @@ function ForumPage() {
                     </div>
                   </div>
                   <p className="news-body-paragraph">${selectedPost.body}</p>
-                  <${CommentThread}
-                    newsId=${`forum:${selectedPost.id}`}
-                    autoOpen=${true}
-                    threadOwnerUserId=${selectedPost.createdBy || selectedPost.authorUserId || ""}
-                  />
-                </article>`}
+                    <${CommentThread}
+                      newsId=${`forum:${selectedPost.id}`}
+                      autoOpen=${true}
+                      threadOwnerUserId=${selectedPost.createdBy || selectedPost.authorUserId || ""}
+                    />
+                  </article>`}
           </section>
+          <${PopUp}
+            show=${forumProfileOpen}
+            onClose=${() => setForumProfileOpen(false)}
+            title="Profile Card"
+          >
+            ${forumProfileUser
+              ? html`<div className="profile-card">
+                  <img
+                    className=${`profile-card-avatar avatar-rank-${rankSlug(
+                      forumProfileUser.rankLabel || "Unregistered",
+                    )}`.trim()}
+                    src=${forumProfileUser.image}
+                    alt=${forumProfileUser.name}
+                  />
+                  <div className=${`profile-card-name rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}>
+                    ${forumProfileUser.name}
+                  </div>
+                  ${forumProfileUser.username
+                    ? html`<div className="profile-card-username">@${forumProfileUser.username}</div>`
+                    : html``}
+                  <div className=${`comment-rank profile-card-rank rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}>
+                    ${(() => {
+                      const iconType = getRankIconType(forumProfileUser.rankLabel || "");
+                      return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                        <span>${forumProfileUser.rankLabel || "Unregistered"}</span>`;
+                    })()}
+                  </div>
+                  ${forumProfileUser.staff ? html`<div className="profile-card-badge">Hardtale Staff Member</div>` : html``}
+                </div>`
+              : html``}
+          <//>
         </section>
       `;
     }
@@ -3920,35 +3967,49 @@ function ForumPage() {
             : html`<div className="news-list">
                 ${posts.map(
                   (post) => html`<article key=${post.id} className="news-card forum-post-card">
-                    <${Link}
-                      className="forum-post-link"
-                      to=${`/forum?section=${encodeURIComponent(selectedSectionId)}&post=${encodeURIComponent(post.id)}`}
-                    >
-                      <div className="forum-post-author-row">
+                    <div className="forum-post-author-row">
+                      <button
+                        className="forum-post-author-trigger"
+                        type="button"
+                        onClick=${() => openForumProfileCard(post)}
+                        title="Open profile card"
+                        aria-label="Open profile card"
+                      >
                         <img
                           className="forum-post-author-avatar"
                           src=${post.authorImage || "/assets/HardTale_H_GreyScale.png"}
                           alt=${post.authorName || "User"}
                         />
-                        <span className="muted">By</span>
+                      </button>
+                      <span className="muted">By</span>
+                      <button
+                        className="forum-post-author-name-btn"
+                        type="button"
+                        onClick=${() => openForumProfileCard(post)}
+                      >
                         <${AuthorName} value=${post.authorName || "User"} isStaffLabel=${isStaffLabel} />
-                        <span
-                          className=${`comment-rank forum-author-rank rank-${String(
-                            post.authorRank || "Unregistered",
-                          )
-                            .trim()
-                            .toLowerCase()
-                            .replace(/[^a-z0-9]+/g, "-")}`.trim()}
-                        >
-                          ${(() => {
-                            const iconType = getRankIconType(post.authorRank || "");
-                            return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
-                              <span>${post.authorRank || "Unregistered"}</span>`;
-                          })()}
-                        </span>
-                        <span className="forum-post-op">OP</span>
-                        <${TimestampText} value=${post.createdAt} formatTimestamp=${formatTimestamp} />
-                      </div>
+                      </button>
+                      <span
+                        className=${`comment-rank forum-author-rank rank-${String(
+                          post.authorRank || "Unregistered",
+                        )
+                          .trim()
+                          .toLowerCase()
+                          .replace(/[^a-z0-9]+/g, "-")}`.trim()}
+                      >
+                        ${(() => {
+                          const iconType = getRankIconType(post.authorRank || "");
+                          return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                            <span>${post.authorRank || "Unregistered"}</span>`;
+                        })()}
+                      </span>
+                      <span className="forum-post-op">OP</span>
+                      <${TimestampText} value=${post.createdAt} formatTimestamp=${formatTimestamp} />
+                    </div>
+                    <${Link}
+                      className="forum-post-link"
+                      to=${`/forum?section=${encodeURIComponent(selectedSectionId)}&post=${encodeURIComponent(post.id)}`}
+                    >
                       <div className="forum-post-header-divider"></div>
                       <div className="news-header">
                         <div className="news-title-row">
@@ -3962,6 +4023,37 @@ function ForumPage() {
               </div>`}
           ${postsStatus ? html`<div className="muted">${postsStatus}</div>` : html``}
         </section>
+        <${PopUp}
+          show=${forumProfileOpen}
+          onClose=${() => setForumProfileOpen(false)}
+          title="Profile Card"
+        >
+          ${forumProfileUser
+            ? html`<div className="profile-card">
+                <img
+                  className=${`profile-card-avatar avatar-rank-${rankSlug(
+                    forumProfileUser.rankLabel || "Unregistered",
+                  )}`.trim()}
+                  src=${forumProfileUser.image}
+                  alt=${forumProfileUser.name}
+                />
+                <div className=${`profile-card-name rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}>
+                  ${forumProfileUser.name}
+                </div>
+                ${forumProfileUser.username
+                  ? html`<div className="profile-card-username">@${forumProfileUser.username}</div>`
+                  : html``}
+                <div className=${`comment-rank profile-card-rank rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}>
+                  ${(() => {
+                    const iconType = getRankIconType(forumProfileUser.rankLabel || "");
+                    return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                      <span>${forumProfileUser.rankLabel || "Unregistered"}</span>`;
+                  })()}
+                </div>
+                ${forumProfileUser.staff ? html`<div className="profile-card-badge">Hardtale Staff Member</div>` : html``}
+              </div>`
+            : html``}
+        <//>
 
         <${PopUp}
           show=${showCreateModal}
@@ -4598,25 +4690,44 @@ function renderRankIcon(type) {
   }
 }
 
-function NotificationsPanel({ notifications, onView }) {
+function NotificationsPanel({ notifications, onView, onOpenProfile }) {
   if (!notifications.length) {
     return html`<p className="muted">No notifications yet.</p>`;
   }
 
   return html`
     <div className="notif-list">
-      ${notifications.map(
-        (item) => html`<div key=${item.id} className="notif-card">
+      ${notifications.map((item) => {
+        const authorLabel = String(item?.authorName || item?.author || "System");
+        const canOpenProfile =
+          typeof onOpenProfile === "function" &&
+          Boolean(item?.authorUserId || item?.authorImage || item?.authorName);
+        return html`<div key=${item.id} className="notif-card">
           <div className="notif-title">
             ${item.featured ? html`<span className="news-star mini" title="Featured">â˜…</span>` : html``}
             ${item.title}
           </div>
           <div className="notif-body">${item.message}</div>
-          <div className="notif-author">
-            <${TimestampText} value=${item.createdAt} formatTimestamp=${formatTimestamp} />
-            <span>
-              Sent by <${AuthorName} value=${item.author} isStaffLabel=${isStaffLabel} />
-            </span>
+          <div className="notif-author-row">
+            <div className="notif-author">
+              <${TimestampText} value=${item.createdAt} formatTimestamp=${formatTimestamp} />
+              <span>
+                Sent by <${AuthorName} value=${authorLabel} isStaffLabel=${isStaffLabel} />
+              </span>
+            </div>
+            ${canOpenProfile
+              ? html`<button
+                  className="notif-profile-peek"
+                  type="button"
+                  onClick=${() => onOpenProfile(item)}
+                  title="Open profile card"
+                  aria-label="Open profile card"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path fill="currentColor" d="M12 3a5 5 0 100 10 5 5 0 000-10zm0 12c-4.2 0-7.5 2.2-8.6 5.4-.2.6.3 1.1.9 1.1h15.4c.6 0 1.1-.6.9-1.1C19.5 17.2 16.2 15 12 15z"></path>
+                  </svg>
+                </button>`
+              : html``}
           </div>
           ${item.readMoreUrl
             ? html`<div className="notif-actions">
@@ -4625,8 +4736,8 @@ function NotificationsPanel({ notifications, onView }) {
                 </button>
               </div>`
             : html``}
-        </div>`,
-      )}
+        </div>`;
+      })}
     </div>
   `;
 }
@@ -5308,6 +5419,8 @@ function Layout() {
   const [unread, setUnread] = useState(0);
   const [showCart, setShowCart] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [notificationProfileOpen, setNotificationProfileOpen] = useState(false);
+  const [notificationProfileUser, setNotificationProfileUser] = useState(null);
   const [showChangelog, setShowChangelog] = useState(false);
   const [showConnectHelp, setShowConnectHelp] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -5678,6 +5791,22 @@ function Layout() {
     if (!url) return;
     setShowNotifications(false);
     navigate(url);
+  }
+
+  function openNotificationProfile(item) {
+    if (!item) return;
+    const name = String(item.authorName || item.author || "User");
+    const username = formatUsernameForDisplay(item.authorUsername);
+    const rankLabel = String(item.authorRank || "Unregistered");
+    const staff = isStaffLabel(name) || isStaffLabel(username);
+    setNotificationProfileUser({
+      name,
+      username,
+      image: String(item.authorImage || "/assets/HardTale_H_GreyScale.png"),
+      rankLabel,
+      staff,
+    });
+    setNotificationProfileOpen(true);
   }
 
   function removeItem(id) {
@@ -6121,7 +6250,61 @@ function Layout() {
         onClose=${() => setShowNotifications(false)}
         title="Notifications"
       >
-        <${NotificationsPanel} notifications=${sortedNotifications} onView=${viewNotification} />
+        <${NotificationsPanel}
+          notifications=${sortedNotifications}
+          onView=${viewNotification}
+          onOpenProfile=${openNotificationProfile}
+        />
+      <//>
+      <${PopUp}
+        show=${notificationProfileOpen}
+        onClose=${() => setNotificationProfileOpen(false)}
+        title="Profile Card"
+      >
+        ${notificationProfileUser
+          ? html`<div className="profile-card">
+              <img
+                className=${`profile-card-avatar avatar-rank-${String(
+                  notificationProfileUser.rankLabel || "Unregistered",
+                )
+                  .trim()
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, "-")}`.trim()}
+                src=${notificationProfileUser.image}
+                alt=${notificationProfileUser.name}
+              />
+              <div
+                className=${`profile-card-name rank-${String(
+                  notificationProfileUser.rankLabel || "Unregistered",
+                )
+                  .trim()
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, "-")}`.trim()}
+              >
+                ${notificationProfileUser.name}
+              </div>
+              ${notificationProfileUser.username
+                ? html`<div className="profile-card-username">@${notificationProfileUser.username}</div>`
+                : html``}
+              <div
+                className=${`comment-rank profile-card-rank rank-${String(
+                  notificationProfileUser.rankLabel || "Unregistered",
+                )
+                  .trim()
+                  .toLowerCase()
+                  .replace(/[^a-z0-9]+/g, "-")}`.trim()}
+              >
+                ${(() => {
+                  const iconType = getRankIconType(notificationProfileUser.rankLabel || "");
+                  return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                    <span>${notificationProfileUser.rankLabel || "Unregistered"}</span>`;
+                })()}
+              </div>
+              ${notificationProfileUser.staff
+                ? html`<div className="profile-card-badge">Hardtale Staff Member</div>`
+                : html``}
+            </div>`
+          : html``}
       <//>
       <${PopUp}
         show=${showConnectHelp}

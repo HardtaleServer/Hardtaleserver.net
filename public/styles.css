@@ -815,6 +815,30 @@ body[data-theme="light"] .settings-icon {
   border: 1px solid var(--stroke);
 }
 
+.forum-post-author-trigger {
+  border: none;
+  background: transparent;
+  padding: 0;
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.forum-post-author-name-btn {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.forum-post-author-name-btn:hover .author-name,
+.forum-post-author-trigger:hover + .muted + .forum-post-author-name-btn .author-name {
+  text-decoration: underline;
+}
+
 .forum-post-op {
   font-size: 10px;
   font-weight: 700;
@@ -3840,12 +3864,43 @@ body[data-theme="dark"] .store-cta {
   color: var(--muted);
 }
 
+.notif-author-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .notif-author {
   color: var(--accent);
   font-size: 12px;
   font-weight: 600;
-  display: block;
+  display: grid;
+  gap: 2px;
   margin-top: 2px;
+}
+
+.notif-profile-peek {
+  border: 1px solid var(--stroke);
+  background: var(--card);
+  color: var(--muted);
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.notif-profile-peek svg {
+  width: 14px;
+  height: 14px;
+}
+
+.notif-profile-peek:hover {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .notif-card .notification-timestamp {
@@ -4494,8 +4549,9 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
     flex-direction: column;
     align-items: flex-end;
     text-align: right;
-    margin-left: auto;
-    width: 100%;
+    margin-left: 0;
+    width: auto;
+    flex: 1;
   }
 
   .notif-author span {
@@ -4681,7 +4737,7 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   .comment-header-desktop {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 10px;
   }
 
@@ -4693,32 +4749,6 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
     display: flex;
     align-items: baseline;
     gap: 8px;
-  }
-
-  .comment-profile-peek {
-    border: 1px solid var(--stroke);
-    background: var(--bg-soft);
-    color: var(--muted);
-    width: 20px;
-    height: 20px;
-    border-radius: 999px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
-  }
-
-  .comment-profile-peek:hover {
-    color: var(--accent);
-    border-color: var(--accent);
-    transform: translateY(-1px);
-  }
-
-  .comment-profile-peek svg {
-    width: 11px;
-    height: 11px;
-    display: block;
   }
 
   .comment-header-desktop .comment-rank {

@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-16 (v1.3.27)
+- Reply notifications now store and display the real replying user metadata (name/userId/username/avatar/rank) instead of `System`.
+- Added notification-panel profile peek so recipients can open the replying user's profile card directly from the bell popup.
+- Kept `View` deep-links for reply notifications unchanged so users can still jump to the exact reply thread.
+
 ## 2026-02-16 (v1.3.26)
 - Switched `/link` feature gating to `LINKING_ENABLED` with local mock mode when disabled.
 - Kept `/link` URL parsing active while simulating redeem outcomes for invalid/expired, already used, rate-limited, and unavailable states.
