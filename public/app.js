@@ -4821,21 +4821,24 @@ function VotePage() {
 
 function LinkPage() {
   const location = useLocation();
-  const [digits, setDigits] = useState(["", "", "", "", "", ""]);
+  const LINK_CODE_LENGTH = 8;
+  const [digits, setDigits] = useState(Array.from({ length: LINK_CODE_LENGTH }, () => ""));
   const inputRefs = useRef([]);
   const fullCode = digits.join("");
-  const isComplete = fullCode.length === 6 && /^\d{6}$/.test(fullCode);
+  const isComplete =
+    fullCode.length === LINK_CODE_LENGTH &&
+    new RegExp(`^\\d{${LINK_CODE_LENGTH}}$`).test(fullCode);
 
   useEffect(() => {
     const rawSearch = String(location.search || "").replace(/^\?/, "");
     if (!rawSearch) return;
     const decoded = decodeURIComponent(rawSearch);
-    const match = decoded.match(/\d{6}/);
+    const match = decoded.match(new RegExp(`\\d{${LINK_CODE_LENGTH}}`));
     if (!match) return;
     const parsed = match[0].split("");
-    if (parsed.length !== 6) return;
+    if (parsed.length !== LINK_CODE_LENGTH) return;
     setDigits(parsed);
-  }, [location.search]);
+  }, [location.search, LINK_CODE_LENGTH]);
 
   function setDigitAt(index, value) {
     const next = [...digits];
@@ -4847,7 +4850,7 @@ function LinkPage() {
     const raw = String(event.target.value || "");
     const value = raw.replace(/\D/g, "").slice(-1);
     setDigitAt(index, value);
-    if (value && index < 5) {
+    if (value && index < LINK_CODE_LENGTH - 1) {
       inputRefs.current[index + 1]?.focus();
       inputRefs.current[index + 1]?.select();
     }
@@ -4863,7 +4866,7 @@ function LinkPage() {
       inputRefs.current[index - 1]?.focus();
       return;
     }
-    if (event.key === "ArrowRight" && index < 5) {
+    if (event.key === "ArrowRight" && index < LINK_CODE_LENGTH - 1) {
       event.preventDefault();
       inputRefs.current[index + 1]?.focus();
     }
@@ -4871,15 +4874,15 @@ function LinkPage() {
 
   function onPaste(event) {
     const text = String(event.clipboardData?.getData("text") || "");
-    const pastedDigits = text.replace(/\D/g, "").slice(0, 6).split("");
+    const pastedDigits = text.replace(/\D/g, "").slice(0, LINK_CODE_LENGTH).split("");
     if (pastedDigits.length === 0) return;
     event.preventDefault();
-    const next = ["", "", "", "", "", ""];
+    const next = Array.from({ length: LINK_CODE_LENGTH }, () => "");
     for (let i = 0; i < pastedDigits.length; i += 1) {
       next[i] = pastedDigits[i];
     }
     setDigits(next);
-    const focusIndex = Math.min(pastedDigits.length - 1, 5);
+    const focusIndex = Math.min(pastedDigits.length - 1, LINK_CODE_LENGTH - 1);
     inputRefs.current[focusIndex]?.focus();
     inputRefs.current[focusIndex]?.select();
   }
@@ -4890,7 +4893,7 @@ function LinkPage() {
         <div className="link-eyebrow">Account Linking</div>
         <h1 className="link-title">Link Hardtale UUID to Clerk</h1>
         <p className="link-copy">
-          Enter your 6-digit link code. This page is prepared for the upcoming HardtaleNetwork plugin auth flow.
+          Enter your 8-digit link code. This page is prepared for the upcoming HardtaleNetwork plugin auth flow.
         </p>
         <div className="link-code-grid" onPaste=${onPaste}>
           ${digits.map(
