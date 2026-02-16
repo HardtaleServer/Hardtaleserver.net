@@ -68,6 +68,8 @@ const STORE_RANK_PRODUCTS = {
 };
 const STORE_PRODUCT_IDS = new Set(Object.keys(STORE_RANK_PRODUCTS));
 const STORE_RANK_BY_LABEL = { Hero: 1, Legend: 2, Mythic: 3 };
+const DISPLAY_TITLES = ["Registered", "Hero", "Legend", "Mythic"];
+const DISPLAY_TITLE_TIER = { Registered: 0, Hero: 1, Legend: 2, Mythic: 3 };
 const MONGO_URI = process.env.MONGO_URI || "";
 const MONGO_DB_NAME = process.env.MONGO_DB || "hardtaledb";
 
@@ -227,7 +229,34 @@ connectMongo().catch(() => {
 function normalizeComment(doc) {
   if (!doc) return null;
   const { _id, ...rest } = doc;
-  return { ...rest, id: _id ? String(_id) : doc.id };
+  const normalized = {
+    ...rest,
+    id: _id ? String(_id) : doc.id,
+    authorUsername: formatUsernameForDisplay(rest.authorUsername, 80),
+  };
+  if (
+    normalized.authorName &&
+    normalized.authorUsername &&
+    String(normalized.authorName).toLowerCase() === String(rest.authorUsername || "").toLowerCase()
+  ) {
+    normalized.authorName = normalized.authorUsername;
+  }
+  if (Array.isArray(normalized.replies)) {
+    normalized.replies = normalized.replies.map((reply) => {
+      if (!reply) return reply;
+      const replyUsername = formatUsernameForDisplay(reply.authorUsername, 80);
+      const nextReply = { ...reply, authorUsername: replyUsername };
+      if (
+        nextReply.authorName &&
+        replyUsername &&
+        String(nextReply.authorName).toLowerCase() === String(reply.authorUsername || "").toLowerCase()
+      ) {
+        nextReply.authorName = replyUsername;
+      }
+      return nextReply;
+    });
+  }
+  return normalized;
 }
 
 function normalizeCommentList(list = []) {
@@ -440,6 +469,13 @@ function normalizeText(value, limit) {
   return String(value || "").trim().slice(0, limit);
 }
 
+function formatUsernameForDisplay(value, limit = 80) {
+  const username = normalizeText(value, limit);
+  if (!username) return "";
+  if (/[A-Z]/.test(username)) return username;
+  return `${username.charAt(0).toUpperCase()}${username.slice(1)}`;
+}
+
 function getUserEmail(user) {
   return (
     user?.primaryEmailAddress?.emailAddress ||
@@ -450,7 +486,7 @@ function getUserEmail(user) {
 
 function getUserDisplayName(user) {
   return (
-    normalizeText(user?.username, 80) ||
+    formatUsernameForDisplay(user?.username, 80) ||
     normalizeText(getUserEmail(user), 80) ||
     normalizeText(user?.fullName, 80) ||
     "User"
@@ -463,12 +499,16 @@ async function getFreshAuthorSnapshot(userId, cache = new Map()) {
   if (cache.has(key)) return cache.get(key);
   try {
     const user = await clerkClient.users.getUser(key);
+    const rankInfo = resolveDisplayRankFromMetadata(
+      user?.publicMetadata || {},
+      isAdminUser(user),
+    );
     const snapshot = {
       authorName: getUserDisplayName(user),
-      authorUsername: normalizeText(user?.username, 80),
+      authorUsername: formatUsernameForDisplay(user?.username, 80),
       authorEmail: getUserEmail(user),
       authorImage: user?.imageUrl || "",
-      authorRank: String(user?.publicMetadata?.rank || "Registered"),
+      authorRank: rankInfo.displayRank,
     };
     cache.set(key, snapshot);
     return snapshot;
@@ -673,6 +713,25 @@ function maxRankLabel(currentRank, nextRank) {
   return nextTier > currentTier ? nextRank : currentRank;
 }
 
+function normalizeDisplayTitle(value) {
+  const title = normalizeText(value, 20);
+  return DISPLAY_TITLES.includes(title) ? title : "";
+}
+
+function getUnlockedDisplayTitles(ownedRank) {
+  const normalizedOwned = normalizeDisplayTitle(ownedRank) || "Registered";
+  const maxTier = DISPLAY_TITLE_TIER[normalizedOwned] ?? 0;
+  return DISPLAY_TITLES.filter((title) => (DISPLAY_TITLE_TIER[title] ?? 0) <= maxTier);
+}
+
+function resolveDisplayRankFromMetadata(metadata = {}, includeAllTitles = false) {
+  const ownedRank = normalizeDisplayTitle(metadata?.rank) || "Registered";
+  const availableTitles = includeAllTitles ? [...DISPLAY_TITLES] : getUnlockedDisplayTitles(ownedRank);
+  const preferred = normalizeDisplayTitle(metadata?.displayRank);
+  const displayRank = preferred && availableTitles.includes(preferred) ? preferred : ownedRank;
+  return { ownedRank, displayRank, availableTitles };
+}
+
 function normalizeNewsItem(item) {
   const title = String(item?.title || "").trim().slice(0, 120);
   const description = String(item?.description || "").trim();
@@ -680,6 +739,7 @@ function normalizeNewsItem(item) {
   const readMoreUrl = String(item?.readMoreUrl || "").trim().slice(0, 500);
   const imageUrl = String(item?.imageUrl || "").trim().slice(0, 500);
   const featured = Boolean(item?.featured);
+  const commentsLocked = Boolean(item?.commentsLocked);
 
   if (!title || !description || !author) {
     return null;
@@ -693,8 +753,21 @@ function normalizeNewsItem(item) {
     readMoreUrl,
     imageUrl,
     featured,
+    commentsLocked,
     createdAt: new Date().toISOString(),
   };
+}
+
+async function isNewsThreadLocked(newsId) {
+  const key = normalizeText(newsId, 200);
+  if (!key) return false;
+  if (key.startsWith("forum:")) return false;
+  if (!newsCollection) return false;
+  const doc = await newsCollection.findOne(
+    { id: key, isDeleted: false },
+    { projection: { commentsLocked: 1 } },
+  );
+  return Boolean(doc?.commentsLocked);
 }
 
 function normalizeNotificationItem(item) {
@@ -822,6 +895,14 @@ function normalizeForumBody(value) {
 function normalizeForumPost(doc) {
   if (!doc) return null;
   const stripped = stripMongoId(doc);
+  const authorUsername = formatUsernameForDisplay(stripped.authorUsername, 80);
+  const authorNameRaw = normalizeText(stripped.authorName, 80);
+  const authorName =
+    authorNameRaw &&
+    authorUsername &&
+    authorNameRaw.toLowerCase() === String(stripped.authorUsername || "").toLowerCase()
+      ? authorUsername
+      : authorNameRaw;
   return {
     ...stripped,
     id: normalizeText(stripped.id, 128),
@@ -829,9 +910,9 @@ function normalizeForumPost(doc) {
     title: normalizeForumTitle(stripped.title),
     body: normalizeForumBody(stripped.body),
     createdBy: normalizeText(stripped.createdBy, 128),
-    authorName: normalizeText(stripped.authorName, 80),
+    authorName,
     authorUserId: normalizeText(stripped.authorUserId, 128),
-    authorUsername: normalizeText(stripped.authorUsername, 80),
+    authorUsername,
     authorImage: String(stripped.authorImage || ""),
     createdAt: stripped.createdAt || new Date().toISOString(),
     updatedAt: stripped.updatedAt || stripped.createdAt || new Date().toISOString(),
@@ -926,6 +1007,65 @@ app.get("/api/me", async (req, res) => {
   }
 });
 
+app.get("/api/profile/title", async (req, res) => {
+  try {
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const user = await clerkClient.users.getUser(auth.userId);
+    const { ownedRank, displayRank, availableTitles } = resolveDisplayRankFromMetadata(
+      user?.publicMetadata || {},
+      isAdminUser(user),
+    );
+    return res.json({ ownedRank, selectedTitle: displayRank, availableTitles });
+  } catch (error) {
+    console.error("Failed to load profile title settings", error);
+    return res.status(500).json({ error: "Failed to load profile title settings" });
+  }
+});
+
+app.post("/api/profile/title", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+
+    const requestedTitle = normalizeDisplayTitle(req.body?.title);
+    if (!requestedTitle) {
+      return res.status(400).json({ error: "Invalid title" });
+    }
+
+    const user = await clerkClient.users.getUser(auth.userId);
+    const rankInfo = resolveDisplayRankFromMetadata(
+      user?.publicMetadata || {},
+      isAdminUser(user),
+    );
+    if (!rankInfo.availableTitles.includes(requestedTitle)) {
+      return res.status(400).json({ error: "Title not unlocked" });
+    }
+
+    await clerkClient.users.updateUserMetadata(auth.userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        displayRank: requestedTitle,
+      },
+    });
+
+    await commentsCollection.updateMany(
+      { userId: auth.userId, isDeleted: false },
+      { $set: { authorRank: requestedTitle, updatedAt: new Date() } },
+    );
+
+    return res.json({
+      ownedRank: rankInfo.ownedRank,
+      selectedTitle: requestedTitle,
+      availableTitles: rankInfo.availableTitles,
+    });
+  } catch (error) {
+    console.error("Failed to update profile title settings", error);
+    return res.status(500).json({ error: "Failed to update profile title settings" });
+  }
+});
+
 app.get("/api/news", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
@@ -1013,8 +1153,11 @@ app.post("/api/ranks/sync", async (req, res) => {
       Object.entries(users).map(async ([userId, entry]) => {
         const groups = Array.isArray(entry?.groups) ? entry.groups : [];
         const rank = extractRank(groups);
+        const targetUser = await clerkClient.users.getUser(userId);
+        const currentMetadata = targetUser?.publicMetadata || {};
         await clerkClient.users.updateUserMetadata(userId, {
           publicMetadata: {
+            ...currentMetadata,
             rank,
           },
         });
@@ -1259,11 +1402,17 @@ app.post("/api/comments", async (req, res) => {
     if (!newsId || !body) {
       return res.status(400).json({ error: "Invalid comment" });
     }
+    if (await isNewsThreadLocked(newsId)) {
+      return res.status(403).json({ error: "Comments are locked for this post" });
+    }
 
     const user = await clerkClient.users.getUser(auth.userId);
     const email = getUserEmail(user);
-    const rank = String(user?.publicMetadata?.rank || "Registered");
-    const authorUsername = normalizeText(user?.username, 80);
+    const rank = resolveDisplayRankFromMetadata(
+      user?.publicMetadata || {},
+      isAdminUser(user),
+    ).displayRank;
+    const authorUsername = formatUsernameForDisplay(user?.username, 80);
     await commentsCollection.insertOne({
       newsId,
       userId: auth.userId,
@@ -1368,8 +1517,11 @@ app.post("/api/comments/:id/replies", async (req, res) => {
 
     const user = await clerkClient.users.getUser(auth.userId);
     const email = getUserEmail(user);
-    const rank = String(user?.publicMetadata?.rank || "Registered");
-    const authorUsername = normalizeText(user?.username, 80);
+    const rank = resolveDisplayRankFromMetadata(
+      user?.publicMetadata || {},
+      isAdminUser(user),
+    ).displayRank;
+    const authorUsername = formatUsernameForDisplay(user?.username, 80);
     const reply = {
       id: crypto.randomUUID(),
       userId: auth.userId,
@@ -1393,6 +1545,9 @@ app.post("/api/comments/:id/replies", async (req, res) => {
     });
     if (!comment) {
       return res.status(404).json({ error: "Comment not found" });
+    }
+    if (await isNewsThreadLocked(comment.newsId)) {
+      return res.status(403).json({ error: "Comments are locked for this post" });
     }
     const updatedReplies = [...(comment.replies || []), reply].slice(-50);
     await commentsCollection.updateOne(
@@ -1643,7 +1798,7 @@ app.post("/api/news", async (req, res) => {
         : {
             author: normalizedAuthor,
             authorUserId: auth.userId,
-            authorUsername: normalizeText(user?.username, 80),
+            authorUsername: formatUsernameForDisplay(user?.username, 80),
             authorImage: user?.imageUrl || "",
           };
 
@@ -1742,9 +1897,19 @@ app.patch("/api/news/:id", async (req, res) => {
       return res.status(403).json({ error: "Not authorized" });
     }
 
+    const setPayload = {
+      updatedAt: new Date().toISOString(),
+    };
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "featured")) {
+      setPayload.featured = Boolean(req.body?.featured);
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, "commentsLocked")) {
+      setPayload.commentsLocked = Boolean(req.body?.commentsLocked);
+    }
+
     await newsCollection.updateOne(
       { id: req.params.id, isDeleted: false },
-      { $set: { featured: Boolean(req.body?.featured), updatedAt: new Date().toISOString() } },
+      { $set: setPayload },
     );
     const nextNewsRaw = await newsCollection
       .find({ isDeleted: false })
@@ -1922,15 +2087,20 @@ app.post("/api/cart/checkout", async (req, res) => {
       const currentRank = String(user?.publicMetadata?.rank || "Registered");
       awardedRank = maxRankLabel(currentRank, purchasedHighestRank);
       if (awardedRank !== currentRank) {
+        const nextMetadata = {
+          ...user.publicMetadata,
+          rank: awardedRank,
+        };
+        const nextDisplayRank = resolveDisplayRankFromMetadata(
+          nextMetadata,
+          isAdminUser(user),
+        ).displayRank;
         await clerkClient.users.updateUserMetadata(auth.userId, {
-          publicMetadata: {
-            ...user.publicMetadata,
-            rank: awardedRank,
-          },
+          publicMetadata: nextMetadata,
         });
         await commentsCollection.updateMany(
           { userId: auth.userId, isDeleted: false },
-          { $set: { authorRank: awardedRank, updatedAt: new Date() } },
+          { $set: { authorRank: nextDisplayRank, updatedAt: new Date() } },
         );
       }
     }
@@ -2031,7 +2201,7 @@ app.post("/api/forum/posts", async (req, res) => {
       createdBy: auth.userId,
       authorName: getUserDisplayName(user),
       authorUserId: auth.userId,
-      authorUsername: normalizeText(user?.username, 80),
+      authorUsername: formatUsernameForDisplay(user?.username, 80),
       authorImage: user?.imageUrl || "",
       isDeleted: false,
       createdAt: now,

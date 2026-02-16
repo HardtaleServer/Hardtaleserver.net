@@ -362,6 +362,7 @@ const RANK_TIER_ORDER = {
   "rank-legend": 2,
   "rank-mythic": 3,
 };
+const PROFILE_DISPLAY_TITLES = ["Registered", "Hero", "Legend", "Mythic"];
 
 function buildCartFromIds(entries = []) {
   if (!Array.isArray(entries)) return [];
@@ -654,8 +655,20 @@ function getUserEmail(user) {
   );
 }
 
+function formatUsernameForDisplay(value) {
+  const username = String(value || "").trim().slice(0, 80);
+  if (!username) return "";
+  if (/[A-Z]/.test(username)) return username;
+  return `${username.charAt(0).toUpperCase()}${username.slice(1)}`;
+}
+
 function getUserDisplayName(user) {
-  return user?.username || getUserEmail(user) || user?.fullName || "User";
+  return (
+    formatUsernameForDisplay(user?.username) ||
+    getUserEmail(user) ||
+    user?.fullName ||
+    "User"
+  );
 }
 
 function formatTimestamp(value) {
@@ -790,6 +803,7 @@ function NewsCard({ item, focusCommentId, focusReplyId, autoOpenComments }) {
         focusCommentId=${focusCommentId}
         focusReplyId=${focusReplyId}
         autoOpen=${autoOpenComments}
+        commentsLocked=${Boolean(item.commentsLocked)}
       />
 
       <${PopUp}
@@ -1082,8 +1096,9 @@ function ReactionBar({ itemType, itemId }) {
   `;
 }
 
-function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
+function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, commentsLocked = false }) {
   const { getToken, isSignedIn, userId } = useAuth();
+  const { openSignIn } = useClerk();
   const [open, setOpen] = useState(Boolean(autoOpen));
   const [comments, setComments] = useState([]);
   const [commentCount, setCommentCount] = useState(0);
@@ -1097,6 +1112,8 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
   const [openResponses, setOpenResponses] = useState({});
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileUser, setProfileUser] = useState(null);
+  const [profileTitleStatus, setProfileTitleStatus] = useState("");
+  const [profileTitleSaving, setProfileTitleSaving] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState([]);
   const [replyTargets, setReplyTargets] = useState({});
@@ -1178,6 +1195,10 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
   async function submitComment(event) {
     event.preventDefault();
     if (!isSignedIn) return;
+    if (commentsLocked) {
+      setComposerStatus("Comments are locked for this post.");
+      return;
+    }
     if (!draft.trim()) return;
     setComposerStatus("Posting...");
     try {
@@ -1186,13 +1207,16 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ newsId, text: draft }),
       });
-      if (!response.ok) throw new Error("Failed");
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed");
+      }
       const data = await response.json();
       setComments(Array.isArray(data.comments) ? data.comments : []);
       setDraft("");
       setComposerStatus("");
-    } catch {
-      setComposerStatus("Failed to post.");
+    } catch (error) {
+      setComposerStatus(error?.message || "Failed to post.");
     }
   }
 
@@ -1272,6 +1296,10 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
   }
 
   async function submitReply(comment, text, textarea) {
+    if (commentsLocked) {
+      setCommentActionStatus(comment.id, "Comments are locked for this post.");
+      return;
+    }
     if (!text.trim()) return;
     const target = replyTargets[comment.id] || null;
     const payload = { text };
@@ -1287,7 +1315,11 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      setCommentActionStatus(comment.id, data?.error || "Reply failed.");
+      return;
+    }
     const data = await response.json();
     if (data?.comment) {
       setComments((prev) =>
@@ -1295,6 +1327,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
       );
       clearReplyTarget(comment.id);
       if (textarea) textarea.value = "";
+      setCommentActionStatus(comment.id, "");
     }
   }
 
@@ -1358,15 +1391,102 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
     } catch {}
   }
 
-  function openProfileCard(entry) {
+  async function loadOwnProfileTitleSettings() {
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/title");
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      const availableRaw = Array.isArray(data.availableTitles) ? data.availableTitles : [];
+      const availableTitles = PROFILE_DISPLAY_TITLES.filter((title) => availableRaw.includes(title));
+      const selectedTitle = String(data.selectedTitle || "");
+      const ownedRank = String(data.ownedRank || "Registered");
+      return {
+        availableTitles: availableTitles.length > 0 ? availableTitles : ["Registered"],
+        selectedTitle: selectedTitle || ownedRank,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async function updateOwnDisplayTitle(nextTitle) {
+    if (!profileUser?.isOwn || !nextTitle || profileTitleSaving) return;
+    const current = String(profileUser.rankLabel || "");
+    if (nextTitle === current) return;
+    setProfileTitleSaving(true);
+    setProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/title", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: nextTitle }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save title.");
+      }
+      const data = await response.json();
+      const selectedTitle = String(data?.selectedTitle || nextTitle);
+      const availableRaw = Array.isArray(data?.availableTitles) ? data.availableTitles : [];
+      const availableTitles = PROFILE_DISPLAY_TITLES.filter((title) => availableRaw.includes(title));
+      setProfileUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              rankLabel: selectedTitle,
+              availableTitles: availableTitles.length > 0 ? availableTitles : prev.availableTitles,
+            }
+          : prev,
+      );
+      setComments((prev) =>
+        prev.map((comment) => {
+          if (!comment) return comment;
+          const nextComment =
+            comment.userId === userId ? { ...comment, authorRank: selectedTitle } : comment;
+          const replies = Array.isArray(nextComment.replies) ? nextComment.replies : [];
+          if (replies.length === 0) return nextComment;
+          return {
+            ...nextComment,
+            replies: replies.map((reply) =>
+              reply?.userId === userId ? { ...reply, authorRank: selectedTitle } : reply,
+            ),
+          };
+        }),
+      );
+      setProfileTitleStatus("Saved.");
+      setTimeout(() => setProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setProfileTitleStatus(error?.message || "Failed to save title.");
+    } finally {
+      setProfileTitleSaving(false);
+    }
+  }
+
+  async function openProfileCard(entry) {
     if (!entry) return;
     const rank = resolveRank(entry);
+    const isOwn = Boolean(userId && entry.userId && entry.userId === userId);
+    let availableTitles = [];
+    let selectedTitle = rank.label;
+    if (isOwn && isSignedIn) {
+      const settings = await loadOwnProfileTitleSettings();
+      if (settings) {
+        availableTitles = settings.availableTitles;
+        selectedTitle = settings.selectedTitle || rank.label;
+      }
+    }
+    if (isOwn && availableTitles.length === 0 && selectedTitle) {
+      availableTitles = [selectedTitle];
+    }
+    setProfileTitleStatus("");
     setProfileUser({
       name: String(entry.authorName || "User"),
       image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
-      rankLabel: rank.label,
+      rankLabel: selectedTitle,
       staff: rank.staff,
-      username: String(entry.authorUsername || ""),
+      username: formatUsernameForDisplay(entry.authorUsername),
+      isOwn,
+      availableTitles,
     });
     setProfileOpen(true);
   }
@@ -1383,20 +1503,25 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
               ? html`<div className="no-comments">No comments yet.</div>`
               : html``}
             ${isSignedIn
-              ? html`<form className="comment-form" onSubmit=${submitComment}>
-                  <textarea
-                    rows="3"
-                    placeholder="Write a comment..."
-                    value=${draft}
-                    maxLength="276"
-                    onInput=${(event) => setDraft(event.target.value)}
-                  ></textarea>
-                  <div className="comment-actions right">
-                    <div className="comment-char-count">${draft.length}/276</div>
-                    <button className="button primary" type="submit">Post</button>
-                    ${composerStatus ? html`<span className="muted">${composerStatus}</span>` : html``}
-                  </div>
-                </form>`
+              ? commentsLocked
+                ? html`<div className="comment-login-card">
+                    <div className="comment-login-title">Responses are locked</div>
+                    <div className="comment-login-input">Staff disabled comments for this post.</div>
+                  </div>`
+                : html`<form className="comment-form" onSubmit=${submitComment}>
+                    <textarea
+                      rows="3"
+                      placeholder="Write a comment..."
+                      value=${draft}
+                      maxLength="276"
+                      onInput=${(event) => setDraft(event.target.value)}
+                    ></textarea>
+                    <div className="comment-actions right">
+                      <div className="comment-char-count">${draft.length}/276</div>
+                      <button className="button primary" type="submit">Post</button>
+                      ${composerStatus ? html`<span className="muted">${composerStatus}</span>` : html``}
+                    </div>
+                  </form>`
               : html`<div
                   className="comment-login-card"
                   role="button"
@@ -1488,7 +1613,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                             ${actionStatusByComment[comment.id]}
                           </div>`
                         : html``}
-                      ${(editingId !== comment.id && (comment.userId === userId || isSignedIn))
+                      ${(editingId !== comment.id && (comment.userId === userId || (isSignedIn && !commentsLocked)))
                         ? html`<div className="comment-controls right">
                             ${comment.userId === userId
                               ? html`<button
@@ -1509,7 +1634,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                                   Delete
                                 </button>`
                               : html``}
-                            ${isSignedIn
+                            ${isSignedIn && !commentsLocked
                               ? html`<button
                                   className="ghost-btn"
                                   type="button"
@@ -1620,7 +1745,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                                             </p>
                                           </div>`}
                                       ${(editingReplyKey !== `${comment.id}:${reply.id}` &&
-                                      (reply.userId === userId || isSignedIn))
+                                      (reply.userId === userId || (isSignedIn && !commentsLocked)))
                                         ? html`<div className="comment-controls right">
                                             ${reply.userId === userId
                                               ? html`<button
@@ -1641,7 +1766,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                                                   Delete
                                                 </button>`
                                               : html``}
-                                            ${isSignedIn
+                                            ${isSignedIn && !commentsLocked
                                               ? html`<button
                                                   className="ghost-btn"
                                                   type="button"
@@ -1660,7 +1785,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                                     </div>
                                   </div>`,
                                 )}
-                                ${isSignedIn
+                                ${isSignedIn && !commentsLocked
                                   ? html`<div className="comment-reply-form">
                                       ${replyTargets[comment.id]
                                         ? html`<div className="comment-reply-target">
@@ -1723,6 +1848,24 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen }) {
                 ? html`<div className="profile-card-username">@${profileUser.username}</div>`
                 : html``}
               <div className=${`comment-rank ${profileUser.staff ? "staff" : ""}`}>${profileUser.rankLabel}</div>
+              ${profileUser.isOwn
+                ? html`<label className="profile-card-title-picker">
+                    <span className="muted">Display title</span>
+                    <select
+                      value=${profileUser.rankLabel}
+                      disabled=${profileTitleSaving}
+                      onChange=${(event) => updateOwnDisplayTitle(event.target.value)}
+                    >
+                      ${(Array.isArray(profileUser.availableTitles)
+                        ? profileUser.availableTitles
+                        : ["Registered"]
+                      ).map((title) => html`<option value=${title}>${title}</option>`)}
+                    </select>
+                  </label>`
+                : html``}
+              ${profileTitleStatus && profileUser.isOwn
+                ? html`<div className="muted profile-card-title-status">${profileTitleStatus}</div>`
+                : html``}
               ${profileUser.staff
                 ? html`<div className="profile-card-badge">Hardtale Staff Member</div>`
                 : html``}
@@ -1782,6 +1925,7 @@ function AdminPanel({
   const [newsStatus, setNewsStatus] = useState("");
   const [authorMode, setAuthorMode] = useState("system");
   const [newsFeatured, setNewsFeatured] = useState(false);
+  const [newsCommentsLocked, setNewsCommentsLocked] = useState(false);
   const [pollEnabled, setPollEnabled] = useState(false);
   const [pollQuestion, setPollQuestion] = useState("");
   const [pollMultiple, setPollMultiple] = useState(false);
@@ -1831,6 +1975,7 @@ function AdminPanel({
           readMoreUrl: newsReadMoreUrl,
           imageUrl: newsImageUrl,
           featured: newsFeatured,
+          commentsLocked: newsCommentsLocked,
           poll,
         }),
       });
@@ -1877,6 +2022,7 @@ function AdminPanel({
       setNewsReadMoreUrl("");
       setNewsImageUrl("");
       setNewsFeatured(false);
+      setNewsCommentsLocked(false);
       setPollEnabled(false);
       setPollQuestion("");
       setPollMultiple(false);
@@ -1959,6 +2105,25 @@ function AdminPanel({
       onNewsUpdate(Array.isArray(data.news) ? data.news : []);
     } catch (err) {
       alert("Failed to update featured status.");
+    }
+  }
+
+  async function toggleNewsCommentsLocked(id, commentsLocked) {
+    try {
+      const token = await getToken();
+      const response = await fetch(`/api/news/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ commentsLocked }),
+      });
+      if (!response.ok) throw new Error("Comment lock update failed");
+      const data = await response.json();
+      onNewsUpdate(Array.isArray(data.news) ? data.news : []);
+    } catch (err) {
+      alert("Failed to update comment lock.");
     }
   }
 
@@ -2045,6 +2210,14 @@ function AdminPanel({
           type="checkbox"
           checked=${newsFeatured}
           onChange=${(event) => setNewsFeatured(event.target.checked)}
+        />
+      </label>
+      <label className="settings-row inline">
+        <span>Lock comments</span>
+        <input
+          type="checkbox"
+          checked=${newsCommentsLocked}
+          onChange=${(event) => setNewsCommentsLocked(event.target.checked)}
         />
       </label>
       <label className="settings-row inline">
@@ -2149,6 +2322,13 @@ function AdminPanel({
                   onClick=${() => toggleNewsFeatured(item.id, !item.featured)}
                 >
                   ${item.featured ? "Remove featured" : "Feature this"}
+                </button>
+                <button
+                  className="ghost-btn news-toggle"
+                  type="button"
+                  onClick=${() => toggleNewsCommentsLocked(item.id, !item.commentsLocked)}
+                >
+                  ${item.commentsLocked ? "Unlock comments" : "Lock comments"}
                 </button>
               </article>`,
             )}
@@ -3481,13 +3661,29 @@ function NotFoundPage({
   onNewsUpdate,
   onNotificationsUpdate,
 }) {
+  const location = useLocation();
   const navigate = useNavigate();
   const { user } = useUser();
+  const { getToken, isSignedIn } = useAuth();
+  const { openSignIn } = useClerk();
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(
+    location.pathname === "/support",
+  );
   const [timeLabel, setTimeLabel] = useState("");
   const [copyLabel, setCopyLabel] = useState("Copy Crash Log");
   const [command, setCommand] = useState("");
   const [commandStatus, setCommandStatus] = useState("");
+  const [tickets, setTickets] = useState([]);
+  const [selectedTicketId, setSelectedTicketId] = useState("");
+  const [selectedTicket, setSelectedTicket] = useState(null);
+  const [ticketLoading, setTicketLoading] = useState(false);
+  const [ticketStatus, setTicketStatus] = useState("");
+  const [newSubject, setNewSubject] = useState("");
+  const [newCategory, setNewCategory] = useState("support");
+  const [newBody, setNewBody] = useState("");
+  const [chatDraft, setChatDraft] = useState("");
+  const [nextStatus, setNextStatus] = useState("pending");
   const logRef = useRef(null);
 
   useEffect(() => {
@@ -3513,11 +3709,152 @@ function NotFoundPage({
     }
   }
 
+  async function loadTickets() {
+    if (!showSupportModal || !isSignedIn) {
+      setTickets([]);
+      setSelectedTicketId("");
+      setSelectedTicket(null);
+      setTicketLoading(false);
+      return;
+    }
+    setTicketLoading(true);
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/forum/tickets");
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      const next = Array.isArray(data.tickets) ? data.tickets : [];
+      setTickets(next);
+      if (!selectedTicketId && next.length > 0) {
+        setSelectedTicketId(next[0].id);
+      }
+      setTicketStatus("");
+    } catch {
+      setTicketStatus("Failed to load tickets.");
+    } finally {
+      setTicketLoading(false);
+    }
+  }
+
+  async function loadTicketDetail(ticketId) {
+    if (!showSupportModal || !ticketId || !isSignedIn) {
+      setSelectedTicket(null);
+      return;
+    }
+    try {
+      const response = await apiFetchWithToken(getToken, true, `/api/forum/tickets/${ticketId}`);
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      setSelectedTicket(data.ticket || null);
+      setNextStatus((data.ticket?.status || "pending") === "resolved" ? "resolved" : "pending");
+    } catch {
+      setSelectedTicket(null);
+    }
+  }
+
+  async function submitTicket(event) {
+    event.preventDefault();
+    if (!isSignedIn) return;
+    if (!newSubject.trim() || !newBody.trim()) return;
+    setTicketStatus("Creating ticket...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/forum/tickets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject: newSubject,
+          category: newCategory,
+          body: newBody,
+        }),
+      });
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      const created = data.ticket;
+      setNewSubject("");
+      setNewCategory("support");
+      setNewBody("");
+      setTicketStatus("Ticket created.");
+      await loadTickets();
+      if (created?.id) {
+        setSelectedTicketId(created.id);
+        setSelectedTicket(created);
+      }
+    } catch {
+      setTicketStatus("Failed to create ticket.");
+    }
+  }
+
+  async function sendMessage() {
+    if (!selectedTicketId || !chatDraft.trim()) return;
+    setTicketStatus("Sending message...");
+    try {
+      const response = await apiFetchWithToken(
+        getToken,
+        true,
+        `/api/forum/tickets/${selectedTicketId}/messages`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ body: chatDraft }),
+        },
+      );
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      setSelectedTicket(data.ticket || null);
+      setChatDraft("");
+      setTicketStatus("");
+      await loadTickets();
+    } catch {
+      setTicketStatus("Failed to send message.");
+    }
+  }
+
+  async function updateTicketStatus() {
+    if (!isAdmin || !selectedTicketId) return;
+    setTicketStatus("Updating ticket...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, `/api/forum/tickets/${selectedTicketId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json();
+      setSelectedTicket(data.ticket || null);
+      setTicketStatus("");
+      await loadTickets();
+    } catch {
+      setTicketStatus("Failed to update ticket.");
+    }
+  }
+
+  useEffect(() => {
+    if (location.pathname === "/support") {
+      setShowSupportModal(true);
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    loadTickets();
+  }, [isSignedIn, showSupportModal]);
+
+  useEffect(() => {
+    loadTicketDetail(selectedTicketId);
+  }, [selectedTicketId, isSignedIn, showSupportModal]);
+
+  function closeSupportModal() {
+    setShowSupportModal(false);
+  }
+
   function runCommand(value) {
     const next = (value || command).trim();
     if (!next) return;
     if (next === "/support") {
-      navigate("/support");
+      if (location.pathname === "/support") {
+        setShowSupportModal(true);
+      } else {
+        navigate("/support");
+      }
+      setCommandStatus("Opening support module...");
       return;
     }
     if (next === "/warp spawn") {
@@ -3640,6 +3977,53 @@ function NotFoundPage({
           </aside>
         </main>
       </div>
+      <${PopUp}
+        show=${showSupportModal}
+        onClose=${closeSupportModal}
+        title="Support Center"
+        className="support-center-overlay"
+      >
+        ${!isSignedIn
+          ? html`<section className="card">
+              <p className="muted">Sign in to create and manage support tickets.</p>
+              <button className="button primary" type="button" onClick=${() => openSignIn && openSignIn({})}>
+                Sign in
+              </button>
+            </section>`
+          : html`<section className="card admin-tools support-modal-layout">
+              <${SupportTicketForm}
+                submitTicket=${submitTicket}
+                newSubject=${newSubject}
+                setNewSubject=${setNewSubject}
+                newCategory=${newCategory}
+                setNewCategory=${setNewCategory}
+                newBody=${newBody}
+                setNewBody=${setNewBody}
+                status=${ticketStatus}
+              />
+
+              <div className="admin-panel">
+                <div className="section-title">Ticket Inbox</div>
+                <${TicketInboxList}
+                  loading=${ticketLoading}
+                  tickets=${tickets}
+                  onSelectTicket=${(ticketId) => setSelectedTicketId(ticketId)}
+                />
+
+                <${SupportTicketThread}
+                  selectedTicket=${selectedTicket}
+                  isAdmin=${isAdmin}
+                  nextStatus=${nextStatus}
+                  setNextStatus=${setNextStatus}
+                  updateTicketStatus=${updateTicketStatus}
+                  formatTimestamp=${formatTimestamp}
+                  chatDraft=${chatDraft}
+                  setChatDraft=${setChatDraft}
+                  sendMessage=${sendMessage}
+                />
+              </div>
+            </section>`}
+      <//>
       ${isAdmin
         ? html`<${PopUp}
             show=${showAdminPanel}
@@ -4740,7 +5124,6 @@ function Layout() {
           StorePage=${StorePage}
           VotePage=${VotePage}
           ForumPage=${ForumPage}
-          SupportPage=${SupportPage}
           SubscriptionsPage=${SubscriptionsPage}
           LinkPage=${LinkPage}
           NotFoundPage=${NotFoundPage}

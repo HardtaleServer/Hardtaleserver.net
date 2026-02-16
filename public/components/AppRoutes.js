@@ -11,7 +11,6 @@ export default function AppRoutes({
   StorePage,
   VotePage,
   ForumPage,
-  SupportPage,
   SubscriptionsPage,
   LinkPage,
   NotFoundPage,
@@ -68,7 +67,6 @@ export default function AppRoutes({
       <${Route} path="/store" element=${html`<${StorePage} onAdd=${addToCart} />`} />
       <${Route} path="/vote" element=${html`<${VotePage} />`} />
       <${Route} path="/forum" element=${html`<${ForumPage} />`} />
-      <${Route} path="/support" element=${html`<${SupportPage} isAdmin=${isAdmin} />`} />
       <${Route} path="/subscriptions" element=${html`<${SubscriptionsPage} />`} />
       <${Route} path="/link" element=${html`<${LinkPage} />`} />
       <${Route}
