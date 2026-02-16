@@ -17,6 +17,7 @@ import SupportTicketForm from "./components/SupportTicketForm.js";
 import SupportTicketThread from "./components/SupportTicketThread.js";
 import AppRoutes from "./components/AppRoutes.js";
 import RankBadge from "./components/RankBadge.js";
+import ProfileAchievementsCard from "./components/ProfileAchievementsCard.js";
 import { getRankDisplayLabel, getRankIconType } from "./components/rankConfig.js";
 import {
   BrowserRouter,
@@ -165,6 +166,8 @@ const CHANGELOG_ENTRIES = [
       "Updated rank color tokens into centralized CSS variables and retuned Hero/Legend visuals with matching hover glow behavior.",
       "Updated Store tier locking so lower rank buttons disable when a higher tier is already in the cart.",
       "Started moving permissions and staff-role handling to server-authoritative APIs, with planned live game-server permission sync.",
+      "Updated profile-card owned-rank badge chips to use rank color styling while preserving staff gradient treatment for staff chips.",
+      "Added a reusable profile achievements card section with circular badge placeholders and future API integration notes.",
     ],
   },
   {
@@ -3686,9 +3689,8 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
   }
 
   function getStorePreviewBadges(item) {
-    if (!item?.id) return [];
-    const maxTier = RANK_TIER_ORDER[item.id] || 0;
-    return STORE_BADGE_ORDER.filter((label) => (OWNED_RANK_TIER[label] || 0) <= maxTier);
+    const label = getStoreRankLabel(item);
+    return label ? [label] : [];
   }
 
   function isTierLockedInCart(item) {
@@ -3736,6 +3738,13 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
               ? "Tier locked"
               : "Add to cart";
             return html`<div key=${item.id} className=${`store-card rank-preview-${getStoreRankSlug(item)}`.trim()}>
+            <div className=${`comment-rank store-rank-title rank-${getStoreRankSlug(item)}`.trim()}>
+              ${(() => {
+                const iconType = getRankIconType(getStoreRankLabel(item));
+                return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                  <span>${item.name}</span>`;
+              })()}
+            </div>
             <button
               type="button"
               className="store-profile-preview"
@@ -3748,20 +3757,6 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
                 ${storePreviewUsername
                   ? html`<div className="store-profile-username">@${storePreviewUsername}</div>`
                   : html``}
-                <div className=${`comment-rank store-profile-rank rank-${getStoreRankSlug(item)}`.trim()}>
-                  ${(() => {
-                    const iconType = getRankIconType(getStoreRankLabel(item));
-                    return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
-                      <span>${getStoreRankLabel(item)}</span>`;
-                  })()}
-                </div>
-                <div className=${`comment-rank store-rank-title rank-${getStoreRankSlug(item)}`.trim()}>
-                  ${(() => {
-                    const iconType = getRankIconType(getStoreRankLabel(item));
-                    return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
-                      <span>${item.name}</span>`;
-                  })()}
-                </div>
                 <div className="store-badge-preview-row">
                   ${getStorePreviewBadges(item).map(
                     (label) => html`<${RankBadge} label=${label} className="store-owned-badge" />`,
@@ -6155,26 +6150,29 @@ function renderOwnedRankBadges(entry) {
   const staffBadgeChipClass = `profile-owned-badge staff-owned-badge ${
     entry.showStaffGradient === false ? "staff-static" : ""
   }`.trim();
-  return html`<div className="profile-card-badges-block">
-    <div className="profile-card-badges-title">Badges</div>
-    ${badges.length > 0
-      ? html`<div className="profile-card-badges-row">
-          ${showStaffBadgeChip
-            ? html`<span className=${staffBadgeChipClass}>
-                ${showStaffBadgeIcon ? html`<img className="staff-badge-icon" src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" />` : html``}
-                <span>STAFF</span>
-              </span>`
-            : html``}
-          ${badges.map((label) => {
-            const iconType = getRankIconType(label);
-            const slug = String(label).trim().toLowerCase();
-            return html`<span className=${`profile-owned-badge rank-${slug}`.trim()}>
-              ${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
-              <span>${getRankDisplayLabel(label)}</span>
-            </span>`;
-          })}
-        </div>`
-      : html`<div className="muted profile-card-badges-empty">No store rank badges yet.</div>`}
+  return html`<div className="profile-card-badges-stack">
+    <div className="profile-card-badges-block">
+      <div className="profile-card-badges-title">Badges</div>
+      ${badges.length > 0
+        ? html`<div className="profile-card-badges-row">
+            ${showStaffBadgeChip
+              ? html`<span className=${staffBadgeChipClass}>
+                  ${showStaffBadgeIcon ? html`<img className="staff-badge-icon" src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" />` : html``}
+                  <span>STAFF</span>
+                </span>`
+              : html``}
+            ${badges.map((label) => {
+              const iconType = getRankIconType(label);
+              const slug = String(label).trim().toLowerCase();
+              return html`<span className=${`profile-owned-badge rank-${slug}`.trim()}>
+                ${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                <span>${getRankDisplayLabel(label)}</span>
+              </span>`;
+            })}
+          </div>`
+        : html`<div className="muted profile-card-badges-empty">No store rank badges yet.</div>`}
+    </div>
+    <${ProfileAchievementsCard} achievements=${entry?.achievements || entry?.profileAchievements || []} />
   </div>`;
 }
 
@@ -7382,7 +7380,9 @@ function Layout() {
       username,
       image: String(item.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel,
+      ownedRank: normalizeOwnedRankLabel(item.authorOwnedRank || rankLabel),
       staff,
+      isStaffUser: staff,
       showStaffBadge: item?.authorShowStaffBadge !== false,
       showStaffBadgeIcon: item?.authorShowStaffBadgeIcon !== false,
       showStaffGradient: item?.authorShowStaffGradient !== false,
@@ -7908,6 +7908,7 @@ function Layout() {
                 })()}
               </div>
               ${renderStaffBadge(notificationProfileUser)}
+              ${renderOwnedRankBadges(notificationProfileUser)}
             </div>`
           : html``}
       <//>

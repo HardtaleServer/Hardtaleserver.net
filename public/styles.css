@@ -2787,6 +2787,12 @@ emoji-picker.reaction-picker-panel {
   margin-top: 2px;
 }
 
+.profile-card-badges-stack {
+  width: 100%;
+  display: grid;
+  gap: 10px;
+}
+
 .profile-card-badges-title {
   font-size: 11px;
   letter-spacing: 0.08em;
@@ -2816,6 +2822,36 @@ emoji-picker.reaction-picker-panel {
   letter-spacing: 0.06em;
 }
 
+.profile-owned-badge.rank-hero {
+  color: var(--rank-hero);
+  border-color: color-mix(in srgb, var(--rank-hero) 45%, var(--stroke));
+  background: color-mix(in srgb, var(--rank-hero) 10%, var(--bg-soft));
+}
+
+.profile-owned-badge.rank-legend {
+  color: var(--rank-legend);
+  border-color: color-mix(in srgb, var(--rank-legend) 45%, var(--stroke));
+  background: color-mix(in srgb, var(--rank-legend) 10%, var(--bg-soft));
+}
+
+.profile-owned-badge.rank-mythic {
+  color: var(--rank-mythic);
+  border-color: color-mix(in srgb, var(--rank-mythic) 45%, var(--stroke));
+  background: color-mix(in srgb, var(--rank-mythic) 10%, var(--bg-soft));
+}
+
+.profile-owned-badge.rank-registered,
+.profile-owned-badge.rank-linked {
+  color: var(--rank-registered);
+  border-color: color-mix(in srgb, var(--rank-registered) 42%, var(--stroke));
+  background: color-mix(in srgb, var(--rank-registered) 10%, var(--bg-soft));
+}
+
+.profile-owned-badge.rank-unregistered,
+.profile-owned-badge.rank-unlinked {
+  color: var(--muted);
+}
+
 .profile-owned-badge.staff-owned-badge {
   border-color: color-mix(in srgb, var(--accent) 42%, var(--stroke));
   background: color-mix(in srgb, var(--accent) 12%, var(--bg-soft));
@@ -2843,6 +2879,67 @@ emoji-picker.reaction-picker-panel {
 
 .profile-card-badges-empty {
   font-size: 12px;
+}
+
+.profile-achievements-card {
+  width: 100%;
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  background: var(--bg-soft);
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.profile-achievements-subtitle {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.profile-achievements-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.profile-achievement-chip {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  min-width: 62px;
+}
+
+.profile-achievement-circle {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--stroke));
+  background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 18%, var(--bg-soft)), var(--bg-soft));
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+  overflow: hidden;
+}
+
+.profile-achievement-circle img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-achievement-label {
+  font-size: 10px;
+  text-align: center;
+  color: var(--muted);
+}
+
+.profile-achievement-chip.locked .profile-achievement-circle {
+  filter: grayscale(1);
+  opacity: 0.7;
 }
 
 .profile-card-title-picker {
@@ -3359,7 +3456,7 @@ emoji-picker.reaction-picker-panel {
 }
 
 .store-rank-title {
-  justify-content: flex-start;
+  justify-content: center;
   font-size: 13px;
   font-weight: 700;
 }
