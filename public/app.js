@@ -48,7 +48,6 @@ const THEME_KEY = "hardtale-theme";
 const NAV_KEY = "hardtale-nav";
 const MENU_SIDE_KEY = "hardtale-menu-side";
 const MOBILE_NAV_STYLE_KEY = "hardtale-mobile-nav-style";
-const NOTIFICATIONS_SEEN_KEY = "hardtale-notifications-seen";
 const TICKET_COOLDOWN_KEY = "hardtale-ticket-cooldown";
 const TICKET_COOLDOWN_MS = 60 * 60 * 1000;
 const LOGO_SIDE_KEY = "hardtale-logo-side";
@@ -3522,6 +3521,7 @@ function SupportPage({ isAdmin }) {
                 <${TicketInboxList}
                   loading=${loading}
                   tickets=${tickets}
+                  formatTimestamp=${formatTimestamp}
                   onSelectTicket=${(ticketId) => setSelectedTicketId(ticketId)}
                 />
 
@@ -4156,6 +4156,14 @@ function NotFoundPage({
   }, [location.pathname]);
 
   useEffect(() => {
+    if (location.pathname !== "/support") return;
+    const ticketId = new URLSearchParams(location.search).get("ticketId") || "";
+    if (ticketId) {
+      setSelectedTicketId(ticketId);
+    }
+  }, [location.pathname, location.search]);
+
+  useEffect(() => {
     loadTickets();
   }, [isSignedIn, showSupportModal]);
 
@@ -4329,6 +4337,7 @@ function NotFoundPage({
                 <${TicketInboxList}
                   loading=${ticketLoading}
                   tickets=${tickets}
+                  formatTimestamp=${formatTimestamp}
                   onSelectTicket=${(ticketId) => setSelectedTicketId(ticketId)}
                 />
 
@@ -5155,22 +5164,13 @@ function Layout() {
 
   useEffect(() => {
     if (notificationsLoading) return;
-    const lastSeen = localStorage.getItem(NOTIFICATIONS_SEEN_KEY);
-    const newest = sortedNotifications[0]?.createdAt;
-    if (!newest) {
+    if (!isSignedIn || !userId) {
       setUnread(0);
       return;
     }
-
-    if (!lastSeen || new Date(newest) > new Date(lastSeen)) {
-      const count = sortedNotifications.filter(
-        (item) => !lastSeen || new Date(item.createdAt) > new Date(lastSeen),
-      ).length;
-      setUnread(count);
-    } else {
-      setUnread(0);
-    }
-  }, [sortedNotifications, notificationsLoading]);
+    const count = sortedNotifications.filter((item) => item?.readByMe !== true).length;
+    setUnread(count);
+  }, [sortedNotifications, notificationsLoading, isSignedIn, userId]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -5180,17 +5180,15 @@ function Layout() {
           setNews(Array.isArray(data.news) ? data.news : []);
         })
         .catch(() => {});
-      fetch("/api/notifications")
-        .then((res) => res.json())
+      apiFetchWithToken(getToken, true, "/api/notifications")
+        .then((res) => (res.ok ? res.json() : { notifications: [] }))
         .then((data) => {
-          setNotifications(
-            Array.isArray(data.notifications) ? data.notifications : [],
-          );
+          setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
         })
         .catch(() => {});
     }, 30000);
     return () => clearInterval(interval);
-  }, [setNews, setNotifications]);
+  }, [setNews, setNotifications, getToken]);
 
   useEffect(() => {
     if (!isAuthLoaded) return;
@@ -5228,6 +5226,25 @@ function Layout() {
   }, [isAuthLoaded, isSignedIn, userId, getToken]);
 
   useEffect(() => {
+    if (!isAuthLoaded) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await apiFetchWithToken(getToken, true, "/api/notifications");
+        if (!response.ok) return;
+        const data = await response.json();
+        if (cancelled) return;
+        setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
+      } catch {
+        // keep existing notifications if refresh fails
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthLoaded, isSignedIn, userId, getToken, setNotifications]);
+
+  useEffect(() => {
     if (!isSignedIn || !userId || !cartLoaded) return;
     apiFetchWithToken(getToken, true, "/api/cart", {
       method: "POST",
@@ -5245,11 +5262,33 @@ function Layout() {
     setShowCart(true);
   }, [pendingItem, isSignedIn, cartLoaded]);
 
-  function markNotificationsRead() {
-    const newest = sortedNotifications[0]?.createdAt;
-    if (newest) {
-      localStorage.setItem(NOTIFICATIONS_SEEN_KEY, newest);
+  async function markNotificationsRead() {
+    if (!isSignedIn || !userId) {
       setUnread(0);
+      return;
+    }
+    const unreadIds = sortedNotifications
+      .filter((item) => item?.readByMe !== true)
+      .map((item) => String(item?.id || "").trim())
+      .filter(Boolean);
+    if (unreadIds.length === 0) {
+      setUnread(0);
+      return;
+    }
+    try {
+      await apiFetchWithToken(getToken, true, "/api/notifications/read", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: unreadIds }),
+      });
+      setNotifications((prev) =>
+        prev.map((item) =>
+          unreadIds.includes(String(item?.id || "")) ? { ...item, readByMe: true } : item,
+        ),
+      );
+      setUnread(0);
+    } catch {
+      // Keep current unread state if mark-read fails.
     }
   }
 
@@ -5332,7 +5371,7 @@ function Layout() {
     setShowCart(true);
   }
 
-  const notificationCount = unread > 0 ? unread : sortedNotifications.length;
+  const notificationCount = isSignedIn ? unread : sortedNotifications.length;
   const year = new Date().getFullYear();
   const displayName = getUserDisplayName(user);
   const showLoader = !appHydrated || authTransitionLoading;

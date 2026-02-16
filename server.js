@@ -102,6 +102,7 @@ let commentRevisionsCollection = null;
 let reactionsCollection = null;
 let newsCollection = null;
 let notificationsCollection = null;
+let notificationReadsCollection = null;
 let cartsCollection = null;
 let purchasesCollection = null;
 let supportTicketsCollection = null;
@@ -119,6 +120,7 @@ function resetMongoState() {
   reactionsCollection = null;
   newsCollection = null;
   notificationsCollection = null;
+  notificationReadsCollection = null;
   cartsCollection = null;
   purchasesCollection = null;
   supportTicketsCollection = null;
@@ -151,6 +153,7 @@ async function connectMongo() {
     reactionsCollection &&
     newsCollection &&
     notificationsCollection &&
+    notificationReadsCollection &&
     cartsCollection &&
     purchasesCollection &&
     supportTicketsCollection &&
@@ -181,6 +184,7 @@ async function connectMongo() {
       reactionsCollection = mongoDb.collection("reactions");
       newsCollection = mongoDb.collection("news");
       notificationsCollection = mongoDb.collection("notifications");
+      notificationReadsCollection = mongoDb.collection("notification_reads");
       cartsCollection = mongoDb.collection("carts");
       purchasesCollection = mongoDb.collection("purchases");
       supportTicketsCollection = mongoDb.collection("support_tickets");
@@ -195,6 +199,8 @@ async function connectMongo() {
       await newsCollection.createIndex({ isDeleted: 1, createdAt: -1 });
       await notificationsCollection.createIndex({ id: 1 }, { unique: true });
       await notificationsCollection.createIndex({ isDeleted: 1, createdAt: -1 });
+      await notificationReadsCollection.createIndex({ userId: 1, notificationId: 1 }, { unique: true });
+      await notificationReadsCollection.createIndex({ userId: 1, readAt: -1 });
       await cartsCollection.createIndex({ userId: 1 }, { unique: true });
       await purchasesCollection.createIndex({ userId: 1, createdAt: -1 });
       await supportTicketsCollection.createIndex({ id: 1 }, { unique: true });
@@ -312,6 +318,7 @@ async function requireMongoReady(res) {
     !reactionsCollection ||
     !newsCollection ||
     !notificationsCollection ||
+    !notificationReadsCollection ||
     !cartsCollection ||
     !purchasesCollection ||
     !supportTicketsCollection
@@ -329,6 +336,7 @@ async function requireMongoReady(res) {
     !reactionsCollection ||
     !newsCollection ||
     !notificationsCollection ||
+    !notificationReadsCollection ||
     !cartsCollection ||
     !purchasesCollection ||
     !supportTicketsCollection
@@ -854,6 +862,55 @@ function normalizeNotificationItem(item) {
   };
 }
 
+async function resolveNotificationQueryForUser(userIdRaw) {
+  const userId = normalizeText(userIdRaw, 128);
+  let query = { isDeleted: false, $or: [{ targetUserId: { $exists: false } }, { targetUserId: "" }] };
+  if (!userId) {
+    return { userId: "", isAdmin: false, query };
+  }
+  let isAdmin = false;
+  try {
+    const user = await clerkClient.users.getUser(userId);
+    isAdmin = isAdminUser(user);
+  } catch {
+    isAdmin = false;
+  }
+  if (isAdmin) {
+    query = { isDeleted: false };
+  } else {
+    query = {
+      isDeleted: false,
+      $or: [
+        { targetUserId: { $exists: false } },
+        { targetUserId: "" },
+        { targetUserId: userId },
+      ],
+    };
+  }
+  return { userId, isAdmin, query };
+}
+
+async function withNotificationReadState(list = [], userIdRaw = "") {
+  const userId = normalizeText(userIdRaw, 128);
+  const items = stripMongoIdList(list);
+  if (!userId || items.length === 0) {
+    return items.map((item) => ({ ...item, readByMe: false }));
+  }
+  const ids = items.map((item) => normalizeText(item?.id, 128)).filter(Boolean);
+  if (ids.length === 0) {
+    return items.map((item) => ({ ...item, readByMe: false }));
+  }
+  const reads = await notificationReadsCollection
+    .find({ userId, notificationId: { $in: ids } })
+    .project({ notificationId: 1 })
+    .toArray();
+  const readSet = new Set(reads.map((entry) => String(entry.notificationId || "")));
+  return items.map((item) => ({
+    ...item,
+    readByMe: readSet.has(String(item.id || "")),
+  }));
+}
+
 function normalizeTicketSubject(value) {
   return normalizeText(value, 140);
 }
@@ -920,6 +977,16 @@ function toTicketSummary(ticket) {
     updatedAt: ticket.updatedAt,
     messageCount: Array.isArray(ticket.messages) ? ticket.messages.length : 0,
   };
+}
+
+async function purgeClosedSupportTickets() {
+  if (!supportTicketsCollection) return;
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  await supportTicketsCollection.deleteMany({
+    isDeleted: false,
+    status: "closed",
+    updatedAt: { $lte: cutoff },
+  });
 }
 
 const FORUM_SECTION_SET = new Set([
@@ -1268,38 +1335,60 @@ app.get("/api/notifications", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
     const auth = getAuth(req);
-    const userId = normalizeText(auth?.userId, 128);
-    let query = { isDeleted: false, $or: [{ targetUserId: { $exists: false } }, { targetUserId: "" }] };
-    if (userId) {
-      let isAdmin = false;
-      try {
-        const user = await clerkClient.users.getUser(userId);
-        isAdmin = isAdminUser(user);
-      } catch {
-        isAdmin = false;
-      }
-      if (!isAdmin) {
-        query = {
-          isDeleted: false,
-          $or: [
-            { targetUserId: { $exists: false } },
-            { targetUserId: "" },
-            { targetUserId: userId },
-          ],
-        };
-      } else {
-        query = { isDeleted: false };
-      }
-    }
+    const { userId, query } = await resolveNotificationQueryForUser(auth?.userId);
 
     const notifications = await notificationsCollection
       .find(query)
       .sort({ createdAt: -1 })
       .toArray();
-    return res.json({ notifications: stripMongoIdList(notifications) });
+    return res.json({ notifications: await withNotificationReadState(notifications, userId) });
   } catch (error) {
     console.error("Failed to load notifications", error);
     return res.status(500).json({ error: "Failed to load notifications" });
+  }
+});
+
+app.post("/api/notifications/read", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    const userId = normalizeText(auth?.userId, 128);
+    if (!userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const { query } = await resolveNotificationQueryForUser(userId);
+    const requestIds = Array.isArray(req.body?.ids)
+      ? req.body.ids.map((id) => normalizeText(id, 128)).filter(Boolean)
+      : [];
+    const visibilityFilter = requestIds.length > 0
+      ? { ...query, id: { $in: requestIds } }
+      : query;
+    const visible = await notificationsCollection
+      .find(visibilityFilter)
+      .project({ id: 1 })
+      .toArray();
+    const visibleIds = visible.map((entry) => normalizeText(entry.id, 128)).filter(Boolean);
+    if (visibleIds.length === 0) {
+      return res.json({ marked: 0 });
+    }
+    const now = new Date().toISOString();
+    await notificationReadsCollection.bulkWrite(
+      visibleIds.map((notificationId) => ({
+        updateOne: {
+          filter: { userId, notificationId },
+          update: {
+            $set: { readAt: now, updatedAt: now },
+            $setOnInsert: { id: crypto.randomUUID(), userId, notificationId, createdAt: now },
+          },
+          upsert: true,
+        },
+      })),
+      { ordered: false },
+    );
+    return res.json({ marked: visibleIds.length });
+  } catch (error) {
+    console.error("Failed to mark notifications as read", error);
+    return res.status(500).json({ error: "Failed to mark notifications as read" });
   }
 });
 
@@ -2166,7 +2255,9 @@ app.post("/api/notifications", async (req, res) => {
       .find({ isDeleted: false })
       .sort({ createdAt: -1 })
       .toArray();
-    return res.json({ notifications: stripMongoIdList(nextNotifications) });
+    return res.json({
+      notifications: await withNotificationReadState(nextNotifications, auth.userId),
+    });
   } catch (error) {
     console.error("Failed to create notification", error);
     return res.status(500).json({ error: "Failed to create notification" });
@@ -2194,7 +2285,9 @@ app.patch("/api/notifications/:id", async (req, res) => {
       .find({ isDeleted: false })
       .sort({ createdAt: -1 })
       .toArray();
-    return res.json({ notifications: stripMongoIdList(nextNotifications) });
+    return res.json({
+      notifications: await withNotificationReadState(nextNotifications, auth.userId),
+    });
   } catch (error) {
     console.error("Failed to update notification", error);
     return res.status(500).json({ error: "Failed to update notification" });
@@ -2224,12 +2317,15 @@ app.delete("/api/notifications/:id", async (req, res) => {
         { $set: { isDeleted: true, updatedAt: new Date().toISOString() } },
       );
     }
+    await notificationReadsCollection.deleteMany({ notificationId: req.params.id });
 
     const nextNotifications = await notificationsCollection
       .find({ isDeleted: false })
       .sort({ createdAt: -1 })
       .toArray();
-    return res.json({ notifications: stripMongoIdList(nextNotifications) });
+    return res.json({
+      notifications: await withNotificationReadState(nextNotifications, auth.userId),
+    });
   } catch (error) {
     console.error("Failed to delete notification", error);
     return res.status(500).json({ error: "Failed to delete notification" });
@@ -2434,6 +2530,7 @@ app.post("/api/forum/posts", async (req, res) => {
 app.get("/api/forum/tickets", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
+    await purgeClosedSupportTickets();
     const auth = getAuth(req);
     if (!auth?.userId) {
       return res.status(401).json({ error: "Not authenticated" });
@@ -2463,6 +2560,7 @@ app.get("/api/forum/tickets", async (req, res) => {
 app.post("/api/forum/tickets", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
+    await purgeClosedSupportTickets();
     const auth = getAuth(req);
     if (!auth?.userId) {
       return res.status(401).json({ error: "Not authenticated" });
@@ -2510,6 +2608,7 @@ app.post("/api/forum/tickets", async (req, res) => {
 app.get("/api/forum/tickets/:id", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
+    await purgeClosedSupportTickets();
     const auth = getAuth(req);
     if (!auth?.userId) {
       return res.status(401).json({ error: "Not authenticated" });
@@ -2537,6 +2636,7 @@ app.get("/api/forum/tickets/:id", async (req, res) => {
 app.post("/api/forum/tickets/:id/messages", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
+    await purgeClosedSupportTickets();
     const auth = getAuth(req);
     if (!auth?.userId) {
       return res.status(401).json({ error: "Not authenticated" });
@@ -2576,6 +2676,20 @@ app.post("/api/forum/tickets/:id/messages", async (req, res) => {
         },
       },
     );
+    if (isAdmin && doc.createdBy && doc.createdBy !== auth.userId) {
+      await notificationsCollection.insertOne({
+        id: crypto.randomUUID(),
+        title: "Support Reply",
+        message: `${getUserDisplayName(user)} replied to your ticket: ${String(doc.subject || "Support Ticket")}`,
+        author: getUserDisplayName(user),
+        featured: false,
+        readMoreUrl: `/support?ticketId=${encodeURIComponent(ticketId)}`,
+        targetUserId: doc.createdBy,
+        isDeleted: false,
+        createdAt: new Date().toISOString(),
+      });
+      await pruneCollection(notificationsCollection, 120);
+    }
     const updated = await supportTicketsCollection.findOne({ id: ticketId, isDeleted: false });
     return res.json({ ticket: normalizeTicketDoc(updated) });
   } catch (error) {
@@ -2587,6 +2701,7 @@ app.post("/api/forum/tickets/:id/messages", async (req, res) => {
 app.patch("/api/forum/tickets/:id", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
+    await purgeClosedSupportTickets();
     const auth = getAuth(req);
     if (!auth?.userId) {
       return res.status(401).json({ error: "Not authenticated" });

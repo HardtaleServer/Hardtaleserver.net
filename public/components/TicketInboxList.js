@@ -7,6 +7,7 @@ export default function TicketInboxList({
   loading = false,
   tickets = [],
   onSelectTicket,
+  formatTimestamp,
 }) {
   if (loading) {
     return html`<p className="muted">Loading tickets...</p>`;
@@ -23,7 +24,8 @@ export default function TicketInboxList({
           type="button"
           onClick=${() => onSelectTicket && onSelectTicket(ticket.id)}
         >
-          ${ticket.subject} - ${ticket.status.toUpperCase()}
+          <div>${ticket.subject} - ${ticket.status.toUpperCase()}</div>
+          <div className="muted">${formatTimestamp ? formatTimestamp(ticket.updatedAt || ticket.createdAt) : ""}</div>
         </button>`,
       )}
     </div>
