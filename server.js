@@ -506,7 +506,8 @@ function getUserDisplayName(user) {
 }
 
 function resolveStaffBadgeVisible(metadata = {}) {
-  return metadata?.showStaffBadge !== false;
+  // Staff badge is controlled by the staff-gradient toggle.
+  return resolveStaffGradientVisible(metadata);
 }
 
 function resolveStaffGradientVisible(metadata = {}) {
@@ -1072,7 +1073,6 @@ app.get("/api/profile/title", async (req, res) => {
       ownedRank,
       selectedTitle: displayRank,
       availableTitles,
-      canToggleStaffBadge: isStaff,
       showStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
       canToggleStaffGradient: isStaff,
       showStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
@@ -1128,11 +1128,18 @@ app.post("/api/profile/staff-gradient", async (req, res) => {
       publicMetadata: {
         ...user.publicMetadata,
         showStaffGradient,
+        showStaffBadge: showStaffGradient,
       },
     });
     await commentsCollection.updateMany(
       { userId: auth.userId, isDeleted: false },
-      { $set: { authorShowStaffGradient: showStaffGradient, updatedAt: new Date() } },
+      {
+        $set: {
+          authorShowStaffGradient: showStaffGradient,
+          authorShowStaffBadge: showStaffGradient,
+          updatedAt: new Date(),
+        },
+      },
     );
     return res.json({ showStaffGradient });
   } catch (error) {

@@ -1139,7 +1139,6 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
   const [profileUser, setProfileUser] = useState(null);
   const [profileTitleStatus, setProfileTitleStatus] = useState("");
   const [profileTitleSaving, setProfileTitleSaving] = useState(false);
-  const [profileStaffBadgeSaving, setProfileStaffBadgeSaving] = useState(false);
   const [profileStaffGradientSaving, setProfileStaffGradientSaving] = useState(false);
   const [profileRankEffectsSaving, setProfileRankEffectsSaving] = useState(false);
   const [profileAvatarVfxSaving, setProfileAvatarVfxSaving] = useState(false);
@@ -1479,8 +1478,6 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
       return {
         availableTitles: availableTitles.length > 0 ? availableTitles : fallbackTitles,
         selectedTitle: selectedTitle || ownedRank || "Unregistered",
-        canToggleStaffBadge: Boolean(data?.canToggleStaffBadge),
-        showStaffBadge: data?.showStaffBadge !== false,
         canToggleStaffGradient: Boolean(data?.canToggleStaffGradient),
         showStaffGradient: data?.showStaffGradient !== false,
         canToggleRankEffects: Boolean(data?.canToggleRankEffects),
@@ -1546,49 +1543,6 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
     }
   }
 
-  async function updateOwnStaffBadgeVisibility(nextVisible) {
-    if (!profileUser?.isOwn || !profileUser?.canToggleStaffBadge || profileStaffBadgeSaving) return;
-    setProfileStaffBadgeSaving(true);
-    setProfileTitleStatus("Saving...");
-    try {
-      const response = await apiFetchWithToken(getToken, true, "/api/profile/staff-badge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ showStaffBadge: Boolean(nextVisible) }),
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data?.error || "Failed to save staff badge.");
-      }
-      const data = await response.json();
-      const showStaffBadge = data?.showStaffBadge !== false;
-      setProfileUser((prev) => (prev ? { ...prev, showStaffBadge } : prev));
-      setComments((prev) =>
-        prev.map((comment) => {
-          if (!comment) return comment;
-          const nextComment =
-            comment.userId === userId ? { ...comment, authorShowStaffBadge: showStaffBadge } : comment;
-          const replies = Array.isArray(nextComment.replies) ? nextComment.replies : [];
-          if (replies.length === 0) return nextComment;
-          return {
-            ...nextComment,
-            replies: replies.map((reply) =>
-              reply?.userId === userId
-                ? { ...reply, authorShowStaffBadge: showStaffBadge }
-                : reply,
-            ),
-          };
-        }),
-      );
-      setProfileTitleStatus("Saved.");
-      setTimeout(() => setProfileTitleStatus(""), 1200);
-    } catch (error) {
-      setProfileTitleStatus(error?.message || "Failed to save staff badge.");
-    } finally {
-      setProfileStaffBadgeSaving(false);
-    }
-  }
-
   async function updateOwnStaffGradientVisibility(nextVisible) {
     if (!profileUser?.isOwn || !profileUser?.canToggleStaffGradient || profileStaffGradientSaving) return;
     setProfileStaffGradientSaving(true);
@@ -1606,14 +1560,25 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
       const data = await response.json();
       const showStaffGradient = data?.showStaffGradient !== false;
       setProfileUser((prev) =>
-        prev ? { ...prev, showStaffGradient, staff: prev.isStaffUser && showStaffGradient } : prev,
+        prev
+          ? {
+              ...prev,
+              showStaffGradient,
+              showStaffBadge: showStaffGradient,
+              staff: prev.isStaffUser && showStaffGradient,
+            }
+          : prev,
       );
       setComments((prev) =>
         prev.map((comment) => {
           if (!comment) return comment;
           const nextComment =
             comment.userId === userId
-              ? { ...comment, authorShowStaffGradient: showStaffGradient }
+              ? {
+                  ...comment,
+                  authorShowStaffGradient: showStaffGradient,
+                  authorShowStaffBadge: showStaffGradient,
+                }
               : comment;
           const replies = Array.isArray(nextComment.replies) ? nextComment.replies : [];
           if (replies.length === 0) return nextComment;
@@ -1621,7 +1586,11 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
             ...nextComment,
             replies: replies.map((reply) =>
               reply?.userId === userId
-                ? { ...reply, authorShowStaffGradient: showStaffGradient }
+                ? {
+                    ...reply,
+                    authorShowStaffGradient: showStaffGradient,
+                    authorShowStaffBadge: showStaffGradient,
+                  }
                 : reply,
             ),
           };
@@ -1732,8 +1701,6 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
     const isStaffUser = STAFF_EMAILS.has(email) || isStaffLabel(username) || isStaffLabel(authorName);
     let availableTitles = [];
     let selectedTitle = rank.label;
-    let canToggleStaffBadge = false;
-    let showStaffBadge = entry?.authorShowStaffBadge !== false;
     let canToggleStaffGradient = false;
     let showStaffGradient = entry?.authorShowStaffGradient !== false;
     let canToggleRankEffects = false;
@@ -1745,8 +1712,6 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
       if (settings) {
         availableTitles = settings.availableTitles;
         selectedTitle = settings.selectedTitle || rank.label;
-        canToggleStaffBadge = Boolean(settings.canToggleStaffBadge);
-        showStaffBadge = settings.showStaffBadge !== false;
         canToggleStaffGradient = Boolean(settings.canToggleStaffGradient);
         showStaffGradient = settings.showStaffGradient !== false;
         canToggleRankEffects = Boolean(settings.canToggleRankEffects);
@@ -1768,10 +1733,9 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
       isOwn,
       isStaffUser,
       availableTitles,
-      canToggleStaffBadge,
-      showStaffBadge,
       canToggleStaffGradient,
       showStaffGradient,
+      showStaffBadge: showStaffGradient,
       canToggleRankEffects,
       showRankEffects,
       canToggleAvatarVfx,
@@ -2210,17 +2174,6 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
                     <span>Enable avatar effects</span>
                   </label>`
                 : html``}
-              ${profileUser.isOwn && profileUser.canToggleStaffBadge
-                ? html`<label className="profile-card-toggle">
-                    <input
-                      type="checkbox"
-                      checked=${profileUser.showStaffBadge !== false}
-                      disabled=${profileStaffBadgeSaving}
-                      onChange=${(event) => updateOwnStaffBadgeVisibility(event.target.checked)}
-                    />
-                    <span>Show staff badge</span>
-                  </label>`
-                : html``}
               ${profileUser.isOwn && profileUser.canToggleStaffGradient
                 ? html`<label className="profile-card-toggle">
                     <input
@@ -2235,7 +2188,7 @@ function CommentThread({ newsId, focusCommentId, focusReplyId, autoOpen, comment
               ${profileTitleStatus && profileUser.isOwn
                 ? html`<div className="muted profile-card-title-status">${profileTitleStatus}</div>`
                 : html``}
-              ${profileUser.isStaffUser && profileUser.showStaffBadge !== false
+              ${profileUser.isStaffUser && profileUser.showStaffGradient !== false
                 ? html`<div className="profile-card-badge">Hardtale Staff Member</div>`
                 : html``}
             </div>`
