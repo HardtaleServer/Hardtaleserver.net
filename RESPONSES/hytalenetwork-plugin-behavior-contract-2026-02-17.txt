@@ -1,0 +1,149 @@
+HardtaleNetwork Plugin Behavior Contract (Java)
+Date: 2026-02-17
+
+Purpose
+- Define exactly how the Java plugin should call Hardtale backend routes and handle responses.
+- Remove ambiguity around token auth, route selection, payload shape, and retry behavior.
+
+Backend Base URL
+- Production: https://hardtaleserver-net.onrender.com
+
+Required plugin config (env or plugin config map)
+- HARDTALE_API_BASE_URL=https://hardtaleserver-net.onrender.com
+- HARDTALE_API_TOKEN=<shared token>    (required)
+- HARDTALE_SERVER_NAME=prod            (or dev/staging for your target server)
+
+Route defaults (preferred for current backend)
+- HARDTALE_LINK_CREATE_PATH=/api/link/create
+- HARDTALE_LINK_STATUS_PATH=/api/link/status
+- HARDTALE_FULFILLMENT_PENDING_PATH=/api/fulfillment/pending
+- HARDTALE_FULFILLMENT_ACK_PATH=/api/fulfillment/ack
+
+Alternate routes still supported
+- /api/internal/fulfillment/pending
+- /api/internal/fulfillment/ack
+- /api/server/pending-fulfillments
+- /api/server/ack-fulfillment
+
+Startup requirements (fail fast)
+1) Token must be non-blank after trim.
+2) Base URL must be non-blank and valid HTTPS URL.
+3) Route paths must begin with "/".
+4) Log a startup diagnostics line with:
+   - resolved base URL
+   - resolved pending/ack paths
+   - server name
+   - tokenConfigured=true|false (never print token value)
+
+Auth contract (exact)
+- Send BOTH headers on every backend call:
+  - Authorization: Bearer <TOKEN>
+  - X-Service-Auth: <TOKEN>
+- "Bearer " prefix must be exact case with a trailing space.
+- Do not send Authorization header when token is blank.
+- Trim token once at load time and reuse normalized token.
+
+Known backend token acceptance
+- /api/fulfillment/* accepts token if it matches one of:
+  - HARDTALE_API_TOKEN
+  - FULFILLMENT_API_TOKEN
+  - LINK_SERVICE_AUTH_TOKEN
+- /api/internal/* uses SERVER_SECRET (which may be set from SERVER_SECRET or fall back to HARDTALE_API_TOKEN/FULFILLMENT_API_TOKEN).
+
+Fulfillment poll request
+- Method: GET
+- Path: /api/fulfillment/pending
+- Query:
+  - server=<HARDTALE_SERVER_NAME>
+  - limit=50 (recommended default)
+- Optional: online uuid filters if implemented.
+
+Fulfillment poll response (expected)
+- 200 body shape:
+  {
+    "server": "prod|dev|...",
+    "actions": [
+      {
+        "id": "purchaseId",
+        "playerUuid": "uuid",
+        "type": "PURCHASE_GRANT",
+        "payload": {
+          "purchaseId": "purchaseId",
+          "grants": [ ... ]
+        },
+        "createdAt": "ISO-8601"
+      }
+    ],
+    "purchases": [ ... ]   // legacy compatibility
+  }
+
+Action processing rules
+1) Ignore unknown action types with warn log.
+2) For PURCHASE_GRANT:
+   - Require action.id and playerUuid.
+   - Parse payload.grants as list.
+   - Apply grants idempotently (safe if duplicate poll returns same id).
+3) ACK each processed action with APPLIED or FAILED.
+4) Include error text for FAILED acks.
+
+ACK request
+- Method: POST
+- Path: /api/fulfillment/ack
+- Body (preferred):
+  {
+    "id": "<action.id>",
+    "status": "APPLIED" | "FAILED",
+    "error": "optional failure reason"
+  }
+
+ACK success response
+- 200:
+  {
+    "success": true,
+    "id": "...",
+    "purchaseId": "...",
+    "status": "APPLIED|FAILED",
+    "alreadyFinal": true|false
+  }
+
+HTTP status triage
+- 200: Success; continue normal poll cadence.
+- 400: Request bug (path/query/body mismatch). Log as error with body snippet.
+- 401 with {"error":"Missing Authorization bearer token"}:
+  - Authorization bearer missing/malformed/blank at runtime.
+  - Check token load, trim, and exact "Bearer " prefix.
+- 403 with {"error":"Invalid server secret"}:
+  - Token mismatch between plugin and backend env.
+- 404 on ack:
+  - Purchase not found or already absent; log warn and continue.
+- 500:
+  - Backend issue; retry with backoff.
+- 503:
+  - Backend token not configured; server env issue.
+
+Retry/backoff behavior
+- Poll loop should never crash plugin boot.
+- On non-2xx:
+  - Log one structured warn per failure: method, URL, status, short body.
+  - Exponential backoff with cap (example: 2s, 4s, 8s, 15s, 30s max).
+- On success:
+  - Reset backoff to baseline.
+
+Logging requirements
+- Never log raw token.
+- Include:
+  - method
+  - route
+  - status code
+  - authHeaderAttached=true|false
+  - tokenConfigured=true|false
+  - correlation id/request id if available
+
+Known-good manual auth test (replace TOKEN)
+- curl -i "https://hardtaleserver-net.onrender.com/api/fulfillment/pending?server=dev&limit=1" -H "Authorization: Bearer TOKEN" -H "X-Service-Auth: TOKEN"
+
+Definition of done for plugin auth
+1) Startup log shows tokenConfigured=true.
+2) Poll endpoint returns 200 at least once.
+3) At least one ACK returns success=true.
+4) No repeated 401/403 in steady-state logs.
