@@ -155,6 +155,9 @@ const SMURFIS_TEST_LINK_EMAILS = new Set([
   "hytaleserver@gmail.com",
 ]);
 const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || "").trim();
+const STRIPE_PUBLISHABLE_KEY = String(
+  process.env.STRIPE_PUBLISHABLE_KEY || process.env.VITE_STRIPE_PUBLISHABLE_KEY || "",
+).trim();
 const STRIPE_CURRENCY = String(process.env.STRIPE_CURRENCY || "usd")
   .trim()
   .toLowerCase();
@@ -654,6 +657,7 @@ async function processCartCheckout(userId, options = {}) {
   const purchaseProvider = normalizeText(options?.purchaseProvider, 40) || "LOCAL";
   const paymentStatus = normalizeText(options?.paymentStatus, 40) || "PAID";
   const stripeSessionId = normalizeText(options?.stripeSessionId, 160);
+  const stripePaymentIntentId = normalizeText(options?.stripePaymentIntentId, 160);
   const linked = await linkedAccountsCollection.findOne(
     { webUserId: userId },
     { projection: { _id: 1, playerUuid: 1 } },
@@ -709,6 +713,7 @@ async function processCartCheckout(userId, options = {}) {
       fulfilled: false,
       provider: purchaseProvider,
       stripeSessionId: stripeSessionId || null,
+      stripePaymentIntentId: stripePaymentIntentId || null,
       items,
       total,
       awardedRank: awardedRank || null,
@@ -3747,6 +3752,112 @@ app.post("/api/payments/stripe/create-checkout-session", async (req, res) => {
   }
 });
 
+app.post("/api/payments/stripe/create-payment-intent", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    if (!stripeClient || !STRIPE_ENABLED) {
+      return res.status(503).json({ error: "Stripe payment is not configured" });
+    }
+    if (!STRIPE_PUBLISHABLE_KEY) {
+      return res.status(503).json({ error: "Stripe publishable key is not configured" });
+    }
+
+    const linked = await linkedAccountsCollection.findOne(
+      { webUserId: auth.userId },
+      { projection: { _id: 1 } },
+    );
+    if (!linked) {
+      return res.status(403).json({ error: "Link your game account before checkout" });
+    }
+
+    const cart = await cartsCollection.findOne({ userId: auth.userId });
+    const items = normalizeCartItems(cart?.items || []);
+    if (items.length === 0) {
+      return res.status(400).json({ error: "Cart is empty" });
+    }
+
+    const amount = toStripeUnitAmount(
+      items.reduce((sum, entry) => sum + (STORE_RANK_PRODUCTS[entry.id]?.price || 0), 0),
+    );
+    if (amount <= 0) {
+      return res.status(400).json({ error: "Cart total is invalid" });
+    }
+
+    const intent = await stripeClient.paymentIntents.create({
+      amount,
+      currency: STRIPE_CURRENCY,
+      automatic_payment_methods: { enabled: true },
+      metadata: {
+        userId: auth.userId,
+        cartItemIds: items.map((entry) => entry.id).join(","),
+      },
+    });
+
+    return res.json({
+      success: true,
+      publishableKey: STRIPE_PUBLISHABLE_KEY,
+      clientSecret: intent.client_secret || "",
+      paymentIntentId: intent.id,
+    });
+  } catch (error) {
+    console.error("Failed to create Stripe payment intent", error);
+    return res.status(500).json({ error: "Failed to start Stripe payment" });
+  }
+});
+
+app.post("/api/payments/stripe/finalize-intent", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    if (!stripeClient || !STRIPE_ENABLED) {
+      return res.status(503).json({ error: "Stripe payment is not configured" });
+    }
+
+    const paymentIntentId = normalizeText(req.body?.paymentIntentId, 160);
+    if (!paymentIntentId) {
+      return res.status(400).json({ error: "paymentIntentId is required" });
+    }
+    const intent = await stripeClient.paymentIntents.retrieve(paymentIntentId);
+    if (!intent) {
+      return res.status(404).json({ error: "Payment intent not found" });
+    }
+    const intentUserId = normalizeText(intent?.metadata?.userId, 128);
+    if (intentUserId && intentUserId !== auth.userId) {
+      return res.status(403).json({ error: "Payment intent does not belong to this user" });
+    }
+    if (String(intent.status || "").toLowerCase() !== "succeeded") {
+      return res.status(400).json({ error: "Payment has not completed yet" });
+    }
+
+    const result = await processCartCheckout(auth.userId, {
+      purchaseId: intent.id,
+      purchaseProvider: "STRIPE",
+      paymentStatus: "PAID",
+      stripePaymentIntentId: intent.id,
+    });
+    return res.json({
+      success: true,
+      cart: { items: result.cartItems },
+      purchaseId: result.purchaseId,
+      awardedRank: result.awardedRank,
+      alreadyProcessed: result.alreadyProcessed,
+    });
+  } catch (error) {
+    if (error?.status) {
+      return res.status(error.status).json({ error: error.message || "Checkout failed" });
+    }
+    console.error("Failed to finalize Stripe payment intent", error);
+    return res.status(500).json({ error: "Failed to finalize Stripe payment" });
+  }
+});
+
 app.post("/api/payments/stripe/complete", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
@@ -4640,7 +4751,7 @@ app.get("/logo.png", (req, res) => {
 app.get("/env.js", (req, res) => {
   res.type("application/javascript");
   res.send(
-    `window.__CLERK_PUBLISHABLE_KEY__ = ${JSON.stringify(CLERK_PUBLISHABLE_KEY)};\nwindow.__LOCAL_DEV_MODE__ = ${JSON.stringify(LOCAL_DEV_MODE)};`,
+    `window.__CLERK_PUBLISHABLE_KEY__ = ${JSON.stringify(CLERK_PUBLISHABLE_KEY)};\nwindow.__STRIPE_PUBLISHABLE_KEY__ = ${JSON.stringify(STRIPE_PUBLISHABLE_KEY)};\nwindow.__LOCAL_DEV_MODE__ = ${JSON.stringify(LOCAL_DEV_MODE)};`,
   );
 });
 

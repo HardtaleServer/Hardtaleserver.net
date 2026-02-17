@@ -49,6 +49,7 @@ const html = htm.bind(React.createElement);
 const SERVER_IP = "play.hardtale.net";
 const PLAYER_COUNT = "60+";
 const PUBLISHABLE_KEY = window.__CLERK_PUBLISHABLE_KEY__;
+const STRIPE_PUBLISHABLE_KEY = window.__STRIPE_PUBLISHABLE_KEY__ || "";
 const LOCAL_DEV_MODE = window.__LOCAL_DEV_MODE__ === true;
 const LOGO_SRC = "/Images/IslandLogo/Hero_Island_Logo.png";
 const THEME_KEY = "hardtale-theme";
@@ -73,12 +74,13 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.40";
+const VERSION = "1.3.41";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/Copyright.svg";
 const FEATURED_BADGE_ICON_SVG = "/Images/SVGs/Featured.svg";
 const DELETE_ICON_SVG = "/Images/SVGs/Delete.svg";
+const NOTIFICATIONS_ICON_SVG = "/Images/SVGs/Notifications.svg";
 const LINKED_STATUS_ICON_SVG = "/Images/SVGs/LINKED.svg";
 const UNLINKED_STATUS_ICON_SVG = "/Images/SVGs/UNLINKED.svg";
 const DEFAULT_PROFILE_AVATAR_SVG = "/Images/SVGs/DEFAULT_PROFILE_AVATAR.svg";
@@ -160,6 +162,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.41",
+    date: "2026-02-17",
+    items: [
+      "Added embedded Stripe Payment Element directly inside the existing cart popup so checkout stays fully on-site and in-flow.",
+      "Added Stripe PaymentIntent server APIs for secure in-modal payment creation and finalization.",
+      "Kept legacy checkout/session routes as fallback paths without removing prior functionality.",
+    ],
+  },
   {
     version: "1.3.40",
     date: "2026-02-17",
@@ -3972,7 +3983,7 @@ function SettingsMenu({
           setTimeout(() => setSpinning(false), 420);
         }}
       >
-        <img className="settings-icon" src="/Images/SVGs/SETTINGS_SVG.svg" alt="" />
+        <span className="settings-icon-mask" aria-hidden="true"></span>
       </button>
       ${open
         ? html`<div className=${`settings-menu ${!isMobileView && placement === "right" ? "menu-right" : ""} ${!isMobileView && desktopStickyWide ? "menu-short" : ""}`}>
@@ -4262,9 +4273,11 @@ function NotificationsButton({ count, onClick, flashEnabled }) {
   }
   return html`
     <button className="settings-button notif" title="Notifications" onClick=${handleClick}>
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M12 22a2.5 2.5 0 0 0 2.4-2H9.6A2.5 2.5 0 0 0 12 22zm7-6V11a7 7 0 1 0-14 0v5L3 18v1h18v-1l-2-2z" />
-      </svg>
+      <span
+        className="notif-icon-mask"
+        aria-hidden="true"
+        style=${{ "--notif-icon": `url(${NOTIFICATIONS_ICON_SVG})` }}
+      ></span>
       ${count > 0 ? html`<span className="cart-badge notif-badge">${count}</span>` : html``}
     </button>
   `;
@@ -6904,7 +6917,7 @@ function NotFoundPage({
   const navigate = useNavigate();
   const { user } = useUser();
   const { getToken, isSignedIn } = useAuth();
-  const { openSignIn } = useClerk();
+  const { openSignIn, openUserProfile } = useClerk();
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showSupportModal, setShowSupportModal] = useState(
     location.pathname === "/support",
@@ -8263,7 +8276,17 @@ function Layout() {
   const toastTimersRef = useRef(new Map());
   const seenAchievementToastIdsRef = useRef(new Set());
   const stripeFinalizeKeyRef = useRef("");
+  const stripeMountRef = useRef(null);
+  const stripeClientRef = useRef(null);
+  const stripeElementsRef = useRef(null);
+  const stripePaymentElementRef = useRef(null);
+  const [stripeClientSecret, setStripeClientSecret] = useState("");
+  const [stripePaymentIntentId, setStripePaymentIntentId] = useState("");
+  const [stripeReady, setStripeReady] = useState(false);
+  const [stripeInitializing, setStripeInitializing] = useState(false);
+  const [stripeInlineError, setStripeInlineError] = useState("");
   const cartCount = useMemo(() => cart.length, [cart]);
+  const cartSignature = useMemo(() => serializeCartItems(cart).join(","), [cart]);
   const sortedNews = useMemo(() => {
     const copy = [...news];
     copy.sort((a, b) => {
@@ -8678,6 +8701,106 @@ function Layout() {
       }
     })();
   }, [location.pathname, location.search, isSignedIn, userId, getToken, navigate]);
+
+  useEffect(() => {
+    if (showCart) return;
+    setStripeReady(false);
+    setStripeInlineError("");
+    setStripeClientSecret("");
+    setStripePaymentIntentId("");
+    if (stripePaymentElementRef.current) {
+      try {
+        stripePaymentElementRef.current.unmount();
+      } catch {}
+      stripePaymentElementRef.current = null;
+    }
+    stripeElementsRef.current = null;
+  }, [showCart]);
+
+  useEffect(() => {
+    if (!showCart || !isSignedIn || !userId || cart.length === 0) return;
+    if (!STRIPE_PUBLISHABLE_KEY) return;
+    if (typeof window === "undefined" || typeof window.Stripe !== "function") {
+      setStripeInlineError("Stripe payment UI failed to load. Please refresh and try again.");
+      return;
+    }
+    let cancelled = false;
+    setStripeInitializing(true);
+    setStripeReady(false);
+    setStripeInlineError("");
+    setStripeClientSecret("");
+    setStripePaymentIntentId("");
+    (async () => {
+      try {
+        const response = await apiFetchWithToken(getToken, true, "/api/payments/stripe/create-payment-intent", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(String(data?.error || "Unable to start secure payment."));
+        }
+        if (cancelled) return;
+        setStripeClientSecret(String(data?.clientSecret || ""));
+        setStripePaymentIntentId(String(data?.paymentIntentId || ""));
+      } catch (error) {
+        if (cancelled) return;
+        setStripeInlineError(String(error?.message || "Unable to start secure payment."));
+      } finally {
+        if (!cancelled) setStripeInitializing(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showCart, isSignedIn, userId, cartSignature, cart.length, getToken]);
+
+  useEffect(() => {
+    if (!showCart || !stripeClientSecret || !stripeMountRef.current) return;
+    if (!STRIPE_PUBLISHABLE_KEY) return;
+    if (typeof window === "undefined" || typeof window.Stripe !== "function") return;
+
+    if (!stripeClientRef.current) {
+      stripeClientRef.current = window.Stripe(STRIPE_PUBLISHABLE_KEY);
+    }
+    if (!stripeClientRef.current) return;
+
+    if (stripePaymentElementRef.current) {
+      try {
+        stripePaymentElementRef.current.unmount();
+      } catch {}
+      stripePaymentElementRef.current = null;
+    }
+
+    const appearance = {
+      theme: theme === "light" ? "stripe" : "night",
+      variables: {
+        colorPrimary: "#2aa3ff",
+      },
+    };
+    const elements = stripeClientRef.current.elements({
+      clientSecret: stripeClientSecret,
+      appearance,
+    });
+    const paymentElement = elements.create("payment", {
+      layout: { type: "tabs", defaultCollapsed: false },
+    });
+    paymentElement.mount(stripeMountRef.current);
+    stripeElementsRef.current = elements;
+    stripePaymentElementRef.current = paymentElement;
+    setStripeReady(true);
+
+    return () => {
+      if (stripePaymentElementRef.current) {
+        try {
+          stripePaymentElementRef.current.unmount();
+        } catch {}
+        stripePaymentElementRef.current = null;
+      }
+      stripeElementsRef.current = null;
+      setStripeReady(false);
+    };
+  }, [showCart, stripeClientSecret, theme]);
 
   useEffect(() => {
     if (notificationsLoading) return;
@@ -9127,25 +9250,68 @@ function Layout() {
 
   async function checkout() {
     if (!isSignedIn || cart.length === 0) return;
-    setCartStatus("Starting secure checkout...");
-    try {
-      const stripeResponse = await apiFetchWithToken(
-        getToken,
-        true,
-        "/api/payments/stripe/create-checkout-session",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        },
-      );
-      const stripeData = await stripeResponse.json().catch(() => ({}));
-      if (stripeResponse.ok && stripeData?.checkoutUrl) {
-        setCartStatus("Redirecting to Stripe...");
-        window.location.assign(String(stripeData.checkoutUrl));
+    const stripeAvailable =
+      Boolean(STRIPE_PUBLISHABLE_KEY) &&
+      typeof window !== "undefined" &&
+      typeof window.Stripe === "function";
+
+    if (stripeAvailable) {
+      if (stripeInitializing) {
+        setCartStatus("Loading secure payment fields...");
         return;
       }
+      if (!stripeReady || !stripeElementsRef.current || !stripeClientRef.current) {
+        setCartStatus("Secure payment form is not ready yet.");
+        return;
+      }
+      setCartStatus("Processing secure payment...");
+      try {
+        const result = await stripeClientRef.current.confirmPayment({
+          elements: stripeElementsRef.current,
+          redirect: "if_required",
+        });
+        if (result?.error) {
+          throw new Error(String(result.error.message || "Payment failed."));
+        }
+        const intent = result?.paymentIntent || null;
+        const intentId = String(intent?.id || stripePaymentIntentId || "").trim();
+        if (!intentId) {
+          throw new Error("Payment reference missing after confirmation.");
+        }
+        if (String(intent?.status || "").toLowerCase() !== "succeeded") {
+          setCartStatus("Payment is processing. Please wait a moment and try again.");
+          return;
+        }
+        const finalizeResponse = await apiFetchWithToken(
+          getToken,
+          true,
+          "/api/payments/stripe/finalize-intent",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ paymentIntentId: intentId }),
+          },
+        );
+        const finalizeData = await finalizeResponse.json().catch(() => ({}));
+        if (!finalizeResponse.ok) {
+          throw new Error(String(finalizeData?.error || "Failed to finalize payment."));
+        }
+        setCart(buildCartFromIds(finalizeData?.cart?.items || []));
+        const awardedRank = String(finalizeData?.awardedRank || "").trim();
+        setCartStatus(awardedRank ? `Checkout complete. Rank awarded: ${awardedRank}` : "Checkout complete.");
+        setTimeout(() => {
+          setShowCart(false);
+          setCartStatus("");
+        }, 900);
+        return;
+      } catch (error) {
+        setCartStatus(String(error?.message || "Secure checkout failed. Please try again."));
+        return;
+      }
+    }
 
-      // Fallback path keeps existing behavior for environments without Stripe.
+    setCartStatus("Processing checkout...");
+    try {
       const response = await apiFetchWithToken(getToken, true, "/api/cart/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -9313,7 +9479,6 @@ function Layout() {
         ${isMobile
           ? html`<div
               className=${`mobile-nav-bar ${mobileNavStyle === "solid" ? "nav-solid" : "nav-transparent"} ${menuSide === "left" ? "nav-left" : "nav-right"} ${mobileNavStyle === "solid" ? "with-mini-logo" : ""}`}
-              aria-hidden="true"
             >
               ${mobileNavStyle === "solid"
                 ? html`<div className=${`mobile-nav-logo-wrap ${menuSide === "left" ? "logo-right" : ""}`}>
@@ -9623,9 +9788,23 @@ function Layout() {
                 <span>$${total().toFixed(2)}</span>
               </div>
             </div>`}
+        ${cart.length > 0 && STRIPE_PUBLISHABLE_KEY
+          ? html`<div className="stripe-inline-panel">
+              <div className="stripe-inline-title">Secure Card Payment</div>
+              <div className="muted stripe-inline-hint">
+                Pay securely without leaving this checkout popup.
+              </div>
+              <div className="stripe-inline-element" ref=${stripeMountRef}></div>
+              ${stripeInlineError ? html`<div className="muted">${stripeInlineError}</div>` : html``}
+            </div>`
+          : html``}
         ${cartStatus ? html`<div className="muted">${cartStatus}</div>` : html``}
-        <button className="button primary" onClick=${checkout} disabled=${cart.length === 0}>
-          Checkout
+        <button
+          className="button primary"
+          onClick=${checkout}
+          disabled=${cart.length === 0 || (Boolean(STRIPE_PUBLISHABLE_KEY) && stripeInitializing)}
+        >
+          ${STRIPE_PUBLISHABLE_KEY ? "Pay now" : "Checkout"}
         </button>
       <//>
 
