@@ -5463,12 +5463,6 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
             ${showComparison
               ? html`<div className="store-comparison-wrap expanded">
                   <table className="store-comparison-table" role="table" aria-label="Extended rank feature comparison">
-                    <thead>
-                      <tr>
-                        <th scope="col" className="store-feature-col" aria-label="Feature column"></th>
-                        ${SAMPLE_STORE.map((item) => renderComparisonHeaderCell(item, "extended", false))}
-                      </tr>
-                    </thead>
                     <tbody>
                       ${extendedComparisonRows.map((row) => html`<tr key=${`extended-row-${row.label}`}>
                         <th scope="row" className="store-feature-label">${row.label}</th>
@@ -9122,7 +9116,7 @@ function LinkPage({ onClose = null }) {
     setStatusType("");
     setStatusMessage("");
     try {
-      const response = await apiFetchWithToken(getToken, true, "/api/link/redeem", {
+      const response = await apiFetchWithToken(getToken, true, "/api/link/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: fullCode }),

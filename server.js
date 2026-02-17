@@ -138,6 +138,7 @@ const ACHIEVEMENT_DEFS = [
 ];
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI || "";
 const MONGO_DB_NAME = process.env.MONGO_DB || process.env.MONGODB_DB || "hardtaledb";
+const SERVER_SECRET = String(process.env.SERVER_SECRET || process.env.HARDTALE_API_TOKEN || process.env.FULFILLMENT_API_TOKEN || "").trim();
 const FULFILLMENT_API_TOKEN = String(process.env.FULFILLMENT_API_TOKEN || "").trim();
 const HARDTALE_API_TOKEN = String(process.env.HARDTALE_API_TOKEN || "").trim();
 const PLUGIN_API_TOKENS = Array.from(
@@ -235,6 +236,7 @@ let forumPostsCollection = null;
 let linkedAccountsCollection = null;
 let userAchievementsCollection = null;
 let linkCodesCollection = null;
+let fulfillmentJobsCollection = null;
 let mongoConnectInFlight = null;
 let mongoReconnectTimer = null;
 let mongoReconnectDelayMs = 1000;
@@ -261,6 +263,7 @@ function resetMongoState() {
   linkedAccountsCollection = null;
   userAchievementsCollection = null;
   linkCodesCollection = null;
+  fulfillmentJobsCollection = null;
   mongoConnectInFlight = null;
 }
 
@@ -297,7 +300,8 @@ async function connectMongo() {
     forumPostsCollection &&
     linkedAccountsCollection &&
     userAchievementsCollection &&
-    linkCodesCollection
+    linkCodesCollection &&
+    fulfillmentJobsCollection
   ) {
     return;
   }
@@ -333,6 +337,7 @@ async function connectMongo() {
       linkedAccountsCollection = mongoDb.collection("linked_accounts");
       userAchievementsCollection = mongoDb.collection("user_achievements");
       linkCodesCollection = mongoDb.collection("link_codes");
+      fulfillmentJobsCollection = mongoDb.collection("fulfillment_jobs");
       await commentsCollection.createIndex({ newsId: 1, createdAt: 1 });
       await commentsCollection.createIndex({ userId: 1 });
       await commentRevisionsCollection.createIndex({ commentId: 1, createdAt: 1 });
@@ -366,6 +371,10 @@ async function connectMongo() {
       await linkCodesCollection.createIndex({ code: 1 }, { unique: true });
       await linkCodesCollection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
       await linkCodesCollection.createIndex({ playerUuid: 1, createdAt: -1 });
+      await linkCodesCollection.createIndex({ status: 1, claimedAt: 1, expiresAt: 1 });
+      await fulfillmentJobsCollection.createIndex({ jobId: 1 }, { unique: true });
+      await fulfillmentJobsCollection.createIndex({ status: 1, createdAt: 1 });
+      await fulfillmentJobsCollection.createIndex({ playerUuid: 1, status: 1, createdAt: 1 });
       mongoReconnectDelayMs = 1000;
       console.log("Connected to MongoDB");
     } catch (error) {
@@ -495,7 +504,8 @@ async function requireMongoReady(res) {
     !forumPostRevisionsCollection ||
     !linkedAccountsCollection ||
     !userAchievementsCollection ||
-    !linkCodesCollection
+    !linkCodesCollection ||
+    !fulfillmentJobsCollection
   ) {
     try {
       await connectMongo();
@@ -518,7 +528,8 @@ async function requireMongoReady(res) {
     !forumPostRevisionsCollection ||
     !linkedAccountsCollection ||
     !userAchievementsCollection ||
-    !linkCodesCollection
+    !linkCodesCollection ||
+    !fulfillmentJobsCollection
   ) {
     res.status(503).json({
       error: "Database not connected",
@@ -657,8 +668,9 @@ function requireCommentAuth(req, res) {
   return auth;
 }
 
-function requireFulfillmentAuth(req, res) {
+function requireFulfillmentAuth(req, res, routeLabel = "server_api") {
   if (PLUGIN_API_TOKENS.length === 0) {
+    console.warn(`[server.auth] ${routeLabel} denied: no server API token configured`);
     res.status(503).json({ error: "Plugin API token is not configured" });
     return false;
   }
@@ -667,8 +679,35 @@ function requireFulfillmentAuth(req, res) {
   const bearerToken = authHeader.startsWith(prefix) ? authHeader.slice(prefix.length).trim() : "";
   const serviceToken = normalizeText(req.headers?.["x-service-auth"], 4096);
   const token = bearerToken || serviceToken;
-  if (!token || !PLUGIN_API_TOKENS.includes(token)) {
-    res.status(401).json({ error: "Unauthorized" });
+  if (!token) {
+    console.warn(`[server.auth] ${routeLabel} denied: missing auth header`);
+    res.status(401).json({ error: "Missing Authorization bearer token" });
+    return false;
+  }
+  if (!PLUGIN_API_TOKENS.includes(token)) {
+    console.warn(`[server.auth] ${routeLabel} denied: invalid server secret`);
+    res.status(403).json({ error: "Invalid server secret" });
+    return false;
+  }
+  return true;
+}
+
+function requireServerSecret(req, res, routeLabel = "server_api") {
+  if (!SERVER_SECRET) {
+    console.warn(`[server.auth] ${routeLabel} denied: SERVER_SECRET not configured`);
+    res.status(503).json({ error: "server_secret_not_configured" });
+    return false;
+  }
+  const authHeader = String(req.headers?.authorization || "");
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  if (!token) {
+    console.warn(`[server.auth] ${routeLabel} denied: missing_authorization`);
+    res.status(403).json({ error: "missing_authorization" });
+    return false;
+  }
+  if (token !== SERVER_SECRET) {
+    console.warn(`[server.auth] ${routeLabel} denied: invalid_server_secret`);
+    res.status(403).json({ error: "invalid_server_secret" });
     return false;
   }
   return true;
@@ -862,7 +901,7 @@ async function createHostedLinkCode({ playerUuid, playerName }) {
   const now = new Date();
   const existing = await linkCodesCollection.findOne({
     playerUuid: uuid,
-    usedAt: { $exists: false },
+    status: "pending",
     expiresAt: { $gt: now },
   });
   if (existing?.code) {
@@ -882,6 +921,7 @@ async function createHostedLinkCode({ playerUuid, playerName }) {
         code,
         playerUuid: uuid,
         playerName: safeName,
+        status: "pending",
         createdAt: now,
         updatedAt: now,
         expiresAt,
@@ -895,7 +935,7 @@ async function createHostedLinkCode({ playerUuid, playerName }) {
   return { ok: false, status: 503, code: "SERVER_UNAVAILABLE", error: "Failed to allocate unique link code" };
 }
 
-async function consumeHostedLinkCode({ code, webUserId }) {
+async function claimHostedLinkCode({ code, webUserId }) {
   if (!linkCodesCollection) {
     return { ok: false, status: 503, code: "SERVER_UNAVAILABLE", error: "Link code storage is unavailable" };
   }
@@ -908,32 +948,51 @@ async function consumeHostedLinkCode({ code, webUserId }) {
   if (!found) {
     return { ok: false, status: 404, code: "NOT_FOUND", error: "Link code not found" };
   }
+  if (found.status === "completed") {
+    return { ok: false, status: 409, code: "ALREADY_USED", error: "Link code was already completed" };
+  }
+  if (found.status === "failed") {
+    return { ok: false, status: 409, code: "FAILED", error: "Link code was previously marked failed" };
+  }
   if (found.expiresAt instanceof Date && found.expiresAt.getTime() <= now.getTime()) {
+    await linkCodesCollection.updateOne(
+      { code: normalizedCode, status: { $in: ["pending", "claimed"] } },
+      { $set: { status: "expired", updatedAt: now } },
+    );
     return { ok: false, status: 400, code: "EXPIRED_CODE", error: "Link code expired" };
   }
-  if (found.usedAt) {
-    return { ok: false, status: 409, code: "ALREADY_USED", error: "Link code was already used" };
+  if (found.status === "claimed" && found.claimedByUserId && found.claimedByUserId !== webUserId) {
+    return { ok: false, status: 409, code: "ALREADY_USED", error: "Link code was already claimed" };
   }
   const linkedUuid = normalizePlayerUuid(found.playerUuid);
   if (!linkedUuid) {
     return { ok: false, status: 502, code: "DOWNSTREAM_FAILURE", error: "Link code record missing player UUID" };
   }
 
+  const existingByUser = await linkedAccountsCollection.findOne({ webUserId: webUserId });
+  if (existingByUser && existingByUser.playerUuid && normalizePlayerUuid(existingByUser.playerUuid) !== linkedUuid) {
+    return { ok: false, status: 409, code: "ALREADY_LINKED", error: "Your web account is already linked to another UUID" };
+  }
   const existingByPlayer = await linkedAccountsCollection.findOne({ playerUuid: linkedUuid });
-  if (existingByPlayer && existingByPlayer.webUserId !== webUserId) {
+  if (existingByPlayer?.webUserId && existingByPlayer.webUserId !== webUserId) {
     return { ok: false, status: 409, code: "ALREADY_LINKED", error: "That game account is already linked" };
   }
 
   const claimed = await linkCodesCollection.findOneAndUpdate(
     {
       code: normalizedCode,
-      usedAt: { $exists: false },
+      status: { $in: ["pending", "claimed"] },
+      $or: [
+        { claimedByUserId: { $exists: false } },
+        { claimedByUserId: webUserId },
+      ],
       expiresAt: { $gt: now },
     },
     {
       $set: {
-        usedAt: now,
-        usedByUserId: webUserId,
+        status: "claimed",
+        claimedAt: now,
+        claimedByUserId: webUserId,
         updatedAt: now,
       },
     },
@@ -941,8 +1000,11 @@ async function consumeHostedLinkCode({ code, webUserId }) {
   );
   if (!claimed) {
     const latest = await linkCodesCollection.findOne({ code: normalizedCode });
-    if (latest?.usedAt) {
-      return { ok: false, status: 409, code: "ALREADY_USED", error: "Link code was already used" };
+    if (latest?.status === "claimed" && latest.claimedByUserId && latest.claimedByUserId !== webUserId) {
+      return { ok: false, status: 409, code: "ALREADY_USED", error: "Link code was already claimed" };
+    }
+    if (latest?.status === "completed") {
+      return { ok: false, status: 409, code: "ALREADY_USED", error: "Link code was already completed" };
     }
     if (latest?.expiresAt instanceof Date && latest.expiresAt.getTime() <= now.getTime()) {
       return { ok: false, status: 400, code: "EXPIRED_CODE", error: "Link code expired" };
@@ -951,9 +1013,121 @@ async function consumeHostedLinkCode({ code, webUserId }) {
   }
   return {
     ok: true,
+    code: normalizedCode,
+    status: "claimed",
+    claimedByUserId: webUserId,
+    expiresAt: claimed.expiresAt instanceof Date ? claimed.expiresAt.toISOString() : "",
     playerUuid: linkedUuid,
     playerName: normalizeText(claimed.playerName || found.playerName || "", 60),
   };
+}
+
+async function registerHostedLinkCode({ code, playerUuid, playerName = "", expiresAt }) {
+  if (!linkCodesCollection) {
+    return { ok: false, status: 503, code: "SERVER_UNAVAILABLE", error: "Link code storage is unavailable" };
+  }
+  const normalizedCode = normalizeLinkCode(code);
+  if (normalizedCode.length !== 8) {
+    return { ok: false, status: 400, code: "INVALID_CODE", error: "code must be 8 letters/numbers" };
+  }
+  const normalizedUuid = normalizePlayerUuid(playerUuid);
+  if (!normalizedUuid) {
+    return { ok: false, status: 400, code: "INVALID_UUID", error: "playerUuid is invalid" };
+  }
+  const now = new Date();
+  const safeExpiry = expiresAt instanceof Date && Number.isFinite(expiresAt.getTime())
+    ? expiresAt
+    : new Date(Date.now() + LINK_CODE_TTL_SEC * 1000);
+  if (safeExpiry.getTime() <= now.getTime()) {
+    return { ok: false, status: 400, code: "INVALID_EXPIRY", error: "expiresAt must be in the future" };
+  }
+  const safeName = normalizeText(playerName, 60);
+  try {
+    await linkCodesCollection.updateOne(
+      { code: normalizedCode },
+      {
+        $set: {
+          code: normalizedCode,
+          playerUuid: normalizedUuid,
+          playerName: safeName,
+          status: "pending",
+          updatedAt: now,
+          expiresAt: safeExpiry,
+        },
+        $setOnInsert: {
+          createdAt: now,
+        },
+        $unset: {
+          claimedByUserId: "",
+          claimedAt: "",
+          completedAt: "",
+          failedAt: "",
+          error: "",
+        },
+      },
+      { upsert: true },
+    );
+    return {
+      ok: true,
+      code: normalizedCode,
+      playerUuid: normalizedUuid,
+      expiresAt: safeExpiry.toISOString(),
+    };
+  } catch (error) {
+    if (error?.code === 11000) {
+      return { ok: false, status: 409, code: "ALREADY_USED", error: "Link code already exists" };
+    }
+    throw error;
+  }
+}
+
+function normalizeLinkCodeDocStatus(doc, now = Date.now()) {
+  if (!doc) return "missing";
+  const status = normalizeText(doc.status || "", 20).toLowerCase();
+  if (status) return status;
+  const expiresAtMs = doc.expiresAt instanceof Date ? doc.expiresAt.getTime() : 0;
+  if (expiresAtMs > 0 && expiresAtMs <= now) return "expired";
+  if (doc.claimedByUserId) return "claimed";
+  return "pending";
+}
+
+async function enqueueFulfillmentJob({
+  jobId,
+  playerUuid = "",
+  userId = "",
+  payload = {},
+  source = "stripe",
+}) {
+  if (!fulfillmentJobsCollection) {
+    return { ok: false, status: 503, error: "fulfillment_jobs collection unavailable" };
+  }
+  const normalizedJobId = normalizeText(jobId || "", 160);
+  if (!normalizedJobId) {
+    return { ok: false, status: 400, error: "jobId is required" };
+  }
+  const normalizedUuid = normalizePlayerUuid(playerUuid);
+  const normalizedUserId = normalizeText(userId || "", 128);
+  const now = new Date().toISOString();
+  const payloadSafe = payload && typeof payload === "object" ? payload : {};
+  try {
+    await fulfillmentJobsCollection.insertOne({
+      jobId: normalizedJobId,
+      playerUuid: normalizedUuid || "",
+      userId: normalizedUserId || "",
+      payload: payloadSafe,
+      source: normalizeText(source, 40) || "stripe",
+      status: "pending",
+      error: "",
+      createdAt: now,
+      updatedAt: now,
+    });
+    return { ok: true, alreadyExists: false, jobId: normalizedJobId };
+  } catch (error) {
+    if (error?.code === 11000) {
+      return { ok: true, alreadyExists: true, jobId: normalizedJobId };
+    }
+    throw error;
+  }
 }
 
 function parseJsonSafely(raw) {
@@ -2534,65 +2708,118 @@ async function fulfillStripeCheckoutSession(session, source = "manual") {
   return { success: true, ...result };
 }
 
+async function queueStripeFulfillmentFromSession(session, source = "stripe_webhook") {
+  const sessionId = normalizeText(session?.id, 160);
+  if (!sessionId) {
+    return { ok: false, skipped: true, reason: "missing_session_id" };
+  }
+  const paymentStatus = String(session?.payment_status || "").toLowerCase();
+  if (paymentStatus !== "paid") {
+    return { ok: false, skipped: true, reason: "payment_not_paid" };
+  }
+  const userId = normalizeText(session?.client_reference_id || session?.metadata?.userId, 128);
+  if (!userId) {
+    return { ok: false, skipped: true, reason: "missing_user_id" };
+  }
+  const linked = await linkedAccountsCollection.findOne(
+    { webUserId: userId },
+    { projection: { _id: 0, playerUuid: 1 } },
+  );
+  const playerUuid = normalizePlayerUuid(linked?.playerUuid);
+  const cartItemIds = normalizeText(session?.metadata?.cartItemIds || "", 800)
+    .split(",")
+    .map((entry) => normalizeText(entry, 64))
+    .filter(Boolean);
+  const payload = {
+    type: "stripe_checkout",
+    source,
+    stripe: {
+      sessionId,
+      paymentIntentId: normalizeText(session?.payment_intent, 160),
+      amountTotal: Number(session?.amount_total || 0),
+      currency: normalizeText(session?.currency, 20).toLowerCase(),
+      cartItemIds,
+    },
+  };
+  const queued = await enqueueFulfillmentJob({
+    jobId: `stripe:${sessionId}`,
+    playerUuid,
+    userId,
+    payload,
+    source: "stripe",
+  });
+  return { ok: Boolean(queued?.ok), alreadyExists: Boolean(queued?.alreadyExists), skipped: false };
+}
+
+async function handleStripeWebhook(req, res) {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    if (!stripeClient || !STRIPE_ENABLED) {
+      return res.status(503).json({ error: "Stripe checkout is not configured" });
+    }
+    if (!STRIPE_WEBHOOK_SECRET) {
+      return res.status(503).json({ error: "Stripe webhook secret is not configured" });
+    }
+
+    const signature = req.headers["stripe-signature"];
+    if (!signature) {
+      return res.status(400).json({ error: "Missing Stripe signature" });
+    }
+    const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(String(req.body || ""));
+    let event;
+    try {
+      event = stripeClient.webhooks.constructEvent(rawBody, signature, STRIPE_WEBHOOK_SECRET);
+    } catch {
+      return res.status(400).json({ error: "Invalid Stripe signature" });
+    }
+
+    if (
+      event.type === "checkout.session.completed" ||
+      event.type === "checkout.session.async_payment_succeeded"
+    ) {
+      const session = event.data?.object || null;
+      const queued = await queueStripeFulfillmentFromSession(session, `webhook:${event.type}`);
+      return res.json({
+        received: true,
+        handled: true,
+        eventId: normalizeText(event.id, 120),
+        eventType: event.type,
+        queued: Boolean(queued?.ok),
+        alreadyQueued: Boolean(queued?.alreadyExists),
+        skipped: Boolean(queued?.skipped),
+        reason: normalizeText(queued?.reason || "", 80),
+      });
+    }
+    return res.json({
+      received: true,
+      handled: false,
+      eventId: normalizeText(event.id, 120),
+      eventType: event.type,
+    });
+  } catch (error) {
+    console.error("Failed to process Stripe webhook", error);
+    return res.status(500).json({ error: "Failed to process Stripe webhook" });
+  }
+}
+
 app.post(
   "/api/payments/stripe/webhook",
   express.raw({ type: "application/json", limit: "1mb" }),
-  async (req, res) => {
-    try {
-      if (!(await requireMongoReady(res))) return;
-      if (!stripeClient || !STRIPE_ENABLED) {
-        return res.status(503).json({ error: "Stripe checkout is not configured" });
-      }
-      if (!STRIPE_WEBHOOK_SECRET) {
-        return res.status(503).json({ error: "Stripe webhook secret is not configured" });
-      }
+  handleStripeWebhook,
+);
 
-      const signature = req.headers["stripe-signature"];
-      if (!signature) {
-        return res.status(400).json({ error: "Missing Stripe signature" });
-      }
-
-      const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(String(req.body || ""));
-      let event;
-      try {
-        event = stripeClient.webhooks.constructEvent(rawBody, signature, STRIPE_WEBHOOK_SECRET);
-      } catch (err) {
-        return res.status(400).json({ error: "Invalid Stripe signature" });
-      }
-
-      if (
-        event.type === "checkout.session.completed" ||
-        event.type === "checkout.session.async_payment_succeeded"
-      ) {
-        const session = event.data?.object || null;
-        const outcome = await fulfillStripeCheckoutSession(session, `webhook:${event.type}`);
-        return res.json({
-          received: true,
-          handled: true,
-          eventId: normalizeText(event.id, 120),
-          eventType: event.type,
-          processed: Boolean(outcome?.success),
-          alreadyProcessed: Boolean(outcome?.alreadyProcessed),
-          skipped: Boolean(outcome?.skipped),
-          reason: normalizeText(outcome?.reason || "", 80),
-        });
-      }
-
-      return res.json({
-        received: true,
-        handled: false,
-        eventId: normalizeText(event.id, 120),
-        eventType: event.type,
-      });
-    } catch (error) {
-      console.error("Failed to process Stripe webhook", error);
-      return res.status(500).json({ error: "Failed to process Stripe webhook" });
-    }
-  },
+app.post(
+  "/api/stripe/webhook",
+  express.raw({ type: "application/json", limit: "1mb" }),
+  handleStripeWebhook,
 );
 
 app.use(express.json({ limit: "100kb" }));
-app.use("/api", clerkMiddleware());
+const clerkApiMiddleware = clerkMiddleware();
+app.use("/api", (req, res, next) => {
+  if (String(req.path || "").startsWith("/server/")) return next();
+  return clerkApiMiddleware(req, res, next);
+});
 
 app.get("/api/me", async (req, res) => {
   try {
@@ -4749,7 +4976,7 @@ app.post("/api/fulfillment/ack", async (req, res) => {
 app.post("/api/link/create", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
-    if (!requireFulfillmentAuth(req, res)) return;
+    if (!requireServerSecret(req, res, "link_create")) return;
 
     const playerUuid = normalizePlayerUuid(req.body?.playerUuid || req.body?.uuid);
     if (!playerUuid) {
@@ -4787,12 +5014,278 @@ app.post("/api/link/create", async (req, res) => {
   }
 });
 
+app.get("/api/link/info", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const code = normalizeLinkCode(req.query?.code);
+    if (code.length !== 8) {
+      return res.status(400).json({ valid: false, code: "INVALID_CODE", error: "code is required" });
+    }
+    const doc = await linkCodesCollection.findOne({ code });
+    if (!doc) {
+      return res.status(404).json({ valid: false, code: "NOT_FOUND", error: "Code not found" });
+    }
+    const status = normalizeLinkCodeDocStatus(doc);
+    const isExpired = status === "expired";
+    return res.json({
+      valid: status === "pending" || status === "claimed",
+      status,
+      isExpired,
+      isClaimed: status === "claimed",
+      expiresAt: doc.expiresAt instanceof Date ? doc.expiresAt.toISOString() : "",
+      playerUuidMasked: maskPlayerUuid(doc.playerUuid),
+    });
+  } catch (error) {
+    console.error("Failed to load link info", error);
+    return res.status(500).json({ error: "Failed to load link info" });
+  }
+});
+
+app.post("/api/link/claim", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const code = normalizeLinkCode(req.body?.code);
+    const claimResult = await claimHostedLinkCode({ code, webUserId: auth.userId });
+    if (!claimResult.ok) {
+      return res.status(claimResult.status || 400).json({
+        code: normalizeText(claimResult.code || "INVALID_CODE", 80).toUpperCase(),
+        error: claimResult.error || "Failed to claim link code",
+      });
+    }
+    return res.json({
+      ok: true,
+      claimed: true,
+      code: claimResult.code,
+      playerUuidMasked: maskPlayerUuid(claimResult.playerUuid),
+      expiresAt: claimResult.expiresAt || "",
+    });
+  } catch (error) {
+    console.error("Failed to claim link code", error);
+    return res.status(500).json({ error: "Failed to claim link code" });
+  }
+});
+
+app.post("/api/server/register-code", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    if (!requireServerSecret(req, res, "register_code")) return;
+    const code = normalizeLinkCode(req.body?.code);
+    const playerUuid = normalizePlayerUuid(req.body?.playerUuid || req.body?.uuid);
+    const playerName = normalizeText(req.body?.playerName || req.body?.username || "", 60);
+    const expiresInSecRaw = Number(req.body?.expiresInSec || req.body?.expiresSeconds || LINK_CODE_TTL_SEC);
+    const expiresInSec = Number.isFinite(expiresInSecRaw) ? Math.max(30, Math.min(Math.trunc(expiresInSecRaw), 3600)) : LINK_CODE_TTL_SEC;
+    const expiresAt = new Date(Date.now() + expiresInSec * 1000);
+    const registered = await registerHostedLinkCode({ code, playerUuid, playerName, expiresAt });
+    if (!registered.ok) {
+      return res.status(registered.status || 400).json({
+        code: normalizeText(registered.code || "INVALID_CODE", 80).toUpperCase(),
+        error: registered.error || "Failed to register code",
+      });
+    }
+    return res.json({
+      ok: true,
+      code: registered.code,
+      playerUuid: registered.playerUuid,
+      expiresAt: registered.expiresAt,
+    });
+  } catch (error) {
+    console.error("Failed to register link code", error);
+    return res.status(500).json({ error: "Failed to register link code" });
+  }
+});
+
+app.get("/api/server/pending-links", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    if (!requireServerSecret(req, res, "pending_links")) return;
+    const limitRaw = Number(req.query?.limit);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 200) : 50;
+    const now = new Date();
+    const links = await linkCodesCollection
+      .find({
+        status: "claimed",
+        claimedByUserId: { $exists: true, $ne: "" },
+        expiresAt: { $gt: now },
+      })
+      .sort({ claimedAt: 1, createdAt: 1 })
+      .limit(limit)
+      .project({
+        _id: 0,
+        code: 1,
+        playerUuid: 1,
+        claimedByUserId: 1,
+        claimedAt: 1,
+      })
+      .toArray();
+    return res.json({
+      links: links.map((entry) => ({
+        code: normalizeLinkCode(entry.code),
+        playerUuid: normalizePlayerUuid(entry.playerUuid),
+        userId: normalizeText(entry.claimedByUserId || "", 128),
+        claimedAt: entry.claimedAt || "",
+      })),
+    });
+  } catch (error) {
+    console.error("Failed to load pending links", error);
+    return res.status(500).json({ error: "Failed to load pending links" });
+  }
+});
+
+app.post("/api/server/ack-link", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    if (!requireServerSecret(req, res, "ack_link")) return;
+    const code = normalizeLinkCode(req.body?.code);
+    if (code.length !== 8) {
+      return res.status(400).json({ error: "code is required" });
+    }
+    const resultRaw = normalizeText(req.body?.result, 20).toLowerCase();
+    const isApplied = resultRaw === "applied";
+    const finalStatus = isApplied ? "completed" : "failed";
+    const now = new Date();
+    const errorText = normalizeText(req.body?.error || "", 500);
+
+    const existing = await linkCodesCollection.findOne({ code });
+    if (!existing) {
+      return res.status(404).json({ error: "Link code not found" });
+    }
+    const existingStatus = normalizeLinkCodeDocStatus(existing);
+    if (existingStatus === "completed" || existingStatus === "failed") {
+      return res.json({ success: true, code, status: existingStatus, alreadyFinal: true });
+    }
+    if (existingStatus !== "claimed") {
+      return res.status(409).json({ error: "Link code is not in claimed state" });
+    }
+    const playerUuid = normalizePlayerUuid(existing.playerUuid);
+    const userId = normalizeText(existing.claimedByUserId || "", 128);
+    if (!playerUuid || !userId) {
+      return res.status(409).json({ error: "Claimed link code is missing player/user mapping" });
+    }
+
+    if (isApplied) {
+      const existingByPlayer = await linkedAccountsCollection.findOne({ playerUuid });
+      if (existingByPlayer?.webUserId && existingByPlayer.webUserId !== userId) {
+        return res.status(409).json({ error: "Player UUID already linked to another user" });
+      }
+      await linkedAccountsCollection.updateOne(
+        { webUserId: userId },
+        {
+          $set: {
+            webUserId: userId,
+            playerUuid,
+            playerName: normalizeText(existing.playerName || "", 60),
+            linkSource: "CODE",
+            linkedSource: "CODE",
+            linkedAt: now.toISOString(),
+            updatedAt: now.toISOString(),
+          },
+          $setOnInsert: {
+            createdAt: now.toISOString(),
+          },
+        },
+        { upsert: true },
+      );
+    }
+
+    await linkCodesCollection.updateOne(
+      { code, status: "claimed" },
+      {
+        $set: {
+          status: finalStatus,
+          completedAt: now,
+          updatedAt: now,
+          error: isApplied ? "" : errorText,
+        },
+      },
+    );
+    return res.json({ success: true, code, status: finalStatus, alreadyFinal: false });
+  } catch (error) {
+    console.error("Failed to acknowledge link", error);
+    return res.status(500).json({ error: "Failed to acknowledge link" });
+  }
+});
+
+app.get("/api/server/pending-fulfillments", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    if (!requireServerSecret(req, res, "pending_fulfillments")) return;
+    const limitRaw = Number(req.query?.limit);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 200) : 50;
+    const jobs = await fulfillmentJobsCollection
+      .find({ status: "pending" })
+      .sort({ createdAt: 1 })
+      .limit(limit)
+      .project({ _id: 0, jobId: 1, playerUuid: 1, userId: 1, payload: 1, createdAt: 1 })
+      .toArray();
+    return res.json({
+      jobs: jobs.map((job) => ({
+        jobId: normalizeText(job.jobId || "", 160),
+        playerUuid: normalizePlayerUuid(job.playerUuid),
+        userId: normalizeText(job.userId || "", 128),
+        payload: job.payload && typeof job.payload === "object" ? job.payload : {},
+        createdAt: job.createdAt || "",
+      })),
+    });
+  } catch (error) {
+    console.error("Failed to load pending fulfillment jobs", error);
+    return res.status(500).json({ error: "Failed to load pending fulfillment jobs" });
+  }
+});
+
+app.post("/api/server/ack-fulfillment", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    if (!requireServerSecret(req, res, "ack_fulfillment")) return;
+    const jobId = normalizeText(req.body?.jobId || req.body?.id, 160);
+    if (!jobId) {
+      return res.status(400).json({ error: "jobId is required" });
+    }
+    const resultRaw = normalizeText(req.body?.result, 20).toLowerCase();
+    const finalStatus = resultRaw === "applied" ? "applied" : "failed";
+    const now = new Date().toISOString();
+    const errorText = normalizeText(req.body?.error || "", 500);
+
+    const updated = await fulfillmentJobsCollection.updateOne(
+      { jobId, status: "pending" },
+      {
+        $set: {
+          status: finalStatus,
+          error: finalStatus === "failed" ? errorText : "",
+          ackedAt: now,
+          updatedAt: now,
+        },
+      },
+    );
+    if (updated.modifiedCount > 0) {
+      return res.json({ success: true, jobId, status: finalStatus, alreadyFinal: false });
+    }
+    const existing = await fulfillmentJobsCollection.findOne(
+      { jobId },
+      { projection: { _id: 0, status: 1 } },
+    );
+    if (existing && existing.status && existing.status !== "pending") {
+      return res.json({
+        success: true,
+        jobId,
+        status: normalizeText(existing.status, 20) || "applied",
+        alreadyFinal: true,
+      });
+    }
+    return res.status(404).json({ error: "Fulfillment job not found" });
+  } catch (error) {
+    console.error("Failed to acknowledge fulfillment job", error);
+    return res.status(500).json({ error: "Failed to acknowledge fulfillment job" });
+  }
+});
+
 app.get("/api/link/status", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
     const pluginPlayerUuidRaw = normalizeText(req.query?.playerUuid || req.query?.uuid, 64);
     if (pluginPlayerUuidRaw) {
-      if (!requireFulfillmentAuth(req, res)) return;
+      if (!requireServerSecret(req, res, "link_status")) return;
       const playerUuid = normalizePlayerUuid(pluginPlayerUuidRaw);
       if (!playerUuid) {
         return res.status(400).json({ error: "playerUuid is invalid" });
@@ -4876,218 +5369,27 @@ app.get("/api/profile/link-status/:userId", async (req, res) => {
 app.post("/api/link/redeem", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
-    const auth = getAuth(req);
-    if (!auth?.userId) {
-      logLinkRedeemFailure("auth_missing_user", { status: 401, code: "UNAUTHORIZED", branch: "missing_user_session" });
-      return res.status(401).json({ code: "UNAUTHORIZED", error: "Not authenticated" });
-    }
-    const aud = auth.sessionClaims?.aud;
-    const matchesAud =
-      typeof aud === "string"
-        ? aud === COMMENTS_AUD
-        : Array.isArray(aud)
-        ? aud.includes(COMMENTS_AUD)
-        : false;
-    if (!matchesAud) {
-      logLinkRedeemFailure("auth_forbidden_audience", {
-        status: 403,
-        code: "FORBIDDEN",
-        branch: "audience_mismatch",
-        userId: auth.userId,
-      });
-      return res.status(403).json({ code: "FORBIDDEN", error: "Invalid audience" });
-    }
-
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
     const code = normalizeLinkCode(req.body?.code);
-    const codeProvided = /^[A-Z0-9]{8}$/.test(code);
-    const hytaleJwt = readLinkJwtFromRequest(req);
-
-    let linkResult = null;
-    let linkSource = "";
-
-    if (HYTALE_JWT_ENABLED && hytaleJwt) {
-      const jwtResult = await verifyHytaleJwtToken(hytaleJwt);
-      if (jwtResult.ok) {
-        linkResult = {
-          ok: true,
-          playerUuid: jwtResult.playerUuid,
-          playerName: jwtResult.playerName,
-        };
-        linkSource = "JWT";
-      } else if (!codeProvided) {
-        logLinkRedeemFailure("jwt_verify_failed_no_code_fallback", {
-          status: jwtResult.status || 403,
-          code: jwtResult.code || "FORBIDDEN",
-          branch: jwtResult.branch || "jwt_failed",
-          userId: auth.userId,
-          source: "JWT",
-        });
-        return res.status(jwtResult.status || 403).json({
-          code: jwtResult.code || "FORBIDDEN",
-          error: jwtResult.error || "JWT verification failed",
-        });
-      }
-    }
-
-    if (!linkResult) {
-      if (!codeProvided) {
-        return res.status(400).json({ code: "INVALID_CODE", error: "Link code must be 8 letters/numbers" });
-      }
-      const hostedCodeResult = await consumeHostedLinkCode({
-        code,
-        webUserId: auth.userId,
-      });
-      if (hostedCodeResult.ok) {
-        linkResult = {
-          ok: true,
-          playerUuid: hostedCodeResult.playerUuid,
-          playerName: hostedCodeResult.playerName,
-        };
-        linkSource = "CODE";
-      } else if (hostedCodeResult.code !== "NOT_FOUND") {
-        const statusOut = hostedCodeResult.status || 400;
-        const codeOut = normalizeText(hostedCodeResult.code || "INVALID_CODE", 80).toUpperCase();
-        return res.status(statusOut).json({
-          code: codeOut,
-          error: hostedCodeResult.error || "Redeem failed",
-        });
-      }
-    }
-
-    if (!linkResult && LINK_REDEEM_DOWNSTREAM_FALLBACK_ENABLED) {
-      let redeemResult;
-      if (LINKING_ENABLED) {
-        const idempotencyKey = crypto.randomUUID();
-        redeemResult = await redeemLinkCodeWithGameServer({
-          code,
-          webUserId: auth.userId,
-          idempotencyKey,
-        });
-      } else {
-        redeemResult = buildMockRedeemResult({ code });
-      }
-      if (!redeemResult.ok) {
-        const status = redeemResult.status || 502;
-        const codeOut = normalizeText(redeemResult.code || "", 80).toUpperCase();
-        const isDownstreamFailure = status >= 500 || status === 401 || status === 403 || status === 404;
-        if (isDownstreamFailure) {
-          logLinkRedeemFailure("code_redeem_downstream_failure", {
-            status: 502,
-            code: "DOWNSTREAM_FAILURE",
-            branch: "plugin_redeem_failed",
-            userId: auth.userId,
-            upstreamStatus: status,
-            source: "CODE",
-          });
-          return res.status(502).json({
-            code: "DOWNSTREAM_FAILURE",
-            error: "Downstream redeem service failed",
-            upstreamStatus: status,
-          });
-        }
-        return res.status(status).json({
-          code: codeOut || "",
-          error: redeemResult.error || "Redeem failed",
-        });
-      }
-      const payload = redeemResult.data || {};
-      const playerUuid = normalizePlayerUuid(payload.playerUuid || payload.playerUUID || payload.uuid || payload.playerId);
-      if (!playerUuid) {
-        logLinkRedeemFailure("code_redeem_invalid_payload_uuid", {
-          status: 502,
-          code: "DOWNSTREAM_FAILURE",
-          branch: "plugin_payload_missing_uuid",
-          userId: auth.userId,
-          source: "CODE",
-        });
-        return res.status(502).json({
-          code: "DOWNSTREAM_FAILURE",
-          error: "Redeem succeeded but did not return a valid player UUID",
-        });
-      }
-      linkResult = {
-        ok: true,
-        playerUuid,
-        playerName: normalizeText(payload.playerName || payload.username || payload.playerUsername || "", 60),
-      };
-      linkSource = "CODE";
-    }
-    if (!linkResult) {
-      return res.status(400).json({
-        code: "INVALID_CODE",
-        error: "Invalid or expired link code",
+    const claimResult = await claimHostedLinkCode({ code, webUserId: auth.userId });
+    if (!claimResult.ok) {
+      return res.status(claimResult.status || 400).json({
+        code: normalizeText(claimResult.code || "INVALID_CODE", 80).toUpperCase(),
+        error: claimResult.error || "Failed to claim link code",
       });
     }
-
-    const persisted = await persistLinkedAccountForUser({
-      userId: auth.userId,
-      playerUuid: linkResult.playerUuid,
-      playerName: linkResult.playerName,
-      linkSource,
-      codeLast4: codeProvided ? code.slice(-4) : "",
-    });
-    if (!persisted.ok) {
-      return res.status(persisted.status || 409).json({
-        code: persisted.code || "ALREADY_LINKED",
-        error: persisted.error || "That game account is already linked to another web account",
-      });
-    }
-
-    try {
-      const user = await clerkClient.users.getUser(auth.userId);
-      const currentRank = String(user?.publicMetadata?.rank || "Unregistered");
-      const nextRank = maxRankLabel(currentRank, "Registered");
-      const isStaff = isStaffUser(user);
-        const nextMetadata = {
-          ...user.publicMetadata,
-          rank: nextRank,
-        };
-      const nextDisplayRank = resolveDisplayRankFromMetadata(nextMetadata, isStaff, true).displayRank;
-      await clerkClient.users.updateUserMetadata(auth.userId, {
-        publicMetadata: nextMetadata,
-      });
-      await commentsCollection.updateMany(
-        { userId: auth.userId, isDeleted: false },
-        {
-          $set: {
-            authorRank: nextDisplayRank,
-            authorOwnedRank: nextRank,
-            updatedAt: new Date(),
-          },
-        },
-      );
-      await forumPostsCollection.updateMany(
-        { authorUserId: auth.userId, isDeleted: false },
-        {
-          $set: {
-            authorRank: nextDisplayRank,
-            authorOwnedRank: nextRank,
-            updatedAt: new Date().toISOString(),
-          },
-        },
-      );
-      await unlockAchievement(auth.userId, "linking_up", { notify: true }).catch(() => {});
-    } catch (metadataError) {
-      console.error("Failed to apply linked rank after /link redeem", metadataError);
-    }
-
     return res.json({
       success: true,
-      linked: true,
-      playerUuid: linkResult.playerUuid,
-      maskedPlayerUuid: maskPlayerUuid(linkResult.playerUuid),
-      playerName: linkResult.playerName,
-      linkSource,
-      linkedAt: persisted.linkedAt || new Date().toISOString(),
-      linkMode: LINKING_ENABLED ? "live" : "mock",
+      ok: true,
+      claimed: true,
+      linked: false,
+      code: claimResult.code,
+      playerUuidMasked: maskPlayerUuid(claimResult.playerUuid),
+      expiresAt: claimResult.expiresAt || "",
+      status: "claimed",
     });
   } catch (error) {
-    if (error?.code === 11000) {
-      return res.status(409).json({
-        code: "ALREADY_LINKED",
-        error: "That game account is already linked to another web account",
-      });
-    }
     console.error("Failed to redeem link code", error);
     return res.status(500).json({ error: "Failed to redeem link code" });
   }
@@ -5649,7 +5951,8 @@ app.get("/health", (req, res) => {
     forumPostRevisionsCollection &&
     linkedAccountsCollection &&
     userAchievementsCollection &&
-    linkCodesCollection,
+    linkCodesCollection &&
+    fulfillmentJobsCollection,
   );
   res.status(200).json({
     status: "ok",

@@ -5255,7 +5255,7 @@ body[data-theme="dark"] .store-cta {
   margin-top: 10px;
   border: 1px solid var(--stroke);
   border-radius: 14px;
-  overflow-x: auto;
+  overflow-x: hidden;
   background: color-mix(in srgb, var(--bg-soft) 90%, transparent);
 }
 

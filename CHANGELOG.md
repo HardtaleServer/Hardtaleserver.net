@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.4.00)
+- Added clean auth separation for linking/fulfillment API layers:
+  - Browser/user flow stays Clerk-protected (`POST /api/link/claim`, `POST /api/link/redeem` compatibility).
+  - Server/plugin flow now uses `SERVER_SECRET` on `/api/server/*` routes.
+- Added plugin-facing server routes:
+  - `POST /api/server/register-code`
+  - `GET /api/server/pending-links`
+  - `POST /api/server/ack-link`
+  - `GET /api/server/pending-fulfillments`
+  - `POST /api/server/ack-fulfillment`
+- Added explicit `SERVER_SECRET` auth failure diagnostics (`missing_authorization` vs `invalid_server_secret`) to resolve plugin 403 debugging quickly.
+- Added `fulfillment_jobs` Mongo collection/indexes and idempotent ack-finalization handling.
+- Added `POST /api/link/info` for optional link-code UI feedback (valid/expired/claimed).
+- Switched frontend `/link` submit call to `POST /api/link/claim` with `{ code }`.
+- Added Stripe webhook queue mode for plugin fulfillment:
+  - Webhook now enqueues fulfillment jobs instead of applying rewards immediately.
+  - Added alias endpoint `POST /api/stripe/webhook` (existing `/api/payments/stripe/webhook` retained).
+
 ## 2026-02-17 (v1.3.99)
 - Added reusable `CustomScrollbar` component and enabled global custom scrollbar styling with staff-gradient treatment for page scroll and key modal/drawer scroll containers.
 - Replaced default scrollbar look across app overlays/popups with consistent themed track/thumb styling.
