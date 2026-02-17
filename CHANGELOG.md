@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.87)
+- Adjusted Rank Comparison sticky header offset so rank header cards sit higher and reduce overlap with top feature rows.
+- Removed the `Feature` label from the extended comparison table first column header.
+- Moved extended comparison Add to cart actions outside the table into a dedicated button row below the table.
+
 ## 2026-02-17 (v1.3.86)
 - Reordered Store rank detail popup so the rank badge is centered directly below the rank title.
 - Moved rank detail price to centered footer position below the Add to cart button for all rank popups.

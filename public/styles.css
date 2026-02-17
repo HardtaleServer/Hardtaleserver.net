@@ -5361,7 +5361,7 @@ body[data-theme="dark"] .store-cta {
 
   .store-comparison-table thead th {
     position: sticky;
-    top: 64px;
+    top: 42px;
     z-index: 5;
     border-bottom: 2px solid var(--stroke);
     background: color-mix(in srgb, var(--bg-soft) 92%, var(--bg) 8%);

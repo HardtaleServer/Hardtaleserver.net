@@ -88,7 +88,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.86";
+const VERSION = "1.3.87";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -189,6 +189,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.87",
+    date: "2026-02-17",
+    items: [
+      "Adjusted Rank Comparison sticky header offset to sit higher and reduce overlap with top feature rows.",
+      "Removed `Feature` text from the extended comparison header first column.",
+      "Moved extended comparison Add to cart actions outside the table into a dedicated row beneath the table.",
+    ],
+  },
   {
     version: "1.3.86",
     date: "2026-02-17",
@@ -5219,6 +5228,24 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
     </th>`;
   }
 
+  function renderComparisonBuyRow(keyPrefix = "comparison") {
+    return html`<div className="store-comparison-buy-row">
+      ${SAMPLE_STORE.map((item) => {
+        const addMeta = getStoreAddMeta(item);
+        return html`<button
+          key=${`${keyPrefix}-buy-${item.id}`}
+          type="button"
+          className="button store-cta store-comparison-buy-btn"
+          onClick=${() => onAdd(item)}
+          disabled=${addMeta.addDisabled}
+          title=${addMeta.addTitle}
+        >
+          ${addMeta.addLabel}
+        </button>`;
+      })}
+    </div>`;
+  }
+
   return html`
     <section className="card fade-in">
       <div className="section-title">Hardtale Store</div>
@@ -5342,8 +5369,8 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
                   <table className="store-comparison-table" role="table" aria-label="Extended rank feature comparison">
                     <thead>
                       <tr>
-                        <th scope="col" className="store-feature-col">Feature</th>
-                        ${SAMPLE_STORE.map((item) => renderComparisonHeaderCell(item, "extended", true))}
+                        <th scope="col" className="store-feature-col" aria-label="Feature column"></th>
+                        ${SAMPLE_STORE.map((item) => renderComparisonHeaderCell(item, "extended", false))}
                       </tr>
                     </thead>
                     <tbody>
@@ -5356,6 +5383,7 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
                     </tbody>
                   </table>
                 </div>
+                ${renderComparisonBuyRow("extended")}
                 `
               : html``}
           </div>`
