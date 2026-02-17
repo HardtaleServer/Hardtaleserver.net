@@ -7086,7 +7086,10 @@ function NotificationsPanel({ notifications, onView, onOpenProfile }) {
       ${notifications.map((item) => {
         const authorLabel = String(item?.authorName || item?.author || "System");
         const authorRank = getRankDisplayLabel(item?.authorRank || "Registered");
-        const authorRankSlug = rankSlug(authorRank || "Registered");
+        const authorRankSlug = String(authorRank || "Registered")
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-");
         const authorImage = String(item?.authorImage || "/assets/HardTale_H_GreyScale.png");
         const authorUserId = String(item?.authorUserId || "").trim();
         const isSystemAuthor = /^system$/i.test(authorLabel) || authorUserId === "";
