@@ -7,10 +7,10 @@ Goal
 Do this in order
 1) Confirm backend token env on Render
 - Set one shared token value in Render env:
-  - HARDTALE_API_TOKEN=<shared-token>
+  - HARDTALE_API_TOKEN=fed668d24106dcd1b9cee1b2ddfb919f1eb72d5d1637e7a6d76f21793614f173fbc22bcdd5af7436402b1a80ba8cfd08
 - Optional fallback vars (same value if used):
-  - FULFILLMENT_API_TOKEN=<shared-token>
-  - LINK_SERVICE_AUTH_TOKEN=<shared-token>
+  - FULFILLMENT_API_TOKEN=fed668d24106dcd1b9cee1b2ddfb919f1eb72d5d1637e7a6d76f21793614f173fbc22bcdd5af7436402b1a80ba8cfd08
+  - LINK_SERVICE_AUTH_TOKEN=fed668d24106dcd1b9cee1b2ddfb919f1eb72d5d1637e7a6d76f21793614f173fbc22bcdd5af7436402b1a80ba8cfd08
 - Redeploy after env changes.
 
 2) Configure plugin token and routes (DEV server)
