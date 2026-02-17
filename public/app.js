@@ -6655,6 +6655,15 @@ function ForumPage({ isAdmin = false }) {
           title="Post Preview"
           className="forum-create-overlay"
         >
+          <div className="comment-actions right">
+            <button
+              className="button ghost-btn"
+              type="button"
+              onClick=${() => setShowCreatePreview(false)}
+            >
+              Back to editor
+            </button>
+          </div>
           <article className="news-card forum-post-card forum-preview-card">
             <div className="forum-post-author-row">
               <img
