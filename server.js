@@ -1289,6 +1289,59 @@ function resolveDisplayRankFromMetadata(metadata = {}, includeAllTitles = false,
   return { ownedRank, displayRank, availableTitles };
 }
 
+function normalizeGroupLabel(value, max = 40) {
+  return normalizeText(value, max);
+}
+
+function getMetadataGroupList(metadata = {}) {
+  const keys = ["groups", "groupMemberships", "staffGroups"];
+  const values = [];
+  for (const key of keys) {
+    const raw = metadata?.[key];
+    if (!Array.isArray(raw)) continue;
+    for (const entry of raw) {
+      const label = normalizeGroupLabel(entry);
+      if (!label) continue;
+      values.push(label);
+    }
+  }
+  return values;
+}
+
+function buildProfileGroupsForUser(user, options = {}) {
+  const linked = options?.linked === true;
+  const metadata = user?.publicMetadata || {};
+  const staffRole = resolveStaffRoleForUser(user);
+  const isStaff = Boolean(staffRole);
+  const rankInfo = resolveDisplayRankFromMetadata(metadata, isStaff, linked);
+  const set = new Set();
+  const ordered = [];
+
+  function addGroup(label) {
+    const value = normalizeGroupLabel(label);
+    if (!value) return;
+    const key = value.toLowerCase();
+    if (set.has(key)) return;
+    set.add(key);
+    ordered.push(value);
+  }
+
+  for (const label of getMetadataGroupList(metadata)) {
+    addGroup(label);
+  }
+
+  if (isStaff) addGroup("Staff");
+  if (staffRole) {
+    if (staffRole === "Admin") addGroup("Administrator");
+    else addGroup(staffRole);
+  }
+  if (rankInfo.ownedRank && rankInfo.ownedRank !== "Unregistered") addGroup(rankInfo.ownedRank);
+  if (rankInfo.displayRank && rankInfo.displayRank !== "Unregistered") addGroup(rankInfo.displayRank);
+  addGroup(linked ? "Linked" : "Unlinked");
+
+  return ordered;
+}
+
 async function isLinkedUserId(userId) {
   const id = normalizeText(userId, 128);
   if (!id || !linkedAccountsCollection) return false;
@@ -1950,6 +2003,23 @@ app.get("/api/profile/achievements/:userId", async (req, res) => {
   } catch (error) {
     console.error("Failed to load profile achievements", error);
     return res.status(500).json({ error: "Failed to load profile achievements" });
+  }
+});
+
+app.get("/api/profile/groups/:userId", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const userId = normalizeText(req.params.userId, 128);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+    const user = await clerkClient.users.getUser(userId);
+    const linked = await isLinkedUserId(userId);
+    const groups = buildProfileGroupsForUser(user, { linked });
+    return res.json({ userId, groups });
+  } catch (error) {
+    console.error("Failed to load profile groups", error);
+    return res.status(500).json({ error: "Failed to load profile groups" });
   }
 });
 

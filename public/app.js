@@ -725,6 +725,33 @@ function buildOwnedRankBadges(ownedRank, isStaffUser = false, options = {}) {
   return [unlocked[unlocked.length - 1]];
 }
 
+function normalizeProfileGroupLabel(value = "") {
+  return String(value || "").trim().replace(/\s+/g, " ").slice(0, 40);
+}
+
+function deriveProfileGroups(entry) {
+  const incoming = Array.isArray(entry?.groups) ? entry.groups : [];
+  const groups = [];
+  const seen = new Set();
+  function add(label) {
+    const value = normalizeProfileGroupLabel(label);
+    if (!value) return;
+    const key = value.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    groups.push(value);
+  }
+  for (const item of incoming) add(item);
+  if (groups.length === 0) {
+    if (entry?.isStaffUser || entry?.staff) add("Staff");
+    const staffRoleLabel = toStaffPillTitle(entry?.staffRole || entry?.authorStaffRole || "");
+    if (staffRoleLabel) add(staffRoleLabel);
+    if (entry?.ownedRank && String(entry.ownedRank) !== "Unregistered") add(entry.ownedRank);
+    add(entry?.linkedAccount ? "Linked" : "Unlinked");
+  }
+  return groups;
+}
+
 function applyTheme(value) {
   const root = document.body;
   if (!value || value === "system") {
@@ -1526,6 +1553,7 @@ function CommentThread({
   const [openResponses, setOpenResponses] = useState({});
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileUser, setProfileUser] = useState(null);
+  const [profileInfoTab, setProfileInfoTab] = useState("badges");
   const [profileTitleStatus, setProfileTitleStatus] = useState("");
   const [profileTitleSaving, setProfileTitleSaving] = useState(false);
   const [profileStaffBadgeSaving, setProfileStaffBadgeSaving] = useState(false);
@@ -1968,6 +1996,19 @@ function CommentThread({
       if (!response.ok) throw new Error("Failed");
       const data = await response.json().catch(() => ({}));
       return Array.isArray(data?.achievements) ? data.achievements : [];
+    } catch {
+      return [];
+    }
+  }
+
+  async function loadProfileGroups(targetUserId) {
+    const safeUserId = String(targetUserId || "").trim();
+    if (!safeUserId) return [];
+    try {
+      const response = await fetch(`/api/profile/groups/${encodeURIComponent(safeUserId)}`);
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json().catch(() => ({}));
+      return Array.isArray(data?.groups) ? data.groups : [];
     } catch {
       return [];
     }
@@ -2512,11 +2553,13 @@ function CommentThread({
     if (isOwn && availableTitles.length === 0 && selectedTitle) {
       availableTitles = [selectedTitle];
     }
-    const [linkStatus, achievements] = await Promise.all([
+    const [linkStatus, achievements, groups] = await Promise.all([
       loadProfileLinkStatus(authorUserId),
       loadProfileAchievements(authorUserId),
+      loadProfileGroups(authorUserId),
     ]);
     setProfileTitleStatus("");
+    setProfileInfoTab("badges");
     setProfileUser({
       name: String(entry.authorName || "User"),
       image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
@@ -2549,6 +2592,7 @@ function CommentThread({
       hytalePlayerUuid: linkStatus.playerUuid,
       linkedAccount: linkStatus.linked,
       achievements,
+      groups,
     });
     setProfileOpen(true);
   }
@@ -3134,8 +3178,25 @@ function CommentThread({
               ${profileTitleStatus && profileUser.isOwn
                 ? html`<div className="muted profile-card-title-status">${profileTitleStatus}</div>`
                 : html``}
-              ${renderStaffBadge(profileUser)}
-              ${renderOwnedRankBadges(profileUser)}
+              <div className="profile-card-subtabs" role="tablist" aria-label="Profile details">
+                <button
+                  type="button"
+                  className=${`profile-card-subtab ${profileInfoTab === "badges" ? "active" : ""}`.trim()}
+                  onClick=${() => setProfileInfoTab("badges")}
+                >
+                  Badges
+                </button>
+                <button
+                  type="button"
+                  className=${`profile-card-subtab ${profileInfoTab === "groups" ? "active" : ""}`.trim()}
+                  onClick=${() => setProfileInfoTab("groups")}
+                >
+                  Groups
+                </button>
+              </div>
+              ${profileInfoTab === "groups"
+                ? html`${renderProfileGroupsCard(profileUser)}`
+                : html`${renderStaffBadge(profileUser)}${renderOwnedRankBadges(profileUser)}`}
             </div>`
           : html``}
       <//>
@@ -4739,6 +4800,7 @@ function ForumPage({ isAdmin = false }) {
   const [selectedPostLoading, setSelectedPostLoading] = useState(false);
   const [forumProfileOpen, setForumProfileOpen] = useState(false);
   const [forumProfileUser, setForumProfileUser] = useState(null);
+  const [forumProfileInfoTab, setForumProfileInfoTab] = useState("badges");
   const [forumProfileTitleStatus, setForumProfileTitleStatus] = useState("");
   const [forumProfileTitleSaving, setForumProfileTitleSaving] = useState(false);
   const [forumProfileStaffBadgeSaving, setForumProfileStaffBadgeSaving] = useState(false);
@@ -4925,6 +4987,19 @@ function ForumPage({ isAdmin = false }) {
     }
   }
 
+  async function loadForumProfileGroups(targetUserId) {
+    const safeUserId = String(targetUserId || "").trim();
+    if (!safeUserId) return [];
+    try {
+      const response = await fetch(`/api/profile/groups/${encodeURIComponent(safeUserId)}`);
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json().catch(() => ({}));
+      return Array.isArray(data?.groups) ? data.groups : [];
+    } catch {
+      return [];
+    }
+  }
+
   async function openForumProfileCard(entry) {
     if (!entry) return;
     const rankLabel = String(entry.authorRank || "Unregistered");
@@ -4993,11 +5068,13 @@ function ForumPage({ isAdmin = false }) {
     if (isOwn && availableTitles.length === 0 && selectedTitle) {
       availableTitles = [selectedTitle];
     }
-    const [linkStatus, achievements] = await Promise.all([
+    const [linkStatus, achievements, groups] = await Promise.all([
       loadForumProfileLinkStatus(authorUserId),
       loadForumProfileAchievements(authorUserId),
+      loadForumProfileGroups(authorUserId),
     ]);
     setForumProfileTitleStatus("");
+    setForumProfileInfoTab("badges");
     setForumProfileUser({
       name: authorName,
       username: formatUsernameForDisplay(authorUsername),
@@ -5031,6 +5108,7 @@ function ForumPage({ isAdmin = false }) {
       hytalePlayerUuid: linkStatus.playerUuid,
       linkedAccount: linkStatus.linked,
       achievements,
+      groups,
     });
     setForumProfileOpen(true);
   }
@@ -5529,8 +5607,25 @@ function ForumPage({ isAdmin = false }) {
       ${forumProfileTitleStatus && forumProfileUser.isOwn
         ? html`<div className="muted profile-card-title-status">${forumProfileTitleStatus}</div>`
         : html``}
-      ${renderStaffBadge(forumProfileUser)}
-      ${renderOwnedRankBadges(forumProfileUser)}
+      <div className="profile-card-subtabs" role="tablist" aria-label="Profile details">
+        <button
+          type="button"
+          className=${`profile-card-subtab ${forumProfileInfoTab === "badges" ? "active" : ""}`.trim()}
+          onClick=${() => setForumProfileInfoTab("badges")}
+        >
+          Badges
+        </button>
+        <button
+          type="button"
+          className=${`profile-card-subtab ${forumProfileInfoTab === "groups" ? "active" : ""}`.trim()}
+          onClick=${() => setForumProfileInfoTab("groups")}
+        >
+          Groups
+        </button>
+      </div>
+      ${forumProfileInfoTab === "groups"
+        ? html`${renderProfileGroupsCard(forumProfileUser)}`
+        : html`${renderStaffBadge(forumProfileUser)}${renderOwnedRankBadges(forumProfileUser)}`}
     </div>`;
   }
 
@@ -6924,6 +7019,18 @@ function renderOwnedRankBadges(entry) {
   </div>`;
 }
 
+function renderProfileGroupsCard(entry) {
+  const groups = deriveProfileGroups(entry);
+  return html`<div className="profile-card-badges-block">
+    <div className="profile-card-badges-title">Groups</div>
+    ${groups.length > 0
+      ? html`<div className="profile-card-badges-row profile-groups-row">
+          ${groups.map((group) => html`<span className="profile-group-pill">${group}</span>`)}
+        </div>`
+      : html`<div className="muted profile-card-badges-empty">No groups assigned.</div>`}
+  </div>`;
+}
+
 function NotificationsPanel({ notifications, onView, onOpenProfile }) {
   if (!notifications.length) {
     return html`<p className="muted">No notifications yet.</p>`;
@@ -7694,6 +7801,7 @@ function Layout() {
   const [showNotifications, setShowNotifications] = useState(false);
   const [notificationProfileOpen, setNotificationProfileOpen] = useState(false);
   const [notificationProfileUser, setNotificationProfileUser] = useState(null);
+  const [notificationProfileInfoTab, setNotificationProfileInfoTab] = useState("badges");
   const [showChangelog, setShowChangelog] = useState(false);
   const [showConnectHelp, setShowConnectHelp] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -8230,6 +8338,19 @@ function Layout() {
     }
   }
 
+  async function loadLayoutProfileGroups(targetUserId) {
+    const safeUserId = String(targetUserId || "").trim();
+    if (!safeUserId) return [];
+    try {
+      const response = await fetch(`/api/profile/groups/${encodeURIComponent(safeUserId)}`);
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json().catch(() => ({}));
+      return Array.isArray(data?.groups) ? data.groups : [];
+    } catch {
+      return [];
+    }
+  }
+
   async function openNotificationProfile(item) {
     if (!item) return;
     const name = String(item.authorName || item.author || "User");
@@ -8242,10 +8363,12 @@ function Layout() {
       isStaffLabel(username) ||
       isStaffLabel(rankLabel);
     const authorUserId = String(item.authorUserId || "").trim();
-    const [linkStatus, achievements] = await Promise.all([
+    const [linkStatus, achievements, groups] = await Promise.all([
       loadLayoutProfileLinkStatus(authorUserId),
       loadLayoutProfileAchievements(authorUserId),
+      loadLayoutProfileGroups(authorUserId),
     ]);
+    setNotificationProfileInfoTab("badges");
     setNotificationProfileUser({
       name,
       username,
@@ -8264,6 +8387,7 @@ function Layout() {
       hytalePlayerUuid: linkStatus.playerUuid,
       linkedAccount: linkStatus.linked,
       achievements,
+      groups,
     });
     setNotificationProfileOpen(true);
   }
@@ -8810,8 +8934,25 @@ function Layout() {
                     <span>${getRankDisplayLabel(notificationProfileUser.rankLabel || "Unregistered")}</span>`;
                 })()}
               </div>
-              ${renderStaffBadge(notificationProfileUser)}
-              ${renderOwnedRankBadges(notificationProfileUser)}
+              <div className="profile-card-subtabs" role="tablist" aria-label="Profile details">
+                <button
+                  type="button"
+                  className=${`profile-card-subtab ${notificationProfileInfoTab === "badges" ? "active" : ""}`.trim()}
+                  onClick=${() => setNotificationProfileInfoTab("badges")}
+                >
+                  Badges
+                </button>
+                <button
+                  type="button"
+                  className=${`profile-card-subtab ${notificationProfileInfoTab === "groups" ? "active" : ""}`.trim()}
+                  onClick=${() => setNotificationProfileInfoTab("groups")}
+                >
+                  Groups
+                </button>
+              </div>
+              ${notificationProfileInfoTab === "groups"
+                ? html`${renderProfileGroupsCard(notificationProfileUser)}`
+                : html`${renderStaffBadge(notificationProfileUser)}${renderOwnedRankBadges(notificationProfileUser)}`}
             </div>`
           : html``}
       <//>

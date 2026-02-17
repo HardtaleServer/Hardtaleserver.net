@@ -3167,6 +3167,32 @@ emoji-picker.reaction-picker-panel {
   font-weight: 700;
 }
 
+.profile-card-subtabs {
+  display: inline-flex;
+  gap: 8px;
+  align-self: center;
+  margin-top: 6px;
+}
+
+.profile-card-subtab {
+  border: 1px solid var(--stroke);
+  background: var(--bg-soft);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.profile-card-subtab.active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--stroke));
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-soft));
+}
+
 .profile-card-badges-row {
   display: flex;
   flex-wrap: wrap;
@@ -3260,6 +3286,25 @@ emoji-picker.reaction-picker-panel {
 
 .profile-card-badges-empty {
   font-size: 12px;
+}
+
+.profile-groups-row {
+  justify-content: center;
+}
+
+.profile-group-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--stroke);
+  background: var(--bg-soft);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .profile-achievements-card {
