@@ -5880,9 +5880,6 @@ function ForumPage({ isAdmin = false }) {
                         className=${`author-name ${selectedPost?.authorUseRankFont === true ? "rank-font-on" : "rank-font-off"} rank-${rankSlug(selectedPost?.authorRank || "Unregistered")}`.trim()}
                       />
                     </button>
-                    ${forumShowStaffPill(selectedPost)
-                      ? renderForumStaffPill(selectedPost)
-                      : html``}
                     <span className=${forumRankClassName(selectedPost)}>
                       ${(() => {
                         const iconType = getRankIconType(selectedPost.authorRank || "");
@@ -5890,6 +5887,9 @@ function ForumPage({ isAdmin = false }) {
                           <span>${getRankDisplayLabel(selectedPost.authorRank || "Unregistered")}</span>`;
                       })()}
                     </span>
+                    ${forumShowStaffPill(selectedPost)
+                      ? renderForumStaffPill(selectedPost)
+                      : html``}
                     <span className="forum-post-op">OP</span>
                     <${TimestampText} value=${selectedPost.createdAt} formatTimestamp=${formatTimestamp} />
                     ${(selectedPost.editCount || 0) > 0
@@ -6136,9 +6136,6 @@ function ForumPage({ isAdmin = false }) {
                           className=${`author-name ${post?.authorUseRankFont === true ? "rank-font-on" : "rank-font-off"} rank-${rankSlug(post?.authorRank || "Unregistered")}`.trim()}
                         />
                       </button>
-                      ${forumShowStaffPill(post)
-                        ? renderForumStaffPill(post)
-                        : html``}
                       <span className=${forumRankClassName(post)}>
                         ${(() => {
                           const iconType = getRankIconType(post.authorRank || "");
@@ -6146,6 +6143,9 @@ function ForumPage({ isAdmin = false }) {
                             <span>${getRankDisplayLabel(post.authorRank || "Unregistered")}</span>`;
                         })()}
                       </span>
+                      ${forumShowStaffPill(post)
+                        ? renderForumStaffPill(post)
+                        : html``}
                       <span className="forum-post-op">OP</span>
                       <${TimestampText} value=${post.createdAt} formatTimestamp=${formatTimestamp} />
                       ${(post.editCount || 0) > 0
