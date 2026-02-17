@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.85)
+- Reworked `/api/link/redeem` to enforce signed-in web auth first, before any JWT/code linking branch.
+- Added dual-link strategy routing: verify Hytale JWT first (when provided/configured), then fallback to code redeem only when JWT is missing/invalid and a code is present.
+- Normalized downstream plugin auth/path failures to `502 DOWNSTREAM_FAILURE` with `upstreamStatus` for diagnostics.
+- Added `linkSource` (`JWT` or `CODE`) and `linkedAt` persistence/response fields on successful links.
+- Added temporary structured failure logs for key `/api/link/redeem` branches (`401`/`403`/`502`).
+- Tightened default plugin redeem endpoint path to `/api/v1/link/redeem`.
+
 ## 2026-02-17 (v1.3.84)
 - Added `/link` deep-link auto-submit so valid URL codes (for example `/link?12345678`) redeem automatically once per code view.
 - Added `/link` cooldown lock UI for rate-limited attempts with timer countdown and disabled non-interactive submit button state.

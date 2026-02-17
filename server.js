@@ -146,8 +146,17 @@ const LINK_SERVICE_AUTH_TOKEN = String(process.env.LINK_SERVICE_AUTH_TOKEN || ""
 const LINKING_ENABLED = String(
   process.env.LINKING_ENABLED || process.env.LINK_REDEEM_ENABLED || "false",
 ).toLowerCase() === "true";
+const HYTALE_JWT_ISSUER = String(process.env.HYTALE_JWT_ISSUER || "").trim();
+const HYTALE_JWT_AUDIENCE = String(process.env.HYTALE_JWT_AUDIENCE || "").trim();
+const HYTALE_JWT_JWKS_URL = String(process.env.HYTALE_JWT_JWKS_URL || "").trim();
+const HYTALE_JWT_SHARED_SECRET = String(process.env.HYTALE_JWT_SHARED_SECRET || "").trim();
+const HYTALE_JWT_CLOCK_SKEW_SEC = Math.max(
+  0,
+  Math.min(Number(process.env.HYTALE_JWT_CLOCK_SKEW_SEC || 30), 300),
+);
+const HYTALE_JWT_ENABLED = Boolean(HYTALE_JWT_SHARED_SECRET || HYTALE_JWT_JWKS_URL);
 const LINK_SERVICE_REDEEM_PATHS = String(
-  process.env.LINK_SERVICE_REDEEM_PATHS || "/api/v1/link/redeem,/api/link/redeem,/link/redeem",
+  process.env.LINK_SERVICE_REDEEM_PATHS || "/api/v1/link/redeem",
 )
   .split(",")
   .map((entry) => String(entry || "").trim())
@@ -218,6 +227,10 @@ let mongoConnectInFlight = null;
 let mongoReconnectTimer = null;
 let mongoReconnectDelayMs = 1000;
 const MAX_MONGO_RECONNECT_DELAY_MS = 30000;
+let hytaleJwksCache = {
+  expiresAt: 0,
+  keys: [],
+};
 
 function resetMongoState() {
   mongoClient = null;
@@ -1013,6 +1026,50 @@ function resolveStaffRoleBaseForUser(user) {
   return "";
 }
 
+async function persistLinkedAccountForUser({ userId, playerUuid, playerName, linkSource, codeLast4 = "" }) {
+  const existingByPlayer = await linkedAccountsCollection.findOne({ playerUuid });
+  if (existingByPlayer && existingByPlayer.webUserId !== userId) {
+    return {
+      ok: false,
+      status: 409,
+      code: "ALREADY_LINKED",
+      error: "That game account is already linked to another web account",
+    };
+  }
+
+  const existingByUser = await linkedAccountsCollection.findOne({ webUserId: userId });
+  if (existingByUser && normalizePlayerUuid(existingByUser.playerUuid) === playerUuid) {
+    return {
+      ok: true,
+      alreadyLinked: true,
+      linkedAt: existingByUser.linkedAt || existingByUser.updatedAt || existingByUser.createdAt || new Date().toISOString(),
+    };
+  }
+
+  const nowIso = new Date().toISOString();
+  await linkedAccountsCollection.updateOne(
+    { webUserId: userId },
+    {
+      $set: {
+        webUserId: userId,
+        playerUuid,
+        playerName,
+        linkSource: normalizeText(linkSource, 20).toUpperCase() || "CODE",
+        linkedSource: normalizeText(linkSource, 20).toUpperCase() || "CODE",
+        codeLast4: normalizeText(codeLast4, 8),
+        updatedAt: nowIso,
+        linkedAt: nowIso,
+      },
+      $setOnInsert: {
+        createdAt: nowIso,
+      },
+    },
+    { upsert: true },
+  );
+
+  return { ok: true, alreadyLinked: false, linkedAt: nowIso };
+}
+
 function getAllowedStaffRolePreviewOptions(baseRole) {
   switch (baseRole) {
     case "Operator":
@@ -1030,6 +1087,203 @@ function getAllowedStaffRolePreviewOptions(baseRole) {
     default:
       return [];
   }
+}
+
+function base64UrlToBuffer(value) {
+  const input = String(value || "").replace(/-/g, "+").replace(/_/g, "/");
+  const padded = input.padEnd(Math.ceil(input.length / 4) * 4, "=");
+  return Buffer.from(padded, "base64");
+}
+
+function parseJwtCompact(token) {
+  const raw = String(token || "").trim();
+  const parts = raw.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const header = JSON.parse(base64UrlToBuffer(parts[0]).toString("utf8"));
+    const payload = JSON.parse(base64UrlToBuffer(parts[1]).toString("utf8"));
+    return {
+      raw,
+      header,
+      payload,
+      signature: parts[2],
+      signingInput: `${parts[0]}.${parts[1]}`,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function readLinkJwtFromRequest(req) {
+  const headerToken = normalizeText(req.headers?.["x-hytale-jwt"] || "", 4096);
+  if (headerToken && headerToken.split(".").length === 3) return headerToken;
+  const bodyToken = normalizeText(req.body?.hytaleJwt || req.body?.jwt || "", 4096);
+  if (bodyToken && bodyToken.split(".").length === 3) return bodyToken;
+  return "";
+}
+
+async function fetchHytaleJwksKeys() {
+  if (!HYTALE_JWT_JWKS_URL) return [];
+  if (hytaleJwksCache.expiresAt > Date.now() && Array.isArray(hytaleJwksCache.keys)) {
+    return hytaleJwksCache.keys;
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 6000);
+  try {
+    const response = await fetch(HYTALE_JWT_JWKS_URL, { signal: controller.signal });
+    if (!response.ok) return [];
+    const data = await response.json().catch(() => ({}));
+    const keys = Array.isArray(data?.keys) ? data.keys : [];
+    hytaleJwksCache = {
+      expiresAt: Date.now() + 5 * 60 * 1000,
+      keys,
+    };
+    return keys;
+  } catch {
+    return [];
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function createPemFromJwk(jwk) {
+  if (!jwk || typeof jwk !== "object") return null;
+  if (jwk.x5c && Array.isArray(jwk.x5c) && jwk.x5c[0]) {
+    return `-----BEGIN CERTIFICATE-----\n${jwk.x5c[0]}\n-----END CERTIFICATE-----`;
+  }
+  try {
+    return crypto.createPublicKey({ key: jwk, format: "jwk" });
+  } catch {
+    return null;
+  }
+}
+
+function verifyJwtHmac({ algorithm, signingInput, signatureB64Url, secret }) {
+  const hmacAlg = algorithm === "HS512" ? "sha512" : algorithm === "HS384" ? "sha384" : "sha256";
+  const digest = crypto
+    .createHmac(hmacAlg, secret)
+    .update(signingInput)
+    .digest();
+  const signature = base64UrlToBuffer(signatureB64Url);
+  if (digest.length !== signature.length) return false;
+  return crypto.timingSafeEqual(digest, signature);
+}
+
+function verifyJwtRsa({ algorithm, signingInput, signatureB64Url, keyLike }) {
+  const verifyAlg = algorithm === "RS512" ? "RSA-SHA512" : algorithm === "RS384" ? "RSA-SHA384" : "RSA-SHA256";
+  const verifier = crypto.createVerify(verifyAlg);
+  verifier.update(signingInput);
+  verifier.end();
+  return verifier.verify(keyLike, base64UrlToBuffer(signatureB64Url));
+}
+
+async function verifyHytaleJwtToken(token) {
+  const parsed = parseJwtCompact(token);
+  if (!parsed) {
+    return { ok: false, status: 401, code: "UNAUTHORIZED", error: "Invalid JWT format", branch: "jwt_invalid_format" };
+  }
+  const alg = normalizeText(parsed.header?.alg, 20).toUpperCase();
+  if (!alg || alg === "NONE") {
+    return { ok: false, status: 401, code: "UNAUTHORIZED", error: "Unsupported JWT algorithm", branch: "jwt_unsupported_alg" };
+  }
+
+  let signatureValid = false;
+  if (alg.startsWith("HS")) {
+    if (!HYTALE_JWT_SHARED_SECRET) {
+      return { ok: false, status: 401, code: "UNAUTHORIZED", error: "JWT shared secret not configured", branch: "jwt_missing_shared_secret" };
+    }
+    signatureValid = verifyJwtHmac({
+      algorithm: alg,
+      signingInput: parsed.signingInput,
+      signatureB64Url: parsed.signature,
+      secret: HYTALE_JWT_SHARED_SECRET,
+    });
+  } else if (alg.startsWith("RS")) {
+    const kid = normalizeText(parsed.header?.kid, 200);
+    const jwks = await fetchHytaleJwksKeys();
+    const jwk = jwks.find((entry) => normalizeText(entry?.kid, 200) === kid) || null;
+    const keyLike = createPemFromJwk(jwk);
+    if (!keyLike) {
+      return { ok: false, status: 401, code: "UNAUTHORIZED", error: "JWT signing key not found", branch: "jwt_key_missing" };
+    }
+    signatureValid = verifyJwtRsa({
+      algorithm: alg,
+      signingInput: parsed.signingInput,
+      signatureB64Url: parsed.signature,
+      keyLike,
+    });
+  } else {
+    return { ok: false, status: 401, code: "UNAUTHORIZED", error: "Unsupported JWT algorithm", branch: "jwt_unsupported_alg" };
+  }
+
+  if (!signatureValid) {
+    return { ok: false, status: 401, code: "UNAUTHORIZED", error: "JWT signature invalid", branch: "jwt_signature_invalid" };
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const skew = HYTALE_JWT_CLOCK_SKEW_SEC;
+  const exp = Number(parsed.payload?.exp || 0);
+  const nbf = Number(parsed.payload?.nbf || 0);
+  if (exp && nowSec - skew > exp) {
+    return { ok: false, status: 401, code: "UNAUTHORIZED", error: "JWT expired", branch: "jwt_expired" };
+  }
+  if (nbf && nowSec + skew < nbf) {
+    return { ok: false, status: 401, code: "UNAUTHORIZED", error: "JWT not active yet", branch: "jwt_not_yet_valid" };
+  }
+
+  if (HYTALE_JWT_ISSUER) {
+    const iss = normalizeText(parsed.payload?.iss || "", 255);
+    if (iss !== HYTALE_JWT_ISSUER) {
+      return { ok: false, status: 403, code: "FORBIDDEN", error: "JWT issuer mismatch", branch: "jwt_issuer_mismatch" };
+    }
+  }
+  if (HYTALE_JWT_AUDIENCE) {
+    const audRaw = parsed.payload?.aud;
+    const audMatch =
+      typeof audRaw === "string"
+        ? audRaw === HYTALE_JWT_AUDIENCE
+        : Array.isArray(audRaw)
+        ? audRaw.includes(HYTALE_JWT_AUDIENCE)
+        : false;
+    if (!audMatch) {
+      return { ok: false, status: 403, code: "FORBIDDEN", error: "JWT audience mismatch", branch: "jwt_audience_mismatch" };
+    }
+  }
+
+  const playerUuid = normalizePlayerUuid(
+    parsed.payload?.playerUuid ||
+      parsed.payload?.playerUUID ||
+      parsed.payload?.uuid ||
+      parsed.payload?.playerId ||
+      parsed.payload?.sub,
+  );
+  if (!playerUuid) {
+    return { ok: false, status: 403, code: "FORBIDDEN", error: "JWT missing valid player UUID", branch: "jwt_missing_uuid" };
+  }
+  const playerName = normalizeText(
+    parsed.payload?.playerName || parsed.payload?.username || parsed.payload?.name || "",
+    60,
+  );
+
+  return {
+    ok: true,
+    playerUuid,
+    playerName,
+    payload: parsed.payload,
+  };
+}
+
+function logLinkRedeemFailure(event, details = {}) {
+  const safe = {
+    event,
+    status: Number(details.status || 0) || undefined,
+    code: normalizeText(details.code || "", 60) || undefined,
+    branch: normalizeText(details.branch || "", 120) || undefined,
+    userId: normalizeText(details.userId || "", 128) || undefined,
+    upstreamStatus: Number(details.upstreamStatus || 0) || undefined,
+    source: normalizeText(details.source || "", 20) || undefined,
+  };
+  console.warn("[link.redeem]", JSON.stringify(safe));
 }
 
 function resolveStaffRoleForUser(user) {
@@ -4403,69 +4657,134 @@ app.get("/api/profile/link-status/:userId", async (req, res) => {
 app.post("/api/link/redeem", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
-    const auth = requireCommentAuth(req, res);
-    if (!auth) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      logLinkRedeemFailure("auth_missing_user", { status: 401, code: "UNAUTHORIZED", branch: "missing_user_session" });
+      return res.status(401).json({ code: "UNAUTHORIZED", error: "Not authenticated" });
+    }
+    const aud = auth.sessionClaims?.aud;
+    const matchesAud =
+      typeof aud === "string"
+        ? aud === COMMENTS_AUD
+        : Array.isArray(aud)
+        ? aud.includes(COMMENTS_AUD)
+        : false;
+    if (!matchesAud) {
+      logLinkRedeemFailure("auth_forbidden_audience", {
+        status: 403,
+        code: "FORBIDDEN",
+        branch: "audience_mismatch",
+        userId: auth.userId,
+      });
+      return res.status(403).json({ code: "FORBIDDEN", error: "Invalid audience" });
+    }
 
     const code = normalizeLinkCode(req.body?.code);
-    if (!/^[A-Z0-9]{8}$/.test(code)) {
-      return res.status(400).json({ code: "INVALID_CODE", error: "Link code must be 8 letters/numbers" });
+    const codeProvided = /^[A-Z0-9]{8}$/.test(code);
+    const hytaleJwt = readLinkJwtFromRequest(req);
+
+    let linkResult = null;
+    let linkSource = "";
+
+    if (HYTALE_JWT_ENABLED && hytaleJwt) {
+      const jwtResult = await verifyHytaleJwtToken(hytaleJwt);
+      if (jwtResult.ok) {
+        linkResult = {
+          ok: true,
+          playerUuid: jwtResult.playerUuid,
+          playerName: jwtResult.playerName,
+        };
+        linkSource = "JWT";
+      } else if (!codeProvided) {
+        logLinkRedeemFailure("jwt_verify_failed_no_code_fallback", {
+          status: jwtResult.status || 403,
+          code: jwtResult.code || "FORBIDDEN",
+          branch: jwtResult.branch || "jwt_failed",
+          userId: auth.userId,
+          source: "JWT",
+        });
+        return res.status(jwtResult.status || 403).json({
+          code: jwtResult.code || "FORBIDDEN",
+          error: jwtResult.error || "JWT verification failed",
+        });
+      }
     }
 
-    let redeemResult;
-    if (LINKING_ENABLED) {
-      const idempotencyKey = crypto.randomUUID();
-      redeemResult = await redeemLinkCodeWithGameServer({
-        code,
-        webUserId: auth.userId,
-        idempotencyKey,
-      });
-    } else {
-      redeemResult = buildMockRedeemResult({ code });
-    }
-    if (!redeemResult.ok) {
-      return res.status(redeemResult.status || 502).json({
-        code: redeemResult.code || "",
-        error: redeemResult.error || "Redeem failed",
-      });
-    }
-
-    const payload = redeemResult.data || {};
-    const playerUuid = normalizePlayerUuid(payload.playerUuid || payload.playerUUID || payload.uuid || payload.playerId);
-    if (!playerUuid) {
-      return res.status(502).json({
-        code: "SERVER_UNAVAILABLE",
-        error: "Redeem succeeded but did not return a valid player UUID",
-      });
-    }
-
-    const playerName = normalizeText(payload.playerName || payload.username || payload.playerUsername || "", 60);
-    const existingByPlayer = await linkedAccountsCollection.findOne({ playerUuid });
-    if (existingByPlayer && existingByPlayer.webUserId !== auth.userId) {
-      return res.status(409).json({
-        code: "ALREADY_LINKED",
-        error: "That game account is already linked to another web account",
-      });
-    }
-
-    const nowIso = new Date().toISOString();
-    await linkedAccountsCollection.updateOne(
-      { webUserId: auth.userId },
-      {
-        $set: {
+    if (!linkResult) {
+      if (!codeProvided) {
+        return res.status(400).json({ code: "INVALID_CODE", error: "Link code must be 8 letters/numbers" });
+      }
+      let redeemResult;
+      if (LINKING_ENABLED) {
+        const idempotencyKey = crypto.randomUUID();
+        redeemResult = await redeemLinkCodeWithGameServer({
+          code,
           webUserId: auth.userId,
-          playerUuid,
-          playerName,
-          linkedSource: LINKING_ENABLED ? "redeemCode" : "mock",
-          codeLast4: code.slice(-4),
-          updatedAt: nowIso,
-          linkedAt: nowIso,
-        },
-        $setOnInsert: {
-          createdAt: nowIso,
-        },
-      },
-      { upsert: true },
-    );
+          idempotencyKey,
+        });
+      } else {
+        redeemResult = buildMockRedeemResult({ code });
+      }
+      if (!redeemResult.ok) {
+        const status = redeemResult.status || 502;
+        const codeOut = normalizeText(redeemResult.code || "", 80).toUpperCase();
+        const isDownstreamFailure = status >= 500 || status === 401 || status === 403 || status === 404;
+        if (isDownstreamFailure) {
+          logLinkRedeemFailure("code_redeem_downstream_failure", {
+            status: 502,
+            code: "DOWNSTREAM_FAILURE",
+            branch: "plugin_redeem_failed",
+            userId: auth.userId,
+            upstreamStatus: status,
+            source: "CODE",
+          });
+          return res.status(502).json({
+            code: "DOWNSTREAM_FAILURE",
+            error: "Downstream redeem service failed",
+            upstreamStatus: status,
+          });
+        }
+        return res.status(status).json({
+          code: codeOut || "",
+          error: redeemResult.error || "Redeem failed",
+        });
+      }
+      const payload = redeemResult.data || {};
+      const playerUuid = normalizePlayerUuid(payload.playerUuid || payload.playerUUID || payload.uuid || payload.playerId);
+      if (!playerUuid) {
+        logLinkRedeemFailure("code_redeem_invalid_payload_uuid", {
+          status: 502,
+          code: "DOWNSTREAM_FAILURE",
+          branch: "plugin_payload_missing_uuid",
+          userId: auth.userId,
+          source: "CODE",
+        });
+        return res.status(502).json({
+          code: "DOWNSTREAM_FAILURE",
+          error: "Redeem succeeded but did not return a valid player UUID",
+        });
+      }
+      linkResult = {
+        ok: true,
+        playerUuid,
+        playerName: normalizeText(payload.playerName || payload.username || payload.playerUsername || "", 60),
+      };
+      linkSource = "CODE";
+    }
+
+    const persisted = await persistLinkedAccountForUser({
+      userId: auth.userId,
+      playerUuid: linkResult.playerUuid,
+      playerName: linkResult.playerName,
+      linkSource,
+      codeLast4: codeProvided ? code.slice(-4) : "",
+    });
+    if (!persisted.ok) {
+      return res.status(persisted.status || 409).json({
+        code: persisted.code || "ALREADY_LINKED",
+        error: persisted.error || "That game account is already linked to another web account",
+      });
+    }
 
     try {
       const user = await clerkClient.users.getUser(auth.userId);
@@ -4508,9 +4827,11 @@ app.post("/api/link/redeem", async (req, res) => {
     return res.json({
       success: true,
       linked: true,
-      playerUuid,
-      maskedPlayerUuid: maskPlayerUuid(playerUuid),
-      playerName,
+      playerUuid: linkResult.playerUuid,
+      maskedPlayerUuid: maskPlayerUuid(linkResult.playerUuid),
+      playerName: linkResult.playerName,
+      linkSource,
+      linkedAt: persisted.linkedAt || new Date().toISOString(),
       linkMode: LINKING_ENABLED ? "live" : "mock",
     });
   } catch (error) {
