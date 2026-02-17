@@ -53,7 +53,10 @@ function applyInlineMarkdown(input) {
 }
 
 export function markdownToSafeHtml(markdown) {
-  const lines = String(markdown || "").replace(/\r\n/g, "\n").split("\n");
+  const normalizedMarkdown = String(markdown || "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/\r\n/g, "\n");
+  const lines = normalizedMarkdown.split("\n");
   const html = [];
   let i = 0;
   let inCodeBlock = false;
@@ -149,6 +152,7 @@ export function markdownToSafeHtml(markdown) {
 
 export function markdownToPlainText(markdown) {
   const text = String(markdown || "")
+    .replace(/<br\s*\/?>/gi, "\n")
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`([^`]+)`/g, "$1")
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, "$1")

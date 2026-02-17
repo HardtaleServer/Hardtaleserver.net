@@ -4916,6 +4916,53 @@ function ForumPage({ isAdmin = false }) {
     }
   }
 
+  function renderForumHistoryDetails(label, value) {
+    const text = String(value || "").trim();
+    return html`<details className="forum-history-detail">
+      <summary>${label}</summary>
+      <div className="forum-history-detail-body">${text || "No content."}</div>
+    </details>`;
+  }
+
+  function renderForumHistoryContent() {
+    if (!Array.isArray(forumHistoryItems) || forumHistoryItems.length === 0) {
+      return html`<p className="muted">No revisions yet.</p>`;
+    }
+    const firstEditedAt = String(forumHistoryItems[0]?.createdAt || "");
+    return html`<div className="comment-history">
+      ${firstEditedAt
+        ? html`<div className="forum-history-originally-edited">
+            <span className="muted">Originally edited</span>
+            <${TimestampText} value=${firstEditedAt} formatTimestamp=${formatTimestamp} />
+          </div>`
+        : html``}
+      ${forumHistoryItems.map(
+        (entry, index) => html`<div key=${entry.id || `${entry.createdAt || ""}-${index}`} className="comment-history-item">
+          <div className="comment-history-meta">
+            <img
+              className="comment-avatar small"
+              src=${entry.editorImage || "/assets/HardTale_H_GreyScale.png"}
+              alt=${entry.editorName || "Editor"}
+            />
+            <div>
+              <div className="comment-author">${entry.editorName || "Editor"}</div>
+              <div className="forum-history-time">
+                <span className="muted">Edited</span>
+                <${TimestampText} value=${entry.createdAt} formatTimestamp=${formatTimestamp} />
+              </div>
+            </div>
+          </div>
+          <div className="comment-history-body forum-history-body">
+            ${renderForumHistoryDetails("Before title", entry.oldTitle)}
+            ${renderForumHistoryDetails("After title", entry.newTitle)}
+            ${renderForumHistoryDetails("Before body", entry.oldBody)}
+            ${renderForumHistoryDetails("After body", entry.newBody)}
+          </div>
+        </div>`,
+      )}
+    </div>`;
+  }
+
   async function loadOwnForumProfileTitleSettings() {
     try {
       const response = await apiFetchWithToken(getToken, true, "/api/profile/title");
@@ -5892,21 +5939,6 @@ function ForumPage({ isAdmin = false }) {
                       : html``}
                     <span className="forum-post-op">OP</span>
                     <${TimestampText} value=${selectedPost.createdAt} formatTimestamp=${formatTimestamp} />
-                    ${(selectedPost.editCount || 0) > 0
-                      ? html`<span className="muted forum-post-edited-inline">
-                          Edited${selectedPost.editedByName ? ` by ${selectedPost.editedByName}` : ""}
-                        </span>
-                        <button
-                          className="ghost-btn forum-post-history-btn"
-                          type="button"
-                          onMouseDown=${(event) => triggerFlash(event.currentTarget)}
-                          onClick=${() => openForumPostHistory(selectedPost)}
-                          title="View past edits"
-                        >
-                          <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
-                          Past edits
-                        </button>`
-                      : html``}
                   </div>
                   <div className="forum-post-header-divider"></div>
                   <div className="news-header">
@@ -5951,11 +5983,43 @@ function ForumPage({ isAdmin = false }) {
                       />`}
                     <div className="forum-post-status-row">
                     ${isForumPostForcedEdit(selectedPost)
-                      ? html`<span className="forum-post-forced-pill">STAFF FORCED EDIT</span>`
+                      ? html`<button
+                          className="forum-post-forced-pill forum-post-forced-pill-btn"
+                          type="button"
+                          onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                          onClick=${() => openForumPostHistory(selectedPost)}
+                          title="View past edits"
+                        >
+                          STAFF FORCED EDIT
+                        </button>`
                       : html``}
-                  </div>
+                    ${(selectedPost.editCount || 0) > 0 && isForumPostForcedEdit(selectedPost)
+                      ? html`<button
+                          className="ghost-btn forum-post-history-btn"
+                          type="button"
+                          onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                          onClick=${() => openForumPostHistory(selectedPost)}
+                          title="View past edits"
+                        >
+                          <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
+                          Past edits
+                        </button>`
+                      : html``}
+                    </div>
                   ${canManageForumPost(selectedPost)
                     ? html`<div className="forum-post-actions-row">
+                        ${(selectedPost.editCount || 0) > 0 && !isForumPostForcedEdit(selectedPost)
+                          ? html`<button
+                              className="ghost-btn forum-post-history-btn"
+                              type="button"
+                              onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                              onClick=${() => openForumPostHistory(selectedPost)}
+                              title="View past edits"
+                            >
+                              <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
+                              Past edits
+                            </button>`
+                          : html``}
                         <button
                           className="ghost-btn"
                           type="button"
@@ -6028,35 +6092,7 @@ function ForumPage({ isAdmin = false }) {
             title=${forumHistoryTitle}
             className="comment-history-overlay"
           >
-            ${forumHistoryItems.length === 0
-              ? html`<p className="muted">No revisions yet.</p>`
-              : html`<div className="comment-history">
-                  ${forumHistoryItems.map(
-                    (entry, index) => html`<div key=${entry.id || `${entry.createdAt || ""}-${index}`} className="comment-history-item">
-                      <div className="comment-history-meta">
-                        <img
-                          className="comment-avatar small"
-                          src=${entry.editorImage || "/assets/HardTale_H_GreyScale.png"}
-                          alt=${entry.editorName || "Editor"}
-                        />
-                        <div>
-                          <div className="comment-author">${entry.editorName || "Editor"}</div>
-                          <div className="muted">${formatTimestamp(entry.createdAt)}</div>
-                        </div>
-                      </div>
-                      <div className="comment-history-body">
-                        <div className="muted">Before title</div>
-                        <p>${entry.oldTitle || ""}</p>
-                        <div className="muted">After title</div>
-                        <p>${entry.newTitle || ""}</p>
-                        <div className="muted">Before body</div>
-                        <p>${entry.oldBody || ""}</p>
-                        <div className="muted">After body</div>
-                        <p>${entry.newBody || ""}</p>
-                      </div>
-                    </div>`,
-                  )}
-                </div>`}
+            ${renderForumHistoryContent()}
           <//>
         </section>
       `;
@@ -6148,21 +6184,6 @@ function ForumPage({ isAdmin = false }) {
                         : html``}
                       <span className="forum-post-op">OP</span>
                       <${TimestampText} value=${post.createdAt} formatTimestamp=${formatTimestamp} />
-                      ${(post.editCount || 0) > 0
-                        ? html`<span className="muted forum-post-edited-inline">
-                            Edited${post.editedByName ? ` by ${post.editedByName}` : ""}
-                          </span>
-                          <button
-                            className="ghost-btn forum-post-history-btn"
-                            type="button"
-                            onMouseDown=${(event) => triggerFlash(event.currentTarget)}
-                            onClick=${() => openForumPostHistory(post)}
-                            title="View past edits"
-                          >
-                            <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
-                            Past edits
-                          </button>`
-                        : html``}
                     </div>
                     <${Link}
                       className="forum-post-link"
@@ -6180,11 +6201,43 @@ function ForumPage({ isAdmin = false }) {
                     </${Link}>
                     <div className="forum-post-status-row">
                       ${isForumPostForcedEdit(post)
-                        ? html`<span className="forum-post-forced-pill">STAFF FORCED EDIT</span>`
+                        ? html`<button
+                            className="forum-post-forced-pill forum-post-forced-pill-btn"
+                            type="button"
+                            onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                            onClick=${() => openForumPostHistory(post)}
+                            title="View past edits"
+                          >
+                            STAFF FORCED EDIT
+                          </button>`
+                        : html``}
+                      ${(post.editCount || 0) > 0 && isForumPostForcedEdit(post)
+                        ? html`<button
+                            className="ghost-btn forum-post-history-btn"
+                            type="button"
+                            onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                            onClick=${() => openForumPostHistory(post)}
+                            title="View past edits"
+                          >
+                            <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
+                            Past edits
+                          </button>`
                         : html``}
                     </div>
                     ${canManageForumPost(post)
                       ? html`<div className="forum-post-actions-row">
+                          ${(post.editCount || 0) > 0 && !isForumPostForcedEdit(post)
+                            ? html`<button
+                                className="ghost-btn forum-post-history-btn"
+                                type="button"
+                                onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                                onClick=${() => openForumPostHistory(post)}
+                                title="View past edits"
+                              >
+                                <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
+                                Past edits
+                              </button>`
+                            : html``}
                           <button
                             className="ghost-btn"
                             type="button"
@@ -6287,35 +6340,7 @@ function ForumPage({ isAdmin = false }) {
           title=${forumHistoryTitle}
           className="comment-history-overlay"
         >
-          ${forumHistoryItems.length === 0
-            ? html`<p className="muted">No revisions yet.</p>`
-            : html`<div className="comment-history">
-                ${forumHistoryItems.map(
-                  (entry, index) => html`<div key=${entry.id || `${entry.createdAt || ""}-${index}`} className="comment-history-item">
-                    <div className="comment-history-meta">
-                      <img
-                        className="comment-avatar small"
-                        src=${entry.editorImage || "/assets/HardTale_H_GreyScale.png"}
-                        alt=${entry.editorName || "Editor"}
-                      />
-                      <div>
-                        <div className="comment-author">${entry.editorName || "Editor"}</div>
-                        <div className="muted">${formatTimestamp(entry.createdAt)}</div>
-                      </div>
-                    </div>
-                    <div className="comment-history-body">
-                      <div className="muted">Before title</div>
-                      <p>${entry.oldTitle || ""}</p>
-                      <div className="muted">After title</div>
-                      <p>${entry.newTitle || ""}</p>
-                      <div className="muted">Before body</div>
-                      <p>${entry.oldBody || ""}</p>
-                      <div className="muted">After body</div>
-                      <p>${entry.newBody || ""}</p>
-                    </div>
-                  </div>`,
-                )}
-              </div>`}
+          ${renderForumHistoryContent()}
         <//>
 
         <${PopUp}

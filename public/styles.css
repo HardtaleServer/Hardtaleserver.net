@@ -1142,10 +1142,9 @@ body[data-theme="light"] .settings-icon {
 }
 
 .forum-post-status-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
 }
 
 .forum-post-edited-note {
@@ -1166,11 +1165,59 @@ body[data-theme="light"] .settings-icon {
   font-weight: 700;
 }
 
+.forum-post-forced-pill-btn {
+  background: transparent;
+  cursor: pointer;
+}
+
 .forum-post-actions-row {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
   flex-wrap: wrap;
+}
+
+.forum-history-originally-edited {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.forum-history-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.forum-history-time .notification-timestamp,
+.forum-history-originally-edited .notification-timestamp {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.forum-history-body {
+  display: grid;
+  gap: 8px;
+}
+
+.forum-history-detail {
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  padding: 6px 8px;
+  background: var(--bg-soft);
+}
+
+.forum-history-detail summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.forum-history-detail-body {
+  margin-top: 8px;
+  white-space: pre-wrap;
 }
 
 .forum-edit-form {
