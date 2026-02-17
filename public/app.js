@@ -8886,6 +8886,9 @@ function LinkPage({ onClose = null }) {
   const inputRefs = useRef([]);
   const autoSubmittedCodeRef = useRef("");
   const badQueryTelemetryRef = useRef("");
+  const linkInfoInFlightRef = useRef(false);
+  const linkInfoLastRequestedCodeRef = useRef("");
+  const linkInfoLastRejected4xxCodeRef = useRef("");
 
   function normalizeCode(value) {
     return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -9038,7 +9041,11 @@ function LinkPage({ onClose = null }) {
 
   useEffect(() => {
     let cancelled = false;
+    let abortController = null;
+    let debounceTimer = null;
     if (!debugCode || !LINK_CODE_REGEX.test(debugCode)) {
+      linkInfoLastRejected4xxCodeRef.current = "";
+      linkInfoLastRequestedCodeRef.current = "";
       setLinkDebugInfo((prev) => ({
         ...prev,
         loading: false,
@@ -9053,24 +9060,70 @@ function LinkPage({ onClose = null }) {
       }));
       return () => {
         cancelled = true;
+        if (debounceTimer) {
+          window.clearTimeout(debounceTimer);
+        }
+        if (abortController) {
+          linkInfoInFlightRef.current = false;
+          abortController.abort();
+        }
       };
     }
-    setLinkDebugInfo((prev) => ({
-      ...prev,
-      loading: true,
-      error: "",
-      code: debugCode,
-    }));
-    fetch(`/api/link/info?code=${encodeURIComponent(debugCode)}`)
-      .then(async (response) => {
-        const data = await response.json().catch(() => ({}));
-        if (cancelled) return;
-        if (!response.ok) {
+    if (linkInfoLastRejected4xxCodeRef.current === debugCode) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (linkInfoInFlightRef.current) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    if (linkInfoLastRequestedCodeRef.current === debugCode) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    debounceTimer = window.setTimeout(() => {
+      if (cancelled || linkInfoInFlightRef.current) return;
+      abortController = new AbortController();
+      linkInfoInFlightRef.current = true;
+      linkInfoLastRequestedCodeRef.current = debugCode;
+      setLinkDebugInfo((prev) => ({
+        ...prev,
+        loading: true,
+        error: "",
+        code: debugCode,
+      }));
+      fetch(`/api/link/info?code=${encodeURIComponent(debugCode)}`, { signal: abortController.signal })
+        .then(async (response) => {
+          const data = await response.json().catch(() => ({}));
+          if (cancelled) return;
+          if (!response.ok) {
+            if (response.status >= 400 && response.status < 500) {
+              linkInfoLastRejected4xxCodeRef.current = debugCode;
+            }
+            setLinkDebugInfo((prev) => ({
+              ...prev,
+              loading: false,
+              code: debugCode,
+              error: String(data?.error || `HTTP ${response.status}`),
+              status: String(data?.status || ""),
+              valid: typeof data?.valid === "boolean" ? data.valid : null,
+              isClaimed: typeof data?.isClaimed === "boolean" ? data.isClaimed : null,
+              isExpired: typeof data?.isExpired === "boolean" ? data.isExpired : null,
+              expiresAt: String(data?.expiresAt || ""),
+              playerUuidMasked: String(data?.playerUuidMasked || ""),
+              fetchedAt: new Date().toISOString(),
+            }));
+            return;
+          }
+          linkInfoLastRejected4xxCodeRef.current = "";
           setLinkDebugInfo((prev) => ({
             ...prev,
             loading: false,
+            error: "",
             code: debugCode,
-            error: String(data?.error || `HTTP ${response.status}`),
             status: String(data?.status || ""),
             valid: typeof data?.valid === "boolean" ? data.valid : null,
             isClaimed: typeof data?.isClaimed === "boolean" ? data.isClaimed : null,
@@ -9079,34 +9132,31 @@ function LinkPage({ onClose = null }) {
             playerUuidMasked: String(data?.playerUuidMasked || ""),
             fetchedAt: new Date().toISOString(),
           }));
-          return;
-        }
-        setLinkDebugInfo((prev) => ({
-          ...prev,
-          loading: false,
-          error: "",
-          code: debugCode,
-          status: String(data?.status || ""),
-          valid: typeof data?.valid === "boolean" ? data.valid : null,
-          isClaimed: typeof data?.isClaimed === "boolean" ? data.isClaimed : null,
-          isExpired: typeof data?.isExpired === "boolean" ? data.isExpired : null,
-          expiresAt: String(data?.expiresAt || ""),
-          playerUuidMasked: String(data?.playerUuidMasked || ""),
-          fetchedAt: new Date().toISOString(),
-        }));
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        setLinkDebugInfo((prev) => ({
-          ...prev,
-          loading: false,
-          code: debugCode,
-          error: String(error?.message || "Failed to fetch link info"),
-          fetchedAt: new Date().toISOString(),
-        }));
-      });
+        })
+        .catch((error) => {
+          if (cancelled || error?.name === "AbortError") return;
+          setLinkDebugInfo((prev) => ({
+            ...prev,
+            loading: false,
+            code: debugCode,
+            error: String(error?.message || "Failed to fetch link info"),
+            fetchedAt: new Date().toISOString(),
+          }));
+        })
+        .finally(() => {
+          linkInfoInFlightRef.current = false;
+          abortController = null;
+        });
+    }, 400);
     return () => {
       cancelled = true;
+      if (debounceTimer) {
+        window.clearTimeout(debounceTimer);
+      }
+      if (abortController) {
+        linkInfoInFlightRef.current = false;
+        abortController.abort();
+      }
     };
   }, [debugCode, LINK_CODE_REGEX]);
 
