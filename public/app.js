@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+﻿import React, { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
 import { createPortal } from "react-dom";
 import htm from "htm";
@@ -20,7 +20,7 @@ import RankBadge from "./components/RankBadge.js";
 import ProfilePreviewButton from "./components/ProfilePreviewButton.js";
 import ProfileCardLayout from "./components/ProfileCardLayout.js";
 import ProfileAchievementsCard from "./components/ProfileAchievementsCard.js";
-import ForumRichEditor, { ForumRenderedMarkdown } from "./components/ForumRichEditor.js";
+import ForumRenderedMarkdown from "./components/ForumRenderedMarkdown.js";
 import ToastSystem, { APP_TOAST_EVENT, createToastPayload, emitAppToast } from "./components/ToastSystem.js";
 import SeoManager from "./components/SeoManager.js";
 import { markdownExcerpt } from "./components/forumMarkdown.js";
@@ -47,6 +47,7 @@ import {
   useUser,
 } from "@clerk/clerk-react";
 
+const ForumRichEditor = React.lazy(() => import("./components/ForumRichEditor.js"));
 const html = htm.bind(React.createElement);
 
 const SERVER_IP = "play.hardtale.net";
@@ -78,7 +79,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.44";
+const VERSION = "1.3.45";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/Copyright.svg";
@@ -166,6 +167,14 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.45",
+    date: "2026-02-17",
+    items: [
+      "Optimized initial load by lazy-loading the rich forum editor only when users open create/edit flows.",
+      "Split forum markdown rendering into a lightweight standalone component so normal page/forum reading no longer pulls the full editor runtime.",
+    ],
+  },
   {
     version: "1.3.44",
     date: "2026-02-17",
@@ -6278,15 +6287,17 @@ function ForumPage({ isAdmin = false }) {
                           onInput=${(event) => setEditingPostTitle(event.target.value)}
                           required
                         />
-                        <${ForumRichEditor}
-                          value=${editingPostBody}
-                          onChange=${setEditingPostBody}
-                          maxLength=${4000}
-                          minLength=${FORUM_BODY_MIN_LENGTH}
-                          draftScope=${`edit:${String(selectedPost.id || "")}`}
-                          showTemplatePicker=${false}
-                          placeholder="Update your post..."
-                        />
+                        <${Suspense} fallback=${html`<div className="muted">Loading editor...</div>`}>
+                          <${ForumRichEditor}
+                            value=${editingPostBody}
+                            onChange=${setEditingPostBody}
+                            maxLength=${4000}
+                            minLength=${FORUM_BODY_MIN_LENGTH}
+                            draftScope=${`edit:${String(selectedPost.id || "")}`}
+                            showTemplatePicker=${false}
+                            placeholder="Update your post..."
+                          />
+                        <//>
                         <div className="comment-actions right submit-panel row">
                           <button className="button primary" type="submit">Save</button>
                           <button className="button ghost-btn" type="button" onClick=${cancelEditPost}>
@@ -6595,15 +6606,17 @@ function ForumPage({ isAdmin = false }) {
                             onInput=${(event) => setEditingPostTitle(event.target.value)}
                             required
                           />
-                          <${ForumRichEditor}
-                            value=${editingPostBody}
-                            onChange=${setEditingPostBody}
-                            maxLength=${4000}
-                            minLength=${FORUM_BODY_MIN_LENGTH}
-                            draftScope=${`edit:${String(post.id || "")}`}
-                            showTemplatePicker=${false}
-                            placeholder="Update your post..."
-                          />
+                          <${Suspense} fallback=${html`<div className="muted">Loading editor...</div>`}>
+                            <${ForumRichEditor}
+                              value=${editingPostBody}
+                              onChange=${setEditingPostBody}
+                              maxLength=${4000}
+                              minLength=${FORUM_BODY_MIN_LENGTH}
+                              draftScope=${`edit:${String(post.id || "")}`}
+                              showTemplatePicker=${false}
+                              placeholder="Update your post..."
+                            />
+                          <//>
                           <div className="comment-actions right submit-panel row">
                             <button className="button primary" type="submit">Save</button>
                             <button className="button ghost-btn" type="button" onClick=${cancelEditPost}>
@@ -6685,17 +6698,19 @@ function ForumPage({ isAdmin = false }) {
               maxLength="140"
               required
             />
-            <${ForumRichEditor}
-              value=${newPostBody}
-              onChange=${setNewPostBody}
-              maxLength=${4000}
-              minLength=${FORUM_BODY_MIN_LENGTH}
-              draftScope=${`create:${selectedSectionId}`}
-              showTemplatePicker=${createTemplateOptions.length > 0}
-              templateOptions=${createTemplateOptions}
-              showModeTabs=${false}
-              placeholder="Write your post..."
-            />
+            <${Suspense} fallback=${html`<div className="muted">Loading editor...</div>`}>
+              <${ForumRichEditor}
+                value=${newPostBody}
+                onChange=${setNewPostBody}
+                maxLength=${4000}
+                minLength=${FORUM_BODY_MIN_LENGTH}
+                draftScope=${`create:${selectedSectionId}`}
+                showTemplatePicker=${createTemplateOptions.length > 0}
+                templateOptions=${createTemplateOptions}
+                showModeTabs=${false}
+                placeholder="Write your post..."
+              />
+            <//>
             <div className="comment-actions right submit-panel row">
               <span className="muted">Posting as ${getUserDisplayName(user)}</span>
               <button
@@ -10089,6 +10104,3 @@ root.render(
     <${App} />
   <//>`
 );
-
-
-
