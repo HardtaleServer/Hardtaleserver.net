@@ -3,12 +3,15 @@ import htm from "htm";
 
 const html = htm.bind(React.createElement);
 
-export default function ProfileInfoTabs({
+function ProfileInfoTabs({
   activeTab = "badges",
   onTabChange,
-  badgesNode = null,
-  groupsNode = null,
+  renderBadges,
+  renderGroups,
 }) {
+  const content = activeTab === "groups"
+    ? (typeof renderGroups === "function" ? renderGroups() : null)
+    : (typeof renderBadges === "function" ? renderBadges() : null);
   return html`
     <div className="profile-card-subtabs" role="tablist" aria-label="Profile details">
       <button
@@ -26,6 +29,8 @@ export default function ProfileInfoTabs({
         Groups
       </button>
     </div>
-    ${activeTab === "groups" ? groupsNode : badgesNode}
+    ${content}
   `;
 }
+
+export default React.memo(ProfileInfoTabs);

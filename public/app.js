@@ -81,7 +81,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.47";
+const VERSION = "1.3.48";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/Copyright.svg";
@@ -169,6 +169,14 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.48",
+    date: "2026-02-17",
+    items: [
+      "Optimized `ProfileInfoTabs` to render only the active tab panel instead of both badges/groups content.",
+      "Memoized reusable UI components (`ProfileInfoTabs`, `ProfileOptionsActions`, `DeferredForumEditor`) to reduce avoidable re-renders.",
+    ],
+  },
   {
     version: "1.3.47",
     date: "2026-02-17",
@@ -3371,8 +3379,8 @@ function CommentThread({
               <${ProfileInfoTabs}
                 activeTab=${profileInfoTab}
                 onTabChange=${setProfileInfoTab}
-                groupsNode=${html`${renderProfileGroupsCard(profileUser)}`}
-                badgesNode=${html`${renderStaffBadge(profileUser)}${renderOwnedRankBadges(profileUser)}`}
+                renderGroups=${() => html`${renderProfileGroupsCard(profileUser)}`}
+                renderBadges=${() => html`${renderStaffBadge(profileUser)}${renderOwnedRankBadges(profileUser)}`}
               />
             </div>`
           : html``}
@@ -5966,8 +5974,8 @@ function ForumPage({ isAdmin = false }) {
       <${ProfileInfoTabs}
         activeTab=${forumProfileInfoTab}
         onTabChange=${setForumProfileInfoTab}
-        groupsNode=${html`${renderProfileGroupsCard(forumProfileUser)}`}
-        badgesNode=${html`${renderStaffBadge(forumProfileUser)}${renderOwnedRankBadges(forumProfileUser)}`}
+        renderGroups=${() => html`${renderProfileGroupsCard(forumProfileUser)}`}
+        renderBadges=${() => html`${renderStaffBadge(forumProfileUser)}${renderOwnedRankBadges(forumProfileUser)}`}
       />
     </div>`;
   }
@@ -9934,8 +9942,10 @@ function Layout() {
               <${ProfileInfoTabs}
                 activeTab=${notificationProfileInfoTab}
                 onTabChange=${setNotificationProfileInfoTab}
-                groupsNode=${html`${renderProfileGroupsCard(notificationProfileUser)}`}
-                badgesNode=${html`${renderStaffBadge(notificationProfileUser)}${renderOwnedRankBadges(notificationProfileUser)}`}
+                renderGroups=${() =>
+                  html`${renderProfileGroupsCard(notificationProfileUser)}`}
+                renderBadges=${() =>
+                  html`${renderStaffBadge(notificationProfileUser)}${renderOwnedRankBadges(notificationProfileUser)}`}
               />
             <//>`
           : html``}

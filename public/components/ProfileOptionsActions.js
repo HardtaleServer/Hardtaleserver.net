@@ -3,7 +3,7 @@ import htm from "htm";
 
 const html = htm.bind(React.createElement);
 
-export default function ProfileOptionsActions({
+function ProfileOptionsActions({
   onViewProfile,
   onViewClerk,
   profileLabel = "View profile card",
@@ -20,3 +20,5 @@ export default function ProfileOptionsActions({
     </div>
   `;
 }
+
+export default React.memo(ProfileOptionsActions);
