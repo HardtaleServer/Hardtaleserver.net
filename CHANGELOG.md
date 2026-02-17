@@ -2,6 +2,9 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.95)
+- Fixed `/store/ranks` card image overlap by constraining rank artwork height and adding a small spacing buffer above profile preview cards.
+
 ## 2026-02-17 (v1.3.94)
 - Updated donor base rank colors in shared site palette: Legend -> `#F7C627`, Mythic -> `#E45579`.
 

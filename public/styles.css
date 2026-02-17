@@ -4823,6 +4823,8 @@ emoji-picker.reaction-picker-panel {
 .store-rank-card-art-wrap {
   display: grid;
   place-items: center;
+  margin-bottom: 4px;
+  overflow: hidden;
 }
 
 .store-rank-card-art-btn {
@@ -4844,7 +4846,7 @@ emoji-picker.reaction-picker-panel {
 .store-rank-card-art {
   width: 100%;
   max-width: 100%;
-  height: clamp(132px, 24vw, 188px);
+  height: clamp(128px, 20vw, 154px);
   object-fit: cover;
   border-radius: 12px;
   border: 1px solid var(--stroke);
