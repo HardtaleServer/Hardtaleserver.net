@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.82)
+- Added `info` toast support with default `Images/SVGs/toasts/Info.svg` icon and neutral light-blue visual treatment.
+- Added informational toast feedback for staff-forced forum edits so moderation actions can surface as neutral system events.
+- Kept existing success/warning/error toast behavior unchanged while enabling shared `Info.svg` reuse across UI actions.
+
 ## 2026-02-17 (v1.3.81)
 - Added clickable rank artwork on `/store/ranks` cards and comparison-header rank cells that opens a dedicated rank detail modal.
 - Added a themed Store rank detail popup with placeholder artwork, condensed perk highlights, and direct add-to-cart action.

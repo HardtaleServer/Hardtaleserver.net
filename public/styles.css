@@ -6654,6 +6654,21 @@ body[data-theme="dark"] .store-cta {
   background-image: linear-gradient(110deg, var(--rank-legend), var(--rank-legend-end));
 }
 
+.toast-info .toast-title,
+.toast-info .toast-message {
+  background-image: linear-gradient(110deg, #5db8ff, #2aa3ff);
+  background-size: 220% 100%;
+  animation: staffReflect 2.5s ease-in-out infinite reverse;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.toast-info .toast-progress-bar {
+  background-image: linear-gradient(110deg, #5db8ff, #2aa3ff);
+}
+
 .toast-error .toast-title,
 .toast-error .toast-message {
   background-image: linear-gradient(110deg, #ff2a2a, var(--staff-admin-start));

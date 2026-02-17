@@ -88,7 +88,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.81";
+const VERSION = "1.3.82";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -100,6 +100,7 @@ const DRAWER_MENU_ICON_SVG = "/Images/SVGs/ui/DrawerMenu.svg";
 const WARNING_STATUS_ICON_SVG = "/Images/SVGs/toasts/Warning.svg";
 const SUCCESS_STATUS_ICON_SVG = "/Images/SVGs/toasts/Success.svg";
 const ERROR_STATUS_ICON_SVG = "/Images/SVGs/toasts/Error.svg";
+const INFO_STATUS_ICON_SVG = "/Images/SVGs/toasts/Info.svg";
 const HERO_RANK_ICON_SVG = "/Images/SVGs/ranks/RANK_HERO.svg";
 const MOD_RANK_ICON_SVG = "/Images/SVGs/ranks/RANK_MOD.svg";
 const ACHIEVEMENT_STAR_ICON_SVG = "/Images/SVGs/ui/Achievement_Star.svg";
@@ -188,6 +189,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.82",
+    date: "2026-02-17",
+    items: [
+      "Added new `info` toast kind support with `Images/SVGs/toasts/Info.svg` default icon and info title fallback handling.",
+      "Added informational forum toast feedback when a staff member force-edits another user's post.",
+      "Prepared shared info icon usage for other neutral system actions while keeping existing success/warning/error behaviors unchanged.",
+    ],
+  },
   {
     version: "1.3.81",
     date: "2026-02-17",
@@ -7037,6 +7047,17 @@ function ForumPage({ isAdmin = false }) {
         setSelectedPost((prev) => (String(prev?.id || "") === postId ? updated : prev));
       } else {
         await loadSectionPosts(selectedSectionId);
+      }
+      const postAuthorUserId = getForumPostAuthorUserId(post);
+      const isForcedEdit = Boolean(isAdmin && userId && postAuthorUserId && String(userId) !== String(postAuthorUserId));
+      if (isForcedEdit) {
+        emitAppToast({
+          kind: "info",
+          title: "Staff edit applied",
+          message: "This post was updated by staff moderation.",
+          icon: INFO_STATUS_ICON_SVG,
+          duration: 4200,
+        });
       }
       cancelEditPost();
     } catch (error) {

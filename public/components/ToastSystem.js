@@ -6,13 +6,14 @@ const html = htm.bind(React.createElement);
 export const APP_TOAST_EVENT = "hardtale:toast";
 const DEFAULT_ICON_BY_KIND = {
   success: "/Images/SVGs/toasts/Success.svg",
+  info: "/Images/SVGs/toasts/Info.svg",
   warning: "/Images/SVGs/toasts/Warning.svg",
   error: "/Images/SVGs/toasts/Error.svg",
 };
 
 function normalizeToastKind(value) {
   const kind = String(value || "success").trim().toLowerCase();
-  if (kind === "warning" || kind === "error") return kind;
+  if (kind === "info" || kind === "warning" || kind === "error") return kind;
   return "success";
 }
 
@@ -29,7 +30,9 @@ export function createToastPayload(input = {}) {
       String(input.id || "").trim() ||
       `toast-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
     kind,
-    title: String(input.title || "").trim() || (kind === "error" ? "Error" : kind === "warning" ? "Warning" : "Success"),
+    title:
+      String(input.title || "").trim() ||
+      (kind === "error" ? "Error" : kind === "warning" ? "Warning" : kind === "info" ? "Info" : "Success"),
     message,
     fullMessage: String(input.fullMessage || message).trim(),
     createdAt: String(input.createdAt || new Date().toISOString()),
