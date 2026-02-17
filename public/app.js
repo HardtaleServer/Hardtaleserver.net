@@ -88,7 +88,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.77";
+const VERSION = "1.3.78";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -188,6 +188,14 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.78",
+    date: "2026-02-17",
+    items: [
+      "Fixed nested-route module loading by switching `index.html` asset paths to absolute URLs (`/app.js`, `/styles.css`).",
+      "Resolved route-refresh MIME issue on paths like `/store/ranks` where module requests were previously falling back to HTML.",
+    ],
+  },
   {
     version: "1.3.77",
     date: "2026-02-17",
