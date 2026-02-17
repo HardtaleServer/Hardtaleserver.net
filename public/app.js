@@ -36,6 +36,7 @@ import GradientScrollArea from "./components/GradientScrollArea.js";
 import InlineDropdownToggle from "./components/InlineDropdownToggle.js";
 import CountBadge from "./components/CountBadge.js";
 import CustomScrollbar from "./components/CustomScrollbar.js";
+import StoreRankArt from "./components/StoreRankArt.js";
 import { markdownExcerpt } from "./components/forumMarkdown.js";
 import { getRankDisplayLabel, getRankIconType } from "./components/rankConfig.js";
 import {
@@ -1085,11 +1086,6 @@ const STORE_PREVIEW_TITLES_BY_ID = {
   "rank-hero": ["Hero"],
   "rank-legend": ["Hero", "Legend"],
   "rank-mythic": ["Hero", "Legend", "Mythic"],
-};
-const STORE_CARD_ART_BY_ID = {
-  "rank-hero": "/Images/store/Store_Ranks.png",
-  "rank-legend": "/Images/store/Store_Ranks.png",
-  "rank-mythic": "/Images/store/Store_Ranks.png",
 };
 const HOME_FORUM_PREVIEW_SECTIONS = [
   "updates",
@@ -5095,7 +5091,8 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
   );
   const coreComparisonRows = useMemo(
     () => [
-      { label: "Chat Prefix", values: { "rank-hero": "[Hero]", "rank-legend": "[Legend]", "rank-mythic": "[Mythic]" } },
+      { label: "Chat Prefix", values: { "rank-hero": "[HERO]", "rank-legend": "[LEGEND]", "rank-mythic": "[MYTHIC]" } },
+      { label: "In-game Name Color", values: { "rank-hero": "Hero Blue", "rank-legend": "Legend Gold", "rank-mythic": "Mythic Pink" } },
       { label: "Passive XP Boost", values: { "rank-hero": "10%", "rank-legend": "20%", "rank-mythic": "30%" } },
       { label: "Daily XP Boost", values: { "rank-hero": "15 min", "rank-legend": "30 min", "rank-mythic": "1 hour" } },
       { label: "Weekly Kit", values: { "rank-hero": true, "rank-legend": true, "rank-mythic": true } },
@@ -5263,9 +5260,9 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
           title=${`Open ${rankLabel} rank details`}
           onClick=${() => setRankDetailItemId(item.id)}
         >
-          <img
+          <${StoreRankArt}
+            rankId=${item.id}
             className="store-rank-head-art"
-            src=${STORE_CARD_ART_BY_ID[item.id] || "/Images/store/Store_Ranks.png"}
             alt=""
             aria-hidden="true"
             loading="lazy"
@@ -5365,9 +5362,9 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
                     title=${`Open ${getStoreRankLabel(item)} rank details`}
                     onClick=${() => setRankDetailItemId(item.id)}
                   >
-                    <img
+                    <${StoreRankArt}
+                      rankId=${item.id}
                       className="store-rank-card-art"
-                      src=${STORE_CARD_ART_BY_ID[item.id] || "/Images/store/Store_Ranks.png"}
                       alt=""
                       aria-hidden="true"
                       loading="lazy"
@@ -5610,9 +5607,9 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
             <div className="store-rank-detail-badge">
               <${RankBadge} label=${getStoreRankLabel(rankDetailItem)} className="store-owned-badge" />
             </div>
-            <img
+            <${StoreRankArt}
+              rankId=${rankDetailItem.id}
               className="store-rank-detail-art"
-              src=${STORE_CARD_ART_BY_ID[rankDetailItem.id] || "/Images/store/Store_Ranks.png"}
               alt=""
               aria-hidden="true"
               loading="lazy"

@@ -237,6 +237,7 @@ let linkedAccountsCollection = null;
 let userAchievementsCollection = null;
 let linkCodesCollection = null;
 let fulfillmentJobsCollection = null;
+let grantsCollection = null;
 let mongoConnectInFlight = null;
 let mongoReconnectTimer = null;
 let mongoReconnectDelayMs = 1000;
@@ -264,6 +265,7 @@ function resetMongoState() {
   userAchievementsCollection = null;
   linkCodesCollection = null;
   fulfillmentJobsCollection = null;
+  grantsCollection = null;
   mongoConnectInFlight = null;
 }
 
@@ -301,7 +303,8 @@ async function connectMongo() {
     linkedAccountsCollection &&
     userAchievementsCollection &&
     linkCodesCollection &&
-    fulfillmentJobsCollection
+    fulfillmentJobsCollection &&
+    grantsCollection
   ) {
     return;
   }
@@ -338,6 +341,7 @@ async function connectMongo() {
       userAchievementsCollection = mongoDb.collection("user_achievements");
       linkCodesCollection = mongoDb.collection("link_codes");
       fulfillmentJobsCollection = mongoDb.collection("fulfillment_jobs");
+      grantsCollection = mongoDb.collection("grants");
       await commentsCollection.createIndex({ newsId: 1, createdAt: 1 });
       await commentsCollection.createIndex({ userId: 1 });
       await commentRevisionsCollection.createIndex({ commentId: 1, createdAt: 1 });
@@ -375,6 +379,9 @@ async function connectMongo() {
       await fulfillmentJobsCollection.createIndex({ jobId: 1 }, { unique: true });
       await fulfillmentJobsCollection.createIndex({ status: 1, createdAt: 1 });
       await fulfillmentJobsCollection.createIndex({ playerUuid: 1, status: 1, createdAt: 1 });
+      await grantsCollection.createIndex({ status: 1, createdAt: 1 });
+      await grantsCollection.createIndex({ playerUuid: 1, status: 1, createdAt: 1 });
+      await grantsCollection.createIndex({ idempotencyKey: 1 }, { unique: true, sparse: true });
       mongoReconnectDelayMs = 1000;
       console.log("Connected to MongoDB");
     } catch (error) {
@@ -505,7 +512,8 @@ async function requireMongoReady(res) {
     !linkedAccountsCollection ||
     !userAchievementsCollection ||
     !linkCodesCollection ||
-    !fulfillmentJobsCollection
+    !fulfillmentJobsCollection ||
+    !grantsCollection
   ) {
     try {
       await connectMongo();
@@ -529,7 +537,8 @@ async function requireMongoReady(res) {
     !linkedAccountsCollection ||
     !userAchievementsCollection ||
     !linkCodesCollection ||
-    !fulfillmentJobsCollection
+    !fulfillmentJobsCollection ||
+    !grantsCollection
   ) {
     res.status(503).json({
       error: "Database not connected",
@@ -993,6 +1002,8 @@ async function claimHostedLinkCode({ code, webUserId }) {
         status: "claimed",
         claimedAt: now,
         claimedByUserId: webUserId,
+        usedAt: now,
+        usedByWebUserId: webUserId,
         updatedAt: now,
       },
     },
@@ -1125,6 +1136,44 @@ async function enqueueFulfillmentJob({
   } catch (error) {
     if (error?.code === 11000) {
       return { ok: true, alreadyExists: true, jobId: normalizedJobId };
+    }
+    throw error;
+  }
+}
+
+async function enqueueGrant({
+  playerUuid = "",
+  userId = "",
+  type = "PERK",
+  value = "",
+  payload = {},
+  serverId = "prod",
+  idempotencyKey = "",
+}) {
+  if (!grantsCollection) {
+    return { ok: false, status: 503, error: "grants collection unavailable" };
+  }
+  const now = new Date();
+  const doc = {
+    grantId: `grant_${crypto.randomUUID()}`,
+    playerUuid: normalizePlayerUuid(playerUuid),
+    userId: normalizeText(userId || "", 128),
+    type: normalizeText(type || "PERK", 30).toUpperCase(),
+    value: normalizeText(value || "", 120),
+    payload: payload && typeof payload === "object" ? payload : {},
+    status: "PENDING",
+    serverId: normalizeText(serverId || "prod", 40) || "prod",
+    idempotencyKey: normalizeText(idempotencyKey || "", 200),
+    createdAt: now,
+    updatedAt: now,
+  };
+  if (!doc.idempotencyKey) delete doc.idempotencyKey;
+  try {
+    const inserted = await grantsCollection.insertOne(doc);
+    return { ok: true, grantId: doc.grantId, id: String(inserted.insertedId || "") };
+  } catch (error) {
+    if (error?.code === 11000 && doc.idempotencyKey) {
+      return { ok: true, duplicate: true };
     }
     throw error;
   }
@@ -2708,7 +2757,7 @@ async function fulfillStripeCheckoutSession(session, source = "manual") {
   return { success: true, ...result };
 }
 
-async function queueStripeFulfillmentFromSession(session, source = "stripe_webhook") {
+async function queueStripeFulfillmentFromSession(session, source = "stripe_webhook", stripeEventId = "") {
   const sessionId = normalizeText(session?.id, 160);
   if (!sessionId) {
     return { ok: false, skipped: true, reason: "missing_session_id" };
@@ -2730,25 +2779,43 @@ async function queueStripeFulfillmentFromSession(session, source = "stripe_webho
     .split(",")
     .map((entry) => normalizeText(entry, 64))
     .filter(Boolean);
-  const payload = {
-    type: "stripe_checkout",
-    source,
-    stripe: {
-      sessionId,
-      paymentIntentId: normalizeText(session?.payment_intent, 160),
-      amountTotal: Number(session?.amount_total || 0),
-      currency: normalizeText(session?.currency, 20).toLowerCase(),
-      cartItemIds,
-    },
+  const normalizedSource = normalizeText(source, 60) || "stripe_webhook";
+  const paymentIntentId = normalizeText(session?.payment_intent, 160);
+  const amountTotal = Number(session?.amount_total || 0);
+  const currency = normalizeText(session?.currency, 20).toLowerCase();
+  const itemIds = cartItemIds.length > 0 ? cartItemIds : ["rank-unknown"];
+  const grants = [];
+  for (let index = 0; index < itemIds.length; index += 1) {
+    const itemId = itemIds[index];
+    const product = STORE_RANK_PRODUCTS[itemId];
+    const value = product?.rank ? String(product.rank).toUpperCase() : normalizeText(itemId, 80).toUpperCase();
+    const payload = {
+      source: normalizedSource,
+      stripe: {
+        sessionId,
+        paymentIntentId,
+        amountTotal,
+        currency,
+        itemId,
+      },
+    };
+    const idempotencyKeyBase = normalizeText(stripeEventId || sessionId, 120) || sessionId;
+    const grant = await enqueueGrant({
+      playerUuid,
+      userId,
+      type: "RANK",
+      value,
+      payload,
+      serverId: "prod",
+      idempotencyKey: `${idempotencyKeyBase}:${index}:${itemId}`,
+    });
+    grants.push(grant);
+  }
+  return {
+    ok: grants.some((entry) => entry?.ok),
+    alreadyExists: grants.every((entry) => entry?.duplicate),
+    skipped: false,
   };
-  const queued = await enqueueFulfillmentJob({
-    jobId: `stripe:${sessionId}`,
-    playerUuid,
-    userId,
-    payload,
-    source: "stripe",
-  });
-  return { ok: Boolean(queued?.ok), alreadyExists: Boolean(queued?.alreadyExists), skipped: false };
 }
 
 async function handleStripeWebhook(req, res) {
@@ -2778,7 +2845,11 @@ async function handleStripeWebhook(req, res) {
       event.type === "checkout.session.async_payment_succeeded"
     ) {
       const session = event.data?.object || null;
-      const queued = await queueStripeFulfillmentFromSession(session, `webhook:${event.type}`);
+      const queued = await queueStripeFulfillmentFromSession(
+        session,
+        `webhook:${event.type}`,
+        normalizeText(event.id, 120),
+      );
       return res.json({
         received: true,
         handled: true,
@@ -2817,7 +2888,8 @@ app.post(
 app.use(express.json({ limit: "100kb" }));
 const clerkApiMiddleware = clerkMiddleware();
 app.use("/api", (req, res, next) => {
-  if (String(req.path || "").startsWith("/server/")) return next();
+  const safePath = String(req.path || "");
+  if (safePath.startsWith("/server/") || safePath.startsWith("/internal/")) return next();
   return clerkApiMiddleware(req, res, next);
 });
 
@@ -5207,76 +5279,183 @@ app.post("/api/server/ack-link", async (req, res) => {
   }
 });
 
-app.get("/api/server/pending-fulfillments", async (req, res) => {
+async function handlePendingGrants(req, res, routeLabel) {
   try {
     if (!(await requireMongoReady(res))) return;
-    if (!requireServerSecret(req, res, "pending_fulfillments")) return;
+    if (!requireServerSecret(req, res, routeLabel)) return;
+    const serverId = normalizeText(req.query?.serverId || req.query?.server || "prod", 40) || "prod";
     const limitRaw = Number(req.query?.limit);
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 200) : 50;
-    const jobs = await fulfillmentJobsCollection
-      .find({ status: "pending" })
+    const docs = await grantsCollection
+      .find({ status: "PENDING", serverId })
       .sort({ createdAt: 1 })
       .limit(limit)
-      .project({ _id: 0, jobId: 1, playerUuid: 1, userId: 1, payload: 1, createdAt: 1 })
+      .project({ _id: 1, grantId: 1, playerUuid: 1, type: 1, value: 1, payload: 1, createdAt: 1 })
       .toArray();
+    const grants = docs.map((doc) => ({
+      grantId: normalizeText(doc.grantId || String(doc._id || ""), 160),
+      playerUuid: normalizePlayerUuid(doc.playerUuid),
+      type: normalizeText(doc.type || "PERK", 30).toUpperCase(),
+      value: normalizeText(doc.value || "", 120),
+      payload: doc.payload && typeof doc.payload === "object" ? doc.payload : {},
+      createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : String(doc.createdAt || ""),
+    }));
     return res.json({
-      jobs: jobs.map((job) => ({
-        jobId: normalizeText(job.jobId || "", 160),
-        playerUuid: normalizePlayerUuid(job.playerUuid),
-        userId: normalizeText(job.userId || "", 128),
-        payload: job.payload && typeof job.payload === "object" ? job.payload : {},
-        createdAt: job.createdAt || "",
+      grants,
+      jobs: grants.map((entry) => ({
+        jobId: entry.grantId,
+        playerUuid: entry.playerUuid,
+        payload: {
+          type: entry.type,
+          value: entry.value,
+          ...entry.payload,
+        },
       })),
     });
   } catch (error) {
-    console.error("Failed to load pending fulfillment jobs", error);
-    return res.status(500).json({ error: "Failed to load pending fulfillment jobs" });
+    console.error("Failed to load pending grants", error);
+    return res.status(500).json({ error: "Failed to load pending grants" });
   }
-});
+}
 
-app.post("/api/server/ack-fulfillment", async (req, res) => {
+async function handleAckGrants(req, res, routeLabel) {
   try {
     if (!(await requireMongoReady(res))) return;
-    if (!requireServerSecret(req, res, "ack_fulfillment")) return;
-    const jobId = normalizeText(req.body?.jobId || req.body?.id, 160);
-    if (!jobId) {
-      return res.status(400).json({ error: "jobId is required" });
+    if (!requireServerSecret(req, res, routeLabel)) return;
+    const ackRows = Array.isArray(req.body?.acks) ? req.body.acks : null;
+    if (ackRows && ackRows.length > 0) {
+      const updates = [];
+      for (const row of ackRows) {
+        const grantId = normalizeText(row?.grantId || row?.jobId || row?.id, 160);
+        if (!grantId) continue;
+        const rawStatus = normalizeText(row?.status || row?.result, 20).toUpperCase();
+        const nextStatus = rawStatus === "APPLIED" ? "APPLIED" : "FAILED";
+        const errorText = normalizeText(row?.message || row?.error || "", 500);
+        const now = new Date();
+        const updateResult = await grantsCollection.updateOne(
+          { grantId, status: "PENDING" },
+          {
+            $set: {
+              status: nextStatus,
+              appliedAt: now,
+              updatedAt: now,
+              error: nextStatus === "FAILED" ? errorText : "",
+            },
+          },
+        );
+        updates.push({ grantId, updated: updateResult.modifiedCount > 0, status: nextStatus });
+      }
+      return res.json({ success: true, updates });
     }
-    const resultRaw = normalizeText(req.body?.result, 20).toLowerCase();
-    const finalStatus = resultRaw === "applied" ? "applied" : "failed";
-    const now = new Date().toISOString();
-    const errorText = normalizeText(req.body?.error || "", 500);
 
-    const updated = await fulfillmentJobsCollection.updateOne(
-      { jobId, status: "pending" },
+    const grantId = normalizeText(req.body?.grantId || req.body?.jobId || req.body?.id, 160);
+    if (!grantId) {
+      return res.status(400).json({ error: "grantId is required" });
+    }
+    const rawStatus = normalizeText(req.body?.status || req.body?.result, 20).toUpperCase();
+    const nextStatus = rawStatus === "APPLIED" ? "APPLIED" : "FAILED";
+    const now = new Date();
+    const errorText = normalizeText(req.body?.message || req.body?.error || "", 500);
+
+    const updated = await grantsCollection.updateOne(
+      { grantId, status: "PENDING" },
       {
         $set: {
-          status: finalStatus,
-          error: finalStatus === "failed" ? errorText : "",
-          ackedAt: now,
+          status: nextStatus,
+          appliedAt: now,
           updatedAt: now,
+          error: nextStatus === "FAILED" ? errorText : "",
         },
       },
     );
     if (updated.modifiedCount > 0) {
-      return res.json({ success: true, jobId, status: finalStatus, alreadyFinal: false });
+      return res.json({ success: true, grantId, status: nextStatus, alreadyFinal: false });
     }
-    const existing = await fulfillmentJobsCollection.findOne(
-      { jobId },
+    const existing = await grantsCollection.findOne(
+      { grantId },
       { projection: { _id: 0, status: 1 } },
     );
-    if (existing && existing.status && existing.status !== "pending") {
-      return res.json({
-        success: true,
-        jobId,
-        status: normalizeText(existing.status, 20) || "applied",
-        alreadyFinal: true,
+    if (existing?.status && existing.status !== "PENDING") {
+      return res.json({ success: true, grantId, status: String(existing.status), alreadyFinal: true });
+    }
+    return res.status(404).json({ error: "Grant not found" });
+  } catch (error) {
+    console.error("Failed to acknowledge grant", error);
+    return res.status(500).json({ error: "Failed to acknowledge grant" });
+  }
+}
+
+app.get("/api/server/pending-fulfillments", async (req, res) => {
+  return handlePendingGrants(req, res, "pending_fulfillments");
+});
+
+app.post("/api/server/ack-fulfillment", async (req, res) => {
+  return handleAckGrants(req, res, "ack_fulfillment");
+});
+
+app.get("/api/internal/fulfillment/pending", async (req, res) => {
+  return handlePendingGrants(req, res, "internal_pending_fulfillments");
+});
+
+app.post("/api/internal/fulfillment/ack", async (req, res) => {
+  return handleAckGrants(req, res, "internal_ack_fulfillment");
+});
+
+app.get("/api/internal/debug/link-status", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    if (!requireServerSecret(req, res, "internal_debug_link_status")) return;
+    const code = normalizeLinkCode(req.query?.code);
+    if (code.length !== 8) {
+      return res.status(400).json({ error: "code is required" });
+    }
+    const doc = await linkCodesCollection.findOne({ code });
+    if (!doc) {
+      return res.status(404).json({ error: "Code not found" });
+    }
+    const status = normalizeLinkCodeDocStatus(doc);
+    return res.json({
+      code: normalizeLinkCode(doc.code),
+      status,
+      playerUuid: normalizePlayerUuid(doc.playerUuid),
+      playerUuidMasked: maskPlayerUuid(doc.playerUuid),
+      playerUsername: normalizeText(doc.playerName || doc.playerUsername || "", 60),
+      claimedByUserId: normalizeText(doc.claimedByUserId || "", 128) || null,
+      usedByWebUserId: normalizeText(doc.usedByWebUserId || "", 128) || null,
+      createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : String(doc.createdAt || ""),
+      expiresAt: doc.expiresAt instanceof Date ? doc.expiresAt.toISOString() : String(doc.expiresAt || ""),
+      usedAt: doc.usedAt instanceof Date ? doc.usedAt.toISOString() : doc.usedAt || null,
+    });
+  } catch (error) {
+    console.error("Failed to load internal link debug status", error);
+    return res.status(500).json({ error: "Failed to load internal link debug status" });
+  }
+});
+
+app.post("/api/internal/link/register", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    if (!requireServerSecret(req, res, "internal_link_register")) return;
+    const code = normalizeLinkCode(req.body?.code);
+    const playerUuid = normalizePlayerUuid(req.body?.playerUuid);
+    const playerUsername = normalizeText(req.body?.playerUsername || req.body?.playerName || "", 60);
+    const expiresAtRaw = Number(req.body?.expiresAt);
+    const expiresAt = Number.isFinite(expiresAtRaw) ? new Date(expiresAtRaw) : new Date(Date.now() + LINK_CODE_TTL_SEC * 1000);
+    const registered = await registerHostedLinkCode({
+      code,
+      playerUuid,
+      playerName: playerUsername,
+      expiresAt,
+    });
+    if (!registered.ok) {
+      return res.status(registered.status || 400).json({
+        error: normalizeText(registered.code || "INVALID_REQUEST", 80).toLowerCase(),
       });
     }
-    return res.status(404).json({ error: "Fulfillment job not found" });
+    return res.json({ ok: true });
   } catch (error) {
-    console.error("Failed to acknowledge fulfillment job", error);
-    return res.status(500).json({ error: "Failed to acknowledge fulfillment job" });
+    console.error("Failed to register internal link code", error);
+    return res.status(500).json({ error: "internal_error" });
   }
 });
 
@@ -5952,7 +6131,8 @@ app.get("/health", (req, res) => {
     linkedAccountsCollection &&
     userAchievementsCollection &&
     linkCodesCollection &&
-    fulfillmentJobsCollection,
+    fulfillmentJobsCollection &&
+    grantsCollection,
   );
   res.status(200).json({
     status: "ok",
@@ -5997,6 +6177,10 @@ app.get("*", (req, res) => {
 
 app.listen(PORT, HOST, () => {
   console.log(`Server running on http://${HOST}:${PORT}`);
+  console.log(
+    `[startup] env: NODE_ENV=${String(process.env.NODE_ENV || "development")} localDev=${LOCAL_DEV_MODE} ` +
+      `serverSecretConfigured=${Boolean(SERVER_SECRET)} pluginTokensConfigured=${PLUGIN_API_TOKENS.length}`,
+  );
   if (LOCAL_DEV_MODE) {
     console.log(
       `Local dev mode active: LINK_SERVICE_BASE_URL forced to ${LOCAL_DEV_LINK_SERVICE_BASE_URL}`,
