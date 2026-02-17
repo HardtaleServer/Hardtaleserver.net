@@ -24,7 +24,12 @@ export default function CommentMeta({
       <div className="comment-meta-right">
         <span className="comment-time">${created}</span>
         ${editCount > 0
-          ? html`<span className="comment-edited">Edited ${updated}</span>`
+          ? html`<span className="comment-edited">
+              ${historyIcon
+                ? html`<img src=${historyIcon} alt="" aria-hidden="true" className="comment-edited-icon" />`
+                : html``}
+              <span>Edited ${updated}</span>
+            </span>`
           : html``}
         ${showHistoryButton && editCount > 0
           ? html`<button
@@ -38,7 +43,7 @@ export default function CommentMeta({
               <span>${editCount}</span>
             </button>`
           : html``}
-        ${showOpBadge && showHistoryButton && editCount > 0
+        ${showOpBadge
           ? html`<span className="comment-op-badge">OP</span>`
           : html``}
       </div>

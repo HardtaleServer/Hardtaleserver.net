@@ -66,6 +66,7 @@ export default function CommentIdentity({
   authorSizeClass,
   showStaffPill = false,
   staffPillText = "Staff",
+  showOpBadge = false,
 }) {
   const name = String(entry?.authorName || "User");
   const sizeClass = authorSizeClass ? authorSizeClass(name) : "";
@@ -102,9 +103,12 @@ export default function CommentIdentity({
             </span>`
           : html``}
       </div>
-      <div className=${`comment-rank ${staffClass} ${roleClass} ${staffStaticClass} ${rankEffectsClass} ${rankFontClass} ${rankClass}`.trim()}>
-        ${rankIconType ? html`<span className="rank-icon">${renderRankIcon(rankIconType)}</span>` : html``}
-        <span>${getRankDisplayLabel(rankLabel)}</span>
+      <div className="comment-rank-row">
+        <div className=${`comment-rank ${staffClass} ${roleClass} ${staffStaticClass} ${rankEffectsClass} ${rankFontClass} ${rankClass}`.trim()}>
+          ${rankIconType ? html`<span className="rank-icon">${renderRankIcon(rankIconType)}</span>` : html``}
+          <span>${getRankDisplayLabel(rankLabel)}</span>
+        </div>
+        ${showOpBadge ? html`<span className="comment-op-badge comment-op-badge-inline">OP</span>` : html``}
       </div>
     </div>
   `;

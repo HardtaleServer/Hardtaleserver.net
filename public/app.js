@@ -2635,6 +2635,8 @@ function CommentThread({
                         entry=${comment}
                         formatTimestamp=${formatTimestamp}
                         variant="mobile"
+                        showOpBadge=${isOriginalPoster(comment)}
+                        historyIcon=${INK_PEN_ICON}
                       />
                     </div>
                     <div className="comment-right">
@@ -2646,19 +2648,19 @@ function CommentThread({
                             authorSizeClass=${authorSizeClass}
                             showStaffPill=${showStaffNameBadge(comment)}
                             staffPillText=${resolveStaffPillTitle(comment)}
+                            showOpBadge=${isOriginalPoster(comment)}
                           />
                         </div>
+                        <${CommentMeta}
+                          entry=${comment}
+                          formatTimestamp=${formatTimestamp}
+                          variant="desktop"
+                          showHistoryButton=${true}
+                          historyIcon=${INK_PEN_ICON}
+                          onHistoryMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                          onHistoryClick=${() => openHistory(comment.id)}
+                        />
                       </div>
-                      <${CommentMeta}
-                        entry=${comment}
-                        formatTimestamp=${formatTimestamp}
-                        variant="desktop"
-                        showOpBadge=${isOriginalPoster(comment)}
-                        showHistoryButton=${true}
-                        historyIcon=${INK_PEN_ICON}
-                        onHistoryMouseDown=${(event) => triggerFlash(event.currentTarget)}
-                        onHistoryClick=${() => openHistory(comment.id)}
-                      />
                       ${editingId === comment.id
                         ? html`<div className="comment-editor">
                             <textarea
@@ -2780,6 +2782,8 @@ function CommentThread({
                                         entry=${reply}
                                         formatTimestamp=${formatTimestamp}
                                         variant="mobile"
+                                        showOpBadge=${isOriginalPoster(reply)}
+                                        historyIcon=${INK_PEN_ICON}
                                       />
                                     </div>
                                     <div className="comment-right">
@@ -2791,15 +2795,16 @@ function CommentThread({
                                             authorSizeClass=${authorSizeClass}
                                             showStaffPill=${false}
                                             staffPillText=${resolveStaffPillTitle(reply)}
+                                            showOpBadge=${isOriginalPoster(reply)}
                                           />
                                         </div>
+                                        <${CommentMeta}
+                                          entry=${reply}
+                                          formatTimestamp=${formatTimestamp}
+                                          variant="desktop"
+                                          historyIcon=${INK_PEN_ICON}
+                                        />
                                       </div>
-                                      <${CommentMeta}
-                                        entry=${reply}
-                                        formatTimestamp=${formatTimestamp}
-                                        variant="desktop"
-                                        showOpBadge=${isOriginalPoster(reply)}
-                                      />
                                       ${editingReplyKey === `${comment.id}:${reply.id}`
                                         ? html`<div className="comment-editor">
                                             <textarea
