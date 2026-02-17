@@ -34,6 +34,13 @@
   --rank-mythic-glow: rgba(225, 0, 255, 0.85);
 }
 
+@font-face {
+  font-family: "PenumbraSerifStd-Bold";
+  src: url("https://static.wfonts.com/data/2016/05/21/penumbra-serif-std/PenumbraSerifStd-Bold.otf")
+    format("opentype");
+  font-display: swap;
+}
+
 @media (max-width: 860px) {
   .store-comparison-toggle {
     width: 100%;
@@ -4966,6 +4973,17 @@ emoji-picker.reaction-picker-panel {
 
 .store-tag-preview {
   font-size: 12px;
+}
+
+.store-tag-preview span:not(.rank-icon) {
+  font-family:
+    "PenumbraSerifStd-Bold",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  letter-spacing: 0.02em;
 }
 
 .store-tag-preview .rank-icon {

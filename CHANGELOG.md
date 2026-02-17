@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.91)
+- Imported `PenumbraSerifStd-Bold` via `@font-face` for store in-game donor tag display.
+- Applied the Penumbra font specifically to `[HERO]`, `[LEGEND]`, and `[MYTHIC]` tag text on `/store/ranks` card previews.
+
 ## 2026-02-17 (v1.3.90)
 - Reordered `/store/ranks` cards to title -> artwork -> profile preview -> centered rank row for cleaner vertical hierarchy.
 - Added in-game donor tag preview line (rank SVG + bracket format like `[HERO]`) above `Titles unlocked`.
