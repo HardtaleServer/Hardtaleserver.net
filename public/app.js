@@ -60,6 +60,7 @@ const LAST_NON_LINK_ROUTE_KEY = "hardtale-last-non-link-route";
 const LINK_REMINDER_LAST_SHOWN_PREFIX = "hardtale-link-reminder-last-shown";
 const LINK_REMINDER_READ_PREFIX = "hardtale-link-reminder-read";
 const LINK_REMINDER_LOCAL_ID_PREFIX = "local-link-reminder";
+const ACHIEVEMENT_TOAST_SEEN_PREFIX = "hardtale-achievement-toast-seen";
 const SUPPORT_ERROR_CONTEXTS_KEY = "hardtale-support-error-contexts";
 const SUPPORT_ERROR_MARKER_START = "[ATTACHED_ERROR_CONTEXT]";
 const SUPPORT_ERROR_MARKER_END = "[/ATTACHED_ERROR_CONTEXT]";
@@ -74,7 +75,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.41";
+const VERSION = "1.3.42";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/Copyright.svg";
@@ -162,6 +163,16 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.42",
+    date: "2026-02-17",
+    items: [
+      "Added /link result toasts for both success and failure outcomes.",
+      "Added persistent achievement-toast dedupe so old achievement notifications no longer re-toast on each reload.",
+      "Expanded Smurfis profile groups for testing visibility (Developer, Administrator, Moderator, Helper, Staff) and treated test-link override as linked for store checks.",
+      "Compacted legacy achievement documents by stripping unused bulky fields when profile achievements are loaded.",
+    ],
+  },
   {
     version: "1.3.41",
     date: "2026-02-17",
@@ -8071,9 +8082,19 @@ function LinkPage({ onClose = null }) {
   }
 
   async function onVerifyClick() {
+    function notifyLinkResult(kind, title, message) {
+      emitAppToast({
+        id: `link-${kind}-${Date.now()}`,
+        kind,
+        title,
+        message,
+        duration: kind === "error" ? 6500 : 5200,
+      });
+    }
     if (!isSignedIn) {
       setStatusType("error");
       setStatusMessage("Sign in first to link your game account.");
+      notifyLinkResult("error", "Link failed", "Sign in first to link your game account.");
       if (openSignIn) openSignIn({});
       return;
     }
@@ -8096,27 +8117,37 @@ function LinkPage({ onClose = null }) {
           errorCode === "CODE_EXPIRED" ||
           errorCode === "CODE_REJECTED"
         ) {
+          const message = "Invalid or expired code. Run /link in-game again for a fresh code.";
           setStatusType("error");
-          setStatusMessage("Invalid or expired code. Run /link in-game again for a fresh code.");
+          setStatusMessage(message);
+          notifyLinkResult("error", "Link failed", message);
           return;
         }
         if (errorCode === "ALREADY_USED" || errorCode === "ALREADY_LINKED" || errorCode === "CODE_USED") {
+          const message = "This code or game account was already used for linking.";
           setStatusType("error");
-          setStatusMessage("This code or game account was already used for linking.");
+          setStatusMessage(message);
+          notifyLinkResult("error", "Link failed", message);
           return;
         }
         if (errorCode === "RATE_LIMITED" || errorCode === "CODE_LOCKED" || response.status === 429) {
+          const message = "Too many attempts. Please wait and try again.";
           setStatusType("error");
-          setStatusMessage("Too many attempts. Please wait and try again.");
+          setStatusMessage(message);
+          notifyLinkResult("error", "Link failed", message);
           return;
         }
         if (errorCode === "SERVER_UNAVAILABLE" || response.status >= 500) {
+          const message = "Link service is unavailable right now. Try again later.";
           setStatusType("error");
-          setStatusMessage("Link service is unavailable right now. Try again later.");
+          setStatusMessage(message);
+          notifyLinkResult("error", "Link failed", message);
           return;
         }
+        const message = String(data?.error || "Link failed. Try again.");
         setStatusType("error");
-        setStatusMessage(String(data?.error || "Link failed. Try again."));
+        setStatusMessage(message);
+        notifyLinkResult("error", "Link failed", message);
         return;
       }
       setLinkedInfo({
@@ -8127,14 +8158,17 @@ function LinkPage({ onClose = null }) {
       const nextMode = String(data?.linkMode || "").toLowerCase() === "mock" ? "mock" : "live";
       setLinkMode(nextMode);
       setStatusType("success");
-      setStatusMessage(
+      const successMessage =
         nextMode === "mock"
           ? "Mock link succeeded. This is a simulated result until live server integration is enabled."
-          : "Your game account is linked.",
-      );
+          : "Your game account is linked.";
+      setStatusMessage(successMessage);
+      notifyLinkResult("success", "Link complete", successMessage);
     } catch {
+      const message = "Link failed. Please try again.";
       setStatusType("error");
-      setStatusMessage("Link failed. Please try again.");
+      setStatusMessage(message);
+      notifyLinkResult("error", "Link failed", message);
     } finally {
       setIsSubmitting(false);
     }
@@ -9120,12 +9154,24 @@ function Layout() {
 
   useEffect(() => {
     if (!isSignedIn || !userId) return;
+    const storageKey = `${ACHIEVEMENT_TOAST_SEEN_PREFIX}:${userId}`;
+    let persistedSeen = new Set();
+    try {
+      const parsed = JSON.parse(localStorage.getItem(storageKey) || "[]");
+      if (Array.isArray(parsed)) {
+        persistedSeen = new Set(parsed.map((entry) => String(entry || "").trim()).filter(Boolean));
+      }
+    } catch {}
+    let changed = false;
     sortedNotifications.forEach((item) => {
       const id = String(item?.id || "").trim();
-      if (!id || seenAchievementToastIdsRef.current.has(id)) return;
+      if (!id || seenAchievementToastIdsRef.current.has(id) || persistedSeen.has(id)) return;
+      if (item?.readByMe === true) return;
       seenAchievementToastIdsRef.current.add(id);
       const haystack = `${item?.title || ""} ${item?.message || ""}`.toLowerCase();
       if (!/(achievement|badge unlocked|title unlocked|unlocked achievement)/i.test(haystack)) return;
+      persistedSeen.add(id);
+      changed = true;
       pushToast({
         id: `achv-${id}`,
         kind: "success",
@@ -9134,6 +9180,12 @@ function Layout() {
         duration: 7000,
       });
     });
+    if (changed) {
+      try {
+        const compact = Array.from(persistedSeen).slice(-300);
+        localStorage.setItem(storageKey, JSON.stringify(compact));
+      } catch {}
+    }
   }, [sortedNotifications, isSignedIn, userId]);
 
   useEffect(

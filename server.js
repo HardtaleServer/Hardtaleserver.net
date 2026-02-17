@@ -658,10 +658,7 @@ async function processCartCheckout(userId, options = {}) {
   const paymentStatus = normalizeText(options?.paymentStatus, 40) || "PAID";
   const stripeSessionId = normalizeText(options?.stripeSessionId, 160);
   const stripePaymentIntentId = normalizeText(options?.stripePaymentIntentId, 160);
-  const linked = await linkedAccountsCollection.findOne(
-    { webUserId: userId },
-    { projection: { _id: 1, playerUuid: 1 } },
-  );
+  const linked = await getEffectiveLinkedAccountForUserId(userId);
   if (!linked) {
     throw createHttpError(403, "Link your game account before checkout");
   }
@@ -1452,6 +1449,7 @@ function getMetadataGroupList(metadata = {}) {
 function buildProfileGroupsForUser(user, options = {}) {
   const linked = options?.linked === true;
   const metadata = user?.publicMetadata || {};
+  const isSmurfisOverride = Boolean(resolveTestLinkOverrideForUser(user));
   const staffRole = resolveStaffRoleForUser(user);
   const isStaff = Boolean(staffRole);
   const rankInfo = resolveDisplayRankFromMetadata(metadata, isStaff, linked);
@@ -1476,6 +1474,13 @@ function buildProfileGroupsForUser(user, options = {}) {
     if (staffRole === "Admin") addGroup("Administrator");
     else addGroup(staffRole);
   }
+  if (isSmurfisOverride) {
+    addGroup("Developer");
+    addGroup("Administrator");
+    addGroup("Moderator");
+    addGroup("Helper");
+    addGroup("Staff");
+  }
   if (rankInfo.ownedRank && rankInfo.ownedRank !== "Unregistered") addGroup(rankInfo.ownedRank);
   if (rankInfo.displayRank && rankInfo.displayRank !== "Unregistered") addGroup(rankInfo.displayRank);
   addGroup(linked ? "Linked" : "Unlinked");
@@ -1484,10 +1489,25 @@ function buildProfileGroupsForUser(user, options = {}) {
 }
 
 async function isLinkedUserId(userId) {
+  const linked = await getEffectiveLinkedAccountForUserId(userId);
+  return Boolean(linked);
+}
+
+async function getEffectiveLinkedAccountForUserId(userId) {
   const id = normalizeText(userId, 128);
-  if (!id || !linkedAccountsCollection) return false;
-  const doc = await linkedAccountsCollection.findOne({ webUserId: id }, { projection: { _id: 1 } });
-  return Boolean(doc);
+  if (!id || !linkedAccountsCollection) return null;
+  const doc = await linkedAccountsCollection.findOne({ webUserId: id });
+  if (doc) return doc;
+  const authUser = await clerkClient.users.getUser(id).catch(() => null);
+  const override = resolveTestLinkOverrideForUser(authUser);
+  if (!override) return null;
+  return {
+    webUserId: id,
+    playerUuid: override.playerUuid,
+    playerName: override.playerName,
+    linkedAt: override.linkedAt,
+    linkedSource: override.linkedSource,
+  };
 }
 
 function buildAchievementCatalogWithState(unlockedRows = [], options = {}) {
@@ -1523,6 +1543,29 @@ async function getUserAchievements(userId) {
   if (!safeUserId || !userAchievementsCollection) {
     return buildAchievementCatalogWithState([]);
   }
+  await userAchievementsCollection.updateMany(
+    {
+      userId: safeUserId,
+      $or: [
+        { title: { $exists: true } },
+        { description: { $exists: true } },
+        { icon: { $exists: true } },
+        { status: { $exists: true } },
+        { locked: { $exists: true } },
+        { unlocked: { $exists: true } },
+      ],
+    },
+    {
+      $unset: {
+        title: "",
+        description: "",
+        icon: "",
+        status: "",
+        locked: "",
+        unlocked: "",
+      },
+    },
+  ).catch(() => {});
   const linked = await isLinkedUserId(safeUserId);
   const rows = await userAchievementsCollection
     .find({ userId: safeUserId })
@@ -3621,10 +3664,7 @@ app.post("/api/cart", async (req, res) => {
     if (!auth?.userId) {
       return res.status(401).json({ error: "Not authenticated" });
     }
-    const linked = await linkedAccountsCollection.findOne(
-      { webUserId: auth.userId },
-      { projection: { _id: 1, playerUuid: 1 } },
-    );
+    const linked = await getEffectiveLinkedAccountForUserId(auth.userId);
     if (!linked) {
       return res.status(403).json({ error: "Link your game account before using the store" });
     }
@@ -3687,10 +3727,7 @@ app.post("/api/payments/stripe/create-checkout-session", async (req, res) => {
       return res.status(503).json({ error: "Stripe checkout is not configured" });
     }
 
-    const linked = await linkedAccountsCollection.findOne(
-      { webUserId: auth.userId },
-      { projection: { _id: 1 } },
-    );
+    const linked = await getEffectiveLinkedAccountForUserId(auth.userId);
     if (!linked) {
       return res.status(403).json({ error: "Link your game account before checkout" });
     }
@@ -3766,10 +3803,7 @@ app.post("/api/payments/stripe/create-payment-intent", async (req, res) => {
       return res.status(503).json({ error: "Stripe publishable key is not configured" });
     }
 
-    const linked = await linkedAccountsCollection.findOne(
-      { webUserId: auth.userId },
-      { projection: { _id: 1 } },
-    );
+    const linked = await getEffectiveLinkedAccountForUserId(auth.userId);
     if (!linked) {
       return res.status(403).json({ error: "Link your game account before checkout" });
     }
