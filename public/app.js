@@ -4515,7 +4515,7 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
         <${RankBadge} label="Hero" className="store-owned-badge" />
         <${RankBadge} label="Legend" className="store-owned-badge" />
         <${RankBadge} label="Mythic" className="store-owned-badge" />
-        by giving global boosts to the entire server.
+        By giving global boosts to the entire server.
       </p>
     </section>
     <section className="card fade-in rank-philosophy">
