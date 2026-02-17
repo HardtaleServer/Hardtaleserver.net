@@ -4807,7 +4807,7 @@ function StoreGatewayPage() {
       title: "Ranks",
       path: "/store/ranks",
       iconType: "hero",
-      imageSrc: "/Images/SVGs/store/Store_Ranks.png",
+      imageSrc: "/Images/store/Store_Ranks.png",
       copy: "Rank perks, prefixes, and account upgrades.",
     },
     {
@@ -4815,7 +4815,7 @@ function StoreGatewayPage() {
       title: "Gold",
       path: "/store/gold",
       iconType: "crown",
-      imageSrc: "/Images/SVGs/store/Store_Gold_Chest.png",
+      imageSrc: "/Images/store/Store_Gold_Chest.png",
       copy: "In-game premium currency bundles and offers.",
     },
     {
@@ -4823,7 +4823,7 @@ function StoreGatewayPage() {
       title: "Currency",
       path: "/store/currency",
       iconType: "star",
-      imageSrc: "/Images/SVGs/store/Store_Boosts_Potion.png",
+      imageSrc: "/Images/store/Store_Boosts_Potion.png",
       copy: "Additional store currencies and exchange packs.",
     },
   ];
