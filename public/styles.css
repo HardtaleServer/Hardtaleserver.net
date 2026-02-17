@@ -3010,6 +3010,26 @@ emoji-picker.reaction-picker-panel {
   animation: donorRankFlow 4s ease-in-out infinite;
 }
 
+.comment-rank.rank-hero .rank-icon-image,
+.profile-card-rank.rank-hero .rank-icon-image,
+.profile-owned-badge.rank-hero .rank-icon-image,
+.store-owned-badge.rank-hero .rank-icon-image,
+.store-rank-title.rank-hero .rank-icon-image,
+.store-profile-rank.rank-hero .rank-icon-image,
+.store-tag-preview.rank-hero .rank-icon-image {
+  filter: saturate(1.35) brightness(1.16) drop-shadow(0 0 6px color-mix(in srgb, var(--rank-hero) 62%, transparent));
+}
+
+.comment-rank.rank-hero .rank-icon svg,
+.profile-card-rank.rank-hero .rank-icon svg,
+.profile-owned-badge.rank-hero .rank-icon svg,
+.store-owned-badge.rank-hero .rank-icon svg,
+.store-rank-title.rank-hero .rank-icon svg,
+.store-profile-rank.rank-hero .rank-icon svg,
+.store-tag-preview.rank-hero .rank-icon svg {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--rank-hero-end) 55%, transparent));
+}
+
 .comment-rank.rank-legend span:not(.rank-icon),
 .store-rank-title.rank-legend span:not(.rank-icon),
 .store-profile-rank.rank-legend span:not(.rank-icon),
@@ -5166,7 +5186,7 @@ emoji-picker.reaction-picker-panel {
 
 .store-rank-title.rank-hero .rank-icon-image,
 .store-profile-rank.rank-hero .rank-icon-image {
-  filter: saturate(1.2) brightness(1.08) drop-shadow(0 0 5px color-mix(in srgb, var(--rank-hero) 58%, transparent));
+  filter: saturate(1.35) brightness(1.16) drop-shadow(0 0 6px color-mix(in srgb, var(--rank-hero) 62%, transparent));
 }
 
 .store-rank-title.rank-legend .rank-icon-image,
@@ -5176,8 +5196,9 @@ emoji-picker.reaction-picker-panel {
 
 .store-rank-title.rank-hero span:not(.rank-icon),
 .store-profile-rank.rank-hero span:not(.rank-icon) {
-  background-size: 170% 100%;
-  animation-duration: 4.9s;
+  background-size: 210% 100%;
+  animation-duration: 4.2s;
+  text-shadow: 0 0 10px color-mix(in srgb, var(--rank-hero-end) 44%, transparent);
 }
 
 .store-rank-title.rank-legend span:not(.rank-icon),
@@ -5427,6 +5448,9 @@ body[data-theme="dark"] .store-cta {
 
 .store-comparison-buy-btn {
   width: 100%;
+}
+.store-rank-head .store-comparison-buy-btn {
+  transform: translateY(-7px);
 }
 
 .store-rank-detail-overlay .popup {
@@ -6323,30 +6347,83 @@ body[data-theme="dark"] .store-cta {
   padding: 10px;
 }
 
-.gradient-scroll-area {
+.gradient-scroll-area,
+html.custom-scrollbars-enabled,
+html.custom-scrollbars-enabled body,
+html.custom-scrollbars-enabled .popup,
+html.custom-scrollbars-enabled .settings-modal-overlay .popup,
+html.custom-scrollbars-enabled .comment-history-overlay .popup,
+html.custom-scrollbars-enabled .support-center-overlay .popup,
+html.custom-scrollbars-enabled .checkout-overlay .popup,
+html.custom-scrollbars-enabled .cart-list,
+html.custom-scrollbars-enabled .mobile-drawer-panel,
+html.custom-scrollbars-enabled .admin-panel-modal-content {
   scrollbar-width: thin;
-  scrollbar-color: var(--accent) color-mix(in srgb, var(--bg-soft) 85%, transparent);
+  scrollbar-color: color-mix(in srgb, var(--accent) 72%, var(--accent-2))
+    color-mix(in srgb, var(--bg-soft) 86%, transparent);
 }
 
-.gradient-scroll-area::-webkit-scrollbar {
+.gradient-scroll-area::-webkit-scrollbar,
+html.custom-scrollbars-enabled::-webkit-scrollbar,
+html.custom-scrollbars-enabled body::-webkit-scrollbar,
+html.custom-scrollbars-enabled .popup::-webkit-scrollbar,
+html.custom-scrollbars-enabled .settings-modal-overlay .popup::-webkit-scrollbar,
+html.custom-scrollbars-enabled .comment-history-overlay .popup::-webkit-scrollbar,
+html.custom-scrollbars-enabled .support-center-overlay .popup::-webkit-scrollbar,
+html.custom-scrollbars-enabled .checkout-overlay .popup::-webkit-scrollbar,
+html.custom-scrollbars-enabled .cart-list::-webkit-scrollbar,
+html.custom-scrollbars-enabled .mobile-drawer-panel::-webkit-scrollbar,
+html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
 
-.gradient-scroll-area::-webkit-scrollbar-track {
+.gradient-scroll-area::-webkit-scrollbar-track,
+html.custom-scrollbars-enabled::-webkit-scrollbar-track,
+html.custom-scrollbars-enabled body::-webkit-scrollbar-track,
+html.custom-scrollbars-enabled .popup::-webkit-scrollbar-track,
+html.custom-scrollbars-enabled .settings-modal-overlay .popup::-webkit-scrollbar-track,
+html.custom-scrollbars-enabled .comment-history-overlay .popup::-webkit-scrollbar-track,
+html.custom-scrollbars-enabled .support-center-overlay .popup::-webkit-scrollbar-track,
+html.custom-scrollbars-enabled .checkout-overlay .popup::-webkit-scrollbar-track,
+html.custom-scrollbars-enabled .cart-list::-webkit-scrollbar-track,
+html.custom-scrollbars-enabled .mobile-drawer-panel::-webkit-scrollbar-track,
+html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar-track {
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-soft) 88%, transparent);
   border: 1px solid color-mix(in srgb, var(--stroke) 90%, transparent);
 }
 
-.gradient-scroll-area::-webkit-scrollbar-thumb {
+.gradient-scroll-area::-webkit-scrollbar-thumb,
+html.custom-scrollbars-enabled::-webkit-scrollbar-thumb,
+html.custom-scrollbars-enabled body::-webkit-scrollbar-thumb,
+html.custom-scrollbars-enabled .popup::-webkit-scrollbar-thumb,
+html.custom-scrollbars-enabled .settings-modal-overlay .popup::-webkit-scrollbar-thumb,
+html.custom-scrollbars-enabled .comment-history-overlay .popup::-webkit-scrollbar-thumb,
+html.custom-scrollbars-enabled .support-center-overlay .popup::-webkit-scrollbar-thumb,
+html.custom-scrollbars-enabled .checkout-overlay .popup::-webkit-scrollbar-thumb,
+html.custom-scrollbars-enabled .cart-list::-webkit-scrollbar-thumb,
+html.custom-scrollbars-enabled .mobile-drawer-panel::-webkit-scrollbar-thumb,
+html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar-thumb {
   border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--accent-2) 42%, var(--stroke));
-  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--stroke));
+  background: linear-gradient(180deg, var(--accent), var(--accent-2), var(--accent));
+  background-size: 100% 220%;
+  box-shadow: 0 0 10px color-mix(in srgb, var(--accent-2) 26%, transparent);
 }
 
-.gradient-scroll-area::-webkit-scrollbar-thumb:hover {
-  filter: brightness(1.08);
+.gradient-scroll-area::-webkit-scrollbar-thumb:hover,
+html.custom-scrollbars-enabled::-webkit-scrollbar-thumb:hover,
+html.custom-scrollbars-enabled body::-webkit-scrollbar-thumb:hover,
+html.custom-scrollbars-enabled .popup::-webkit-scrollbar-thumb:hover,
+html.custom-scrollbars-enabled .settings-modal-overlay .popup::-webkit-scrollbar-thumb:hover,
+html.custom-scrollbars-enabled .comment-history-overlay .popup::-webkit-scrollbar-thumb:hover,
+html.custom-scrollbars-enabled .support-center-overlay .popup::-webkit-scrollbar-thumb:hover,
+html.custom-scrollbars-enabled .checkout-overlay .popup::-webkit-scrollbar-thumb:hover,
+html.custom-scrollbars-enabled .cart-list::-webkit-scrollbar-thumb:hover,
+html.custom-scrollbars-enabled .mobile-drawer-panel::-webkit-scrollbar-thumb:hover,
+html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar-thumb:hover {
+  filter: brightness(1.12);
 }
 
 @media (max-width: 860px) {

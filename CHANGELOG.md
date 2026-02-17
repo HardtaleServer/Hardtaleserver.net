@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.99)
+- Added reusable `CustomScrollbar` component and enabled global custom scrollbar styling with staff-gradient treatment for page scroll and key modal/drawer scroll containers.
+- Replaced default scrollbar look across app overlays/popups with consistent themed track/thumb styling.
+- Strengthened Hero rank icon visual treatment across shared rank pills/cards (including store variants) so Hero icon glow/blue identity matches donor-rank effects.
+- Adjusted sticky store comparison header `Add to cart` button vertical offset so it no longer covers the `Chat Prefix` row.
+
 ## 2026-02-17 (v1.3.98)
 - Enforced strict `/link` query parsing on frontend: only `/link?code=ABCDEFGH` is treated as valid deep-link input.
 - Removed legacy link-query acceptance in the `/link` parser (`link`, `token`, `redeem`, bare query values, and path-segment code extraction are no longer accepted).

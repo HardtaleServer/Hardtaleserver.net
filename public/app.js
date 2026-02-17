@@ -35,6 +35,7 @@ import CopyAction from "./components/CopyAction.js";
 import GradientScrollArea from "./components/GradientScrollArea.js";
 import InlineDropdownToggle from "./components/InlineDropdownToggle.js";
 import CountBadge from "./components/CountBadge.js";
+import CustomScrollbar from "./components/CustomScrollbar.js";
 import { markdownExcerpt } from "./components/forumMarkdown.js";
 import { getRankDisplayLabel, getRankIconType } from "./components/rankConfig.js";
 import {
@@ -10679,6 +10680,7 @@ function Layout() {
 
   return html`
     <div className=${`page ${showMobileNav ? "drawer-open" : ""} ${mobileNavStyle === "solid" ? "nav-solid" : "nav-transparent"} ${isMobile && !showMobileIsland ? "hide-mobile-island" : ""}`}>
+      <${CustomScrollbar} />
       <${SeoManager}
         pathname=${visualPathname}
         search=${routesLocation.search || ""}
