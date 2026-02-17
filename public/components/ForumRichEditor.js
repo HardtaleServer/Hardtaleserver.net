@@ -12,7 +12,39 @@ import {
 } from "./forumEditorUtils.js";
 
 const html = htm.bind(React.createElement);
-const EMOJI_SET = ["😀", "😅", "🔥", "✅", "🎉", "💡", "⚠️", "🛠️", "❤️", "🙏"];
+function ToolIcon({ name }) {
+  if (name === "undo") {
+    return html`<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 5a7 7 0 00-6.2 3.8L3 6v7h7l-2.7-2.7A5 5 0 1112 17h-1v2h1a7 7 0 000-14z"/></svg>`;
+  }
+  if (name === "redo") {
+    return html`<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 5a7 7 0 016.2 3.8L21 6v7h-7l2.7-2.7A5 5 0 1012 17h1v2h-1a7 7 0 010-14z"/></svg>`;
+  }
+  if (name === "list") {
+    return html`<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 6h2v2H4V6zm4 0h12v2H8V6zm-4 5h2v2H4v-2zm4 0h12v2H8v-2zm-4 5h2v2H4v-2zm4 0h12v2H8v-2z"/></svg>`;
+  }
+  if (name === "numbered") {
+    return html`<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M5 6h2v2H5V6zm0 5h2v2H5v-2zm0 5h2v2H5v-2zM9 6h11v2H9V6zm0 5h11v2H9v-2zm0 5h11v2H9v-2z"/></svg>`;
+  }
+  if (name === "quote") {
+    return html`<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 7h5v5H9v3H7V7zm8 0h5v5h-3v3h-2V7z"/></svg>`;
+  }
+  if (name === "code") {
+    return html`<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M8.7 16.6L4.1 12l4.6-4.6 1.4 1.4L6.9 12l3.2 3.2-1.4 1.4zm6.6 0l-1.4-1.4 3.2-3.2-3.2-3.2 1.4-1.4 4.6 4.6-4.6 4.6z"/></svg>`;
+  }
+  if (name === "link") {
+    return html`<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3.9 12a5 5 0 015-5h3v2h-3a3 3 0 000 6h3v2h-3a5 5 0 01-5-5zm6.1 1h4v-2h-4v2zm5-6h3a5 5 0 010 10h-3v-2h3a3 3 0 000-6h-3V7z"/></svg>`;
+  }
+  if (name === "image") {
+    return html`<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 5h16a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V6a1 1 0 011-1zm1 11l3.5-4.5 2.5 3 3.5-4.5L19 16H5zm4-7a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/></svg>`;
+  }
+  if (name === "hr") {
+    return html`<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M4 11h16v2H4z"/></svg>`;
+  }
+  if (name === "emoji") {
+    return html`<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 100 20 10 10 0 000-20zm-4 8a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zm8 0a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zm-7 4h6a3 3 0 01-6 0z"/></svg>`;
+  }
+  return html``;
+}
 
 function ForumRenderedMarkdown({ value = "", className = "" }) {
   const htmlValue = useMemo(() => markdownToSafeHtml(value), [value]);
@@ -32,6 +64,7 @@ export default function ForumRichEditor({
 }) {
   const textareaRef = useRef(null);
   const fileRef = useRef(null);
+  const emojiPickerRef = useRef(null);
   const undoStackRef = useRef([]);
   const redoStackRef = useRef([]);
   const historyLimitRef = useRef(200);
@@ -39,6 +72,8 @@ export default function ForumRichEditor({
   const [mode, setMode] = useState(initialMode);
   const [draftStatus, setDraftStatus] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
+  const [pickerLoaded, setPickerLoaded] = useState(false);
+  const [pickerFailed, setPickerFailed] = useState(false);
   const [toolbarExpanded, setToolbarExpanded] = useState(false);
   const [historyTick, setHistoryTick] = useState(0);
   const draftKey = useMemo(() => buildDraftStorageKey("forum-editor-draft", draftScope), [draftScope]);
@@ -98,6 +133,36 @@ export default function ForumRichEditor({
     touchHistory();
     applyEditorValue(next, { track: false });
   }
+
+  useEffect(() => {
+    let alive = true;
+    async function loadEmojiPicker() {
+      try {
+        await import("https://cdn.jsdelivr.net/npm/emoji-picker-element@1.21.3/index.js");
+        if (!alive) return;
+        setPickerLoaded(true);
+      } catch {
+        if (!alive) return;
+        setPickerFailed(true);
+      }
+    }
+    loadEmojiPicker();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!showEmoji || !pickerLoaded || !emojiPickerRef.current) return;
+    const pickerEl = emojiPickerRef.current;
+    function onEmojiClick(event) {
+      const emoji = event?.detail?.unicode || event?.detail?.emoji;
+      if (!emoji) return;
+      insert(emoji);
+    }
+    pickerEl.addEventListener("emoji-click", onEmojiClick);
+    return () => pickerEl.removeEventListener("emoji-click", onEmojiClick);
+  }, [showEmoji, pickerLoaded, value]);
 
   useEffect(() => {
     if (!autosaveEnabled) return;
@@ -214,13 +279,11 @@ export default function ForumRichEditor({
           <button type="button" className=${`ghost-btn ${mode === "preview" ? "active" : ""}`} onClick=${() => setMode("preview")}>Preview</button>
           <button type="button" className=${`ghost-btn ${mode === "split" ? "active" : ""}`} onClick=${() => setMode("split")}>Split</button>
         </div>
+        <button type="button" className="ghost-btn forum-editor-toolbar-toggle" onClick=${() => setToolbarExpanded((prev) => !prev)}>Tools</button>
         <div className="forum-editor-status muted">${draftStatus}</div>
       </div>
 
       <div className=${`forum-editor-toolbar ${toolbarExpanded ? "expanded" : ""}`.trim()}>
-        <button type="button" className="ghost-btn forum-editor-toolbar-toggle" onClick=${() => setToolbarExpanded((prev) => !prev)}>Tools</button>
-        <button type="button" className="ghost-btn" onClick=${undo} disabled=${!canUndo} title="Undo (Ctrl+Z)">Undo</button>
-        <button type="button" className="ghost-btn" onClick=${redo} disabled=${!canRedo} title="Redo (Ctrl+Y)">Redo</button>
         <button type="button" className="ghost-btn" onClick=${() => wrap("**")}><strong>B</strong></button>
         <button type="button" className="ghost-btn" onClick=${() => wrap("*")}><em>I</em></button>
         <button type="button" className="ghost-btn" onClick=${() => wrap("++")}>U</button>
@@ -228,31 +291,33 @@ export default function ForumRichEditor({
         <button type="button" className="ghost-btn" onClick=${() => prefix("# ")}>H1</button>
         <button type="button" className="ghost-btn" onClick=${() => prefix("## ")}>H2</button>
         <button type="button" className="ghost-btn" onClick=${() => prefix("### ")}>H3</button>
-        <button type="button" className="ghost-btn" onClick=${() => prefix("- ")}>List</button>
-        <button type="button" className="ghost-btn" onClick=${() => prefix("1. ")}>1.</button>
-        <button type="button" className="ghost-btn" onClick=${() => prefix("> ")}>Quote</button>
-        <button type="button" className="ghost-btn" onClick=${() => wrap("`")}>Code</button>
+        <button type="button" className="ghost-btn forum-editor-icon-btn" onClick=${() => prefix("- ")} title="Bulleted list"><${ToolIcon} name="list" /></button>
+        <button type="button" className="ghost-btn forum-editor-icon-btn" onClick=${() => prefix("1. ")} title="Numbered list"><${ToolIcon} name="numbered" /></button>
+        <button type="button" className="ghost-btn forum-editor-icon-btn" onClick=${() => prefix("> ")} title="Quote"><${ToolIcon} name="quote" /></button>
+        <button type="button" className="ghost-btn forum-editor-icon-btn" onClick=${() => wrap("`")} title="Inline code"><${ToolIcon} name="code" /></button>
         <button type="button" className="ghost-btn" onClick=${() => insert("\n```\ncode\n```\n")}>Code Block</button>
         <button
           type="button"
-          className="ghost-btn"
+          className="ghost-btn forum-editor-icon-btn"
+          title="Insert link (Ctrl+K)"
           onClick=${() => {
             const url = window.prompt("Enter URL (https://...)");
             if (!url) return;
             const label = window.prompt("Display text", "Link") || "Link";
             insert(`[${label}](${url})`);
           }}
-        >Link</button>
+        ><${ToolIcon} name="link" /></button>
         <button
           type="button"
-          className="ghost-btn"
+          className="ghost-btn forum-editor-icon-btn"
+          title="Image URL"
           onClick=${() => {
             const url = window.prompt("Image URL (https://...)");
             if (!url) return;
             const alt = window.prompt("Alt text", "image") || "image";
             insert(`![${alt}](${url})`);
           }}
-        >Image URL</button>
+        ><${ToolIcon} name="image" /></button>
         <button type="button" className="ghost-btn" onClick=${() => fileRef.current && fileRef.current.click()}>Upload</button>
         <input
           ref=${fileRef}
@@ -272,14 +337,17 @@ export default function ForumRichEditor({
             event.target.value = "";
           }}
         />
-        <button type="button" className="ghost-btn" onClick=${() => insert("\n---\n")}>HR</button>
-        <button type="button" className="ghost-btn" onClick=${() => setShowEmoji((prev) => !prev)}>Emoji</button>
+        <button type="button" className="ghost-btn forum-editor-icon-btn" onClick=${() => insert("\n---\n")} title="Horizontal rule"><${ToolIcon} name="hr" /></button>
+        <button type="button" className="ghost-btn forum-editor-icon-btn" onClick=${() => setShowEmoji((prev) => !prev)} title="Emoji"><${ToolIcon} name="emoji" /></button>
         <button type="button" className="ghost-btn" onClick=${() => applyEditorValue(clearMarkdownFormatting(value))}>Clear</button>
       </div>
 
       ${showEmoji
-        ? html`<div className="forum-editor-emoji-row">
-            ${EMOJI_SET.map((emoji) => html`<button type="button" className="ghost-btn" onClick=${() => insert(emoji)}>${emoji}</button>`)}
+        ? html`<div className="forum-editor-emoji-picker">
+            ${pickerLoaded
+              ? html`<emoji-picker class="reaction-picker-panel" ref=${emojiPickerRef}></emoji-picker>`
+              : html`<div className="muted">Loading emojis...</div>`}
+            ${pickerFailed ? html`<div className="reaction-error">Failed to load emoji picker.</div>` : html``}
           </div>`
         : html``}
 
@@ -313,6 +381,10 @@ export default function ForumRichEditor({
           : html``}
       </div>
       <div className="forum-editor-footer">
+        <div className="forum-editor-history-row">
+          <button type="button" className="ghost-btn forum-editor-icon-btn" onClick=${undo} disabled=${!canUndo} title="Undo (Ctrl+Z)"><${ToolIcon} name="undo" /></button>
+          <button type="button" className="ghost-btn forum-editor-icon-btn" onClick=${redo} disabled=${!canRedo} title="Redo (Ctrl+Y / Ctrl+Shift+Z)"><${ToolIcon} name="redo" /></button>
+        </div>
         <span className="muted">${count}/${maxLength}</span>
         ${tooShort ? html`<span className="muted">Post body should be at least ${minLength} characters.</span>` : html``}
       </div>
