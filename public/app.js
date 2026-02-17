@@ -66,7 +66,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.36";
+const VERSION = "1.3.37";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
 const LINKED_STATUS_ICON_SVG = "/Images/SVGs/LINKED.svg";
@@ -150,6 +150,14 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.37",
+    date: "2026-02-17",
+    items: [
+      "Added changelog item visibility controls with stable item keys and admin-only filtering for sensitive/internal update notes.",
+      "Restricted internal changelog notes to admin view while keeping player-facing patch history visible to all users.",
+    ],
+  },
   {
     version: "1.3.36",
     date: "2026-02-17",
@@ -1601,6 +1609,20 @@ function CommentThread({
     return entry?.authorShowStaffBadge !== false && Boolean(resolveStaffPillTitle(entry));
   }
 
+  function renderReplyStaffBadge(entry) {
+    if (!showStaffNameBadge(entry)) return html``;
+    const rank = resolveRank(entry);
+    const roleClass = resolveStaffRoleClass(entry);
+    const useGradientPillText = entry?.authorShowStaffBadgeIcon !== false;
+    const staffPillClass = `forum-staff-pill ${roleClass} ${useGradientPillText ? "gradient-text" : "text-only"} ${
+      rank?.animateStaffGradient === false ? "staff-static" : ""
+    }`.trim();
+    const staffPillText = resolveStaffPillTitle(entry) || "Staff";
+    return html`<span className=${`reply-staff-badge ${staffPillClass}`.trim()}>
+      <span className=${useGradientPillText ? "staff-pill-label" : "staff-pill-text"}>${staffPillText}</span>
+    </span>`;
+  }
+
   function rankClassSlug(value) {
     return String(value || "Unregistered")
       .trim()
@@ -2674,11 +2696,12 @@ function CommentThread({
                                           alt=${reply.authorName}
                                         />
                                       </button>
+                                      ${renderReplyStaffBadge(reply)}
                                       <${CommentIdentity}
                                         entry=${reply}
                                         rank=${resolveRank(reply)}
                                         authorSizeClass=${authorSizeClass}
-                                        showStaffPill=${showStaffNameBadge(reply)}
+                                        showStaffPill=${false}
                                         staffPillText=${resolveStaffPillTitle(reply)}
                                       />
                                       <${CommentMeta}
@@ -2694,7 +2717,7 @@ function CommentThread({
                                             entry=${reply}
                                             rank=${resolveRank(reply)}
                                             authorSizeClass=${authorSizeClass}
-                                            showStaffPill=${showStaffNameBadge(reply)}
+                                            showStaffPill=${false}
                                             staffPillText=${resolveStaffPillTitle(reply)}
                                           />
                                         </div>
@@ -6106,10 +6129,61 @@ function ForumPage({ isAdmin = false }) {
   `;
 }
 
-function ChangelogPanel() {
+const CHANGELOG_ADMIN_ONLY_PATTERNS = [
+  /temporary smurfis verified-link test override/i,
+  /\blocal dev\b/i,
+  /\bdev mode\b/i,
+  /\bserver-to-server\b/i,
+  /\bfeature flag\b/i,
+  /\blink_service_/i,
+  /\/api\//i,
+  /\bclerk key\b/i,
+  /\bauth handshake\b/i,
+  /\brender-managed\b/i,
+  /\badmin tools\b/i,
+  /\/panel\b/i,
+  /\bmongo-backed\b/i,
+];
+
+function isAdminOnlyChangelogText(text) {
+  const value = String(text || "");
+  return CHANGELOG_ADMIN_ONLY_PATTERNS.some((pattern) => pattern.test(value));
+}
+
+function buildVisibleChangelogEntries(isAdmin = false) {
+  return CHANGELOG_ENTRIES
+    .map((entry) => {
+      const normalizedItems = (Array.isArray(entry?.items) ? entry.items : [])
+        .map((rawItem, index) => {
+          if (typeof rawItem === "string") {
+            return {
+              key: `${entry.version}-${index}`,
+              text: rawItem,
+              adminOnly: isAdminOnlyChangelogText(rawItem),
+            };
+          }
+          return {
+            key: String(rawItem?.key || `${entry.version}-${index}`),
+            text: String(rawItem?.text || ""),
+            adminOnly: Boolean(rawItem?.adminOnly),
+          };
+        })
+        .filter((item) => item.text)
+        .filter((item) => isAdmin || item.adminOnly !== true);
+
+      return {
+        ...entry,
+        items: normalizedItems,
+      };
+    })
+    .filter((entry) => entry.items.length > 0);
+}
+
+function ChangelogPanel({ isAdmin = false }) {
+  const visibleEntries = buildVisibleChangelogEntries(isAdmin);
   return html`
     <div className="changelog-list">
-      ${CHANGELOG_ENTRIES.map(
+      ${visibleEntries.map(
         (entry) => html`<div key=${entry.version} className="changelog-entry">
           <div className="changelog-header">
             <div className="changelog-version">v${entry.version}</div>
@@ -6117,7 +6191,7 @@ function ChangelogPanel() {
           </div>
           <ul className="changelog-items">
             ${entry.items.map(
-              (item, index) => html`<li key=${`${entry.version}-${index}`}>${item}</li>`,
+              (item) => html`<li key=${item.key}>${item.text}</li>`,
             )}
           </ul>
           <${ReactionBar} itemType="changelog" itemId=${entry.version} />
@@ -6476,9 +6550,6 @@ function NotFoundPage({
               check it for typos - otherwise you can head back to spawn.
             </p>
             <div className="not-found-actions">
-              <button className="button primary" onClick=${() => navigate("/")}>
-                Return to Spawn
-              </button>
               <button className="button" onClick=${() => navigate(-1)}>
                 Go Back
               </button>
@@ -6546,6 +6617,16 @@ function NotFoundPage({
                   /support
                 </button>
                 <span className="muted">Open a support ticket.</span>
+              </div>
+              <div className="not-found-command">
+                <button className="button ghost-btn" type="button" onClick=${() => {
+                  setCommand("/");
+                  setCommandStatus("");
+                  navigate("/");
+                }}>
+                  Return to Spawn
+                </button>
+                <span className="muted">Takes you home.</span>
               </div>
             </div>
           </aside>
@@ -6716,9 +6797,12 @@ function NotificationsPanel({ notifications, onView, onOpenProfile }) {
     <div className="notif-list">
       ${notifications.map((item) => {
         const authorLabel = String(item?.authorName || item?.author || "System");
+        const authorUserId = String(item?.authorUserId || "").trim();
+        const isSystemAuthor = /^system$/i.test(authorLabel) || authorUserId === "";
         const canOpenProfile =
           typeof onOpenProfile === "function" &&
-          Boolean(item?.authorUserId || item?.authorImage || item?.authorName);
+          !isSystemAuthor &&
+          Boolean(authorUserId);
         return html`<div key=${item.id} className="notif-card">
           <div className="notif-title">
             ${item.featured ? html`<span className="news-star mini" title="Featured">â˜…</span>` : html``}
@@ -8612,7 +8696,7 @@ function Layout() {
         onClose=${() => setShowChangelog(false)}
         title="Changelog"
       >
-        <${ChangelogPanel} />
+        <${ChangelogPanel} isAdmin=${isAdmin} />
       <//>
     </div>
   `;

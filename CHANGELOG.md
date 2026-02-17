@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.37)
+- Added changelog item visibility controls with stable item keys and admin-only filtering for sensitive/internal update notes.
+- Restricted internal changelog notes to admin view while keeping player-facing patch history visible to all users.
+
 ## 2026-02-17 (v1.3.36)
 - Switched `/link` to a route-triggered modal overlay while keeping `/link` and `/link?` deep-link parsing/verification behavior intact.
 - Added dismissible modal close (`X`) and background-restore behavior so closing `/link` returns users to the previous page (or Home fallback).
