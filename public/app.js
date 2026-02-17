@@ -22,6 +22,7 @@ import ProfileCardLayout from "./components/ProfileCardLayout.js";
 import ProfileAchievementsCard from "./components/ProfileAchievementsCard.js";
 import DeferredForumEditor from "./components/DeferredForumEditor.js";
 import ForumRenderedMarkdown from "./components/ForumRenderedMarkdown.js";
+import ProfileInfoTabs from "./components/ProfileInfoTabs.js";
 import ProfileOptionsActions from "./components/ProfileOptionsActions.js";
 import ToastSystem, { APP_TOAST_EVENT, createToastPayload, emitAppToast } from "./components/ToastSystem.js";
 import SeoManager from "./components/SeoManager.js";
@@ -80,7 +81,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.46";
+const VERSION = "1.3.47";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/Copyright.svg";
@@ -168,6 +169,14 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.47",
+    date: "2026-02-17",
+    items: [
+      "Extracted reusable `ProfileInfoTabs` component and applied it across comment, forum, and notification profile cards.",
+      "Reduced duplicated profile-tab markup to improve maintainability and keep behavior consistent across views.",
+    ],
+  },
   {
     version: "1.3.46",
     date: "2026-02-17",
@@ -3359,25 +3368,12 @@ function CommentThread({
               ${profileTitleStatus && profileUser.isOwn
                 ? html`<div className="muted profile-card-title-status">${profileTitleStatus}</div>`
                 : html``}
-              <div className="profile-card-subtabs" role="tablist" aria-label="Profile details">
-                <button
-                  type="button"
-                  className=${`profile-card-subtab ${profileInfoTab === "badges" ? "active" : ""}`.trim()}
-                  onClick=${() => setProfileInfoTab("badges")}
-                >
-                  Badges
-                </button>
-                <button
-                  type="button"
-                  className=${`profile-card-subtab ${profileInfoTab === "groups" ? "active" : ""}`.trim()}
-                  onClick=${() => setProfileInfoTab("groups")}
-                >
-                  Groups
-                </button>
-              </div>
-              ${profileInfoTab === "groups"
-                ? html`${renderProfileGroupsCard(profileUser)}`
-                : html`${renderStaffBadge(profileUser)}${renderOwnedRankBadges(profileUser)}`}
+              <${ProfileInfoTabs}
+                activeTab=${profileInfoTab}
+                onTabChange=${setProfileInfoTab}
+                groupsNode=${html`${renderProfileGroupsCard(profileUser)}`}
+                badgesNode=${html`${renderStaffBadge(profileUser)}${renderOwnedRankBadges(profileUser)}`}
+              />
             </div>`
           : html``}
       <//>
@@ -5967,25 +5963,12 @@ function ForumPage({ isAdmin = false }) {
       ${forumProfileTitleStatus && forumProfileUser.isOwn
         ? html`<div className="muted profile-card-title-status">${forumProfileTitleStatus}</div>`
         : html``}
-      <div className="profile-card-subtabs" role="tablist" aria-label="Profile details">
-        <button
-          type="button"
-          className=${`profile-card-subtab ${forumProfileInfoTab === "badges" ? "active" : ""}`.trim()}
-          onClick=${() => setForumProfileInfoTab("badges")}
-        >
-          Badges
-        </button>
-        <button
-          type="button"
-          className=${`profile-card-subtab ${forumProfileInfoTab === "groups" ? "active" : ""}`.trim()}
-          onClick=${() => setForumProfileInfoTab("groups")}
-        >
-          Groups
-        </button>
-      </div>
-      ${forumProfileInfoTab === "groups"
-        ? html`${renderProfileGroupsCard(forumProfileUser)}`
-        : html`${renderStaffBadge(forumProfileUser)}${renderOwnedRankBadges(forumProfileUser)}`}
+      <${ProfileInfoTabs}
+        activeTab=${forumProfileInfoTab}
+        onTabChange=${setForumProfileInfoTab}
+        groupsNode=${html`${renderProfileGroupsCard(forumProfileUser)}`}
+        badgesNode=${html`${renderStaffBadge(forumProfileUser)}${renderOwnedRankBadges(forumProfileUser)}`}
+      />
     </div>`;
   }
 
@@ -6386,31 +6369,19 @@ function ForumPage({ isAdmin = false }) {
             }}
             title="Profile Options"
           >
-            <div className="comment-actions right">
-              <button
-                className="button primary"
-                type="button"
-                onClick=${() => {
-                  const target = forumSelfChooserEntry;
-                  setForumSelfChooserOpen(false);
-                  setForumSelfChooserEntry(null);
-                  if (target) openForumProfileCard(target);
-                }}
-              >
-                View profile card
-              </button>
-              <button
-                className="button ghost-btn"
-                type="button"
-                onClick=${() => {
-                  setForumSelfChooserOpen(false);
-                  setForumSelfChooserEntry(null);
-                  if (openUserProfile) openUserProfile({});
-                }}
-              >
-                View Clerk card
-              </button>
-            </div>
+            <${ProfileOptionsActions}
+              onViewProfile=${() => {
+                const target = forumSelfChooserEntry;
+                setForumSelfChooserOpen(false);
+                setForumSelfChooserEntry(null);
+                if (target) openForumProfileCard(target);
+              }}
+              onViewClerk=${() => {
+                setForumSelfChooserOpen(false);
+                setForumSelfChooserEntry(null);
+                if (openUserProfile) openUserProfile({});
+              }}
+            />
           <//>
           <${PopUp}
             show=${forumHistoryOpen}
@@ -9960,25 +9931,12 @@ function Layout() {
                 })()}
               </div>`}
             >
-              <div className="profile-card-subtabs" role="tablist" aria-label="Profile details">
-                <button
-                  type="button"
-                  className=${`profile-card-subtab ${notificationProfileInfoTab === "badges" ? "active" : ""}`.trim()}
-                  onClick=${() => setNotificationProfileInfoTab("badges")}
-                >
-                  Badges
-                </button>
-                <button
-                  type="button"
-                  className=${`profile-card-subtab ${notificationProfileInfoTab === "groups" ? "active" : ""}`.trim()}
-                  onClick=${() => setNotificationProfileInfoTab("groups")}
-                >
-                  Groups
-                </button>
-              </div>
-              ${notificationProfileInfoTab === "groups"
-                ? html`${renderProfileGroupsCard(notificationProfileUser)}`
-                : html`${renderStaffBadge(notificationProfileUser)}${renderOwnedRankBadges(notificationProfileUser)}`}
+              <${ProfileInfoTabs}
+                activeTab=${notificationProfileInfoTab}
+                onTabChange=${setNotificationProfileInfoTab}
+                groupsNode=${html`${renderProfileGroupsCard(notificationProfileUser)}`}
+                badgesNode=${html`${renderStaffBadge(notificationProfileUser)}${renderOwnedRankBadges(notificationProfileUser)}`}
+              />
             <//>`
           : html``}
       <//>
