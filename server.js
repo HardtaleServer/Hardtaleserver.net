@@ -3839,7 +3839,19 @@ app.post("/api/payments/stripe/create-payment-intent", async (req, res) => {
     });
   } catch (error) {
     console.error("Failed to create Stripe payment intent", error);
-    return res.status(500).json({ error: "Failed to start Stripe payment" });
+    const stripeCode = String(error?.code || error?.raw?.code || "").trim();
+    const stripeType = String(error?.type || error?.raw?.type || "").trim();
+    const stripeMessage = String(error?.raw?.message || error?.message || "").trim();
+    const detail =
+      stripeMessage && stripeMessage.length < 260
+        ? stripeMessage
+        : "Stripe rejected the payment intent request.";
+    return res.status(500).json({
+      error: "Failed to start Stripe payment",
+      detail,
+      code: stripeCode || undefined,
+      type: stripeType || undefined,
+    });
   }
 });
 

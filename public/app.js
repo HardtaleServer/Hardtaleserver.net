@@ -86,7 +86,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.60";
+const VERSION = "1.3.62";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -177,6 +177,22 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.62",
+    date: "2026-02-17",
+    items: [
+      "Fixed cart icon flicker by triggering cart pop animation only when cart count changes.",
+    ],
+  },
+  {
+    version: "1.3.61",
+    date: "2026-02-17",
+    items: [
+      "Fixed mobile navbar visibility issues by keeping cart access visible even when cart count is zero.",
+      "Kept mobile settings access consistently visible instead of hiding it behind signed-in state.",
+      "Stabilized mobile drawer/header action rendering to prevent settings/cart disappearing behavior.",
+    ],
+  },
   {
     version: "1.3.60",
     date: "2026-02-17",
@@ -4472,9 +4488,21 @@ function SettingsMenu({
 }
 
 function CartButton({ onClick, count }) {
+  const [cartPopActive, setCartPopActive] = useState(false);
+  const previousCountRef = useRef(Number(count || 0));
+
+  useEffect(() => {
+    const nextCount = Number(count || 0);
+    if (nextCount === previousCountRef.current) return;
+    previousCountRef.current = nextCount;
+    setCartPopActive(true);
+    const timer = setTimeout(() => setCartPopActive(false), 260);
+    return () => clearTimeout(timer);
+  }, [count]);
+
   return html`
     <button
-      className=${`settings-button cart-button ${count > 0 ? "cart-pop" : ""}`}
+      className=${`settings-button cart-button ${cartPopActive ? "cart-pop" : ""}`}
       title="Cart"
       onClick=${onClick}
     >
@@ -9553,6 +9581,38 @@ function Layout() {
     `;
   }
 
+  function MobileSettingsButton() {
+    return html`<${SettingsMenu}
+      theme=${theme}
+      setTheme=${setTheme}
+      toggleLightDark=${toggleLightDark}
+      placement=${placement}
+      setPlacement=${setPlacement}
+      menuSide=${menuSide}
+      setMenuSide=${setMenuSide}
+      mobileNavStyle=${mobileNavStyle}
+      setMobileNavStyle=${setMobileNavStyle}
+      logoSide=${logoSide}
+      setLogoSide=${setLogoSide}
+      mobileLogoStyle=${mobileLogoStyle}
+      setMobileLogoStyle=${setMobileLogoStyle}
+      showMobileIsland=${showMobileIsland}
+      setShowMobileIsland=${setShowMobileIsland}
+      desktopStickyStyle=${desktopStickyStyle}
+      setDesktopStickyStyle=${setDesktopStickyStyle}
+      desktopStickyWide=${desktopStickyWide}
+      setDesktopStickyWide=${setDesktopStickyWide}
+      desktopStickyLogoStyle=${desktopStickyLogoStyle}
+      setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
+      uiFlashEnabled=${uiFlashEnabled}
+      setUiFlashEnabled=${setUiFlashEnabled}
+      toastShape=${toastShape}
+      setToastShape=${setToastShape}
+      onOpenChange=${setSettingsOpen}
+      isMobile=${isMobile}
+    />`;
+  }
+
   return html`
     <div className=${`page ${showMobileNav ? "drawer-open" : ""} ${mobileNavStyle === "solid" ? "nav-solid" : "nav-transparent"} ${isMobile && !showMobileIsland ? "hide-mobile-island" : ""}`}>
       <${SeoManager}
@@ -9581,6 +9641,8 @@ function Layout() {
               <div className=${`mobile-top-actions ${menuSide === "left" ? "menu-left" : "menu-right"}`}>
                 ${menuSide === "left"
                   ? html`
+                      <${MobileSettingsButton} />
+                      <${CartButton} onClick=${openCart} count=${cartCount} />
                       <button
                         className="settings-button mobile-menu"
                         title="Menu"
@@ -9590,10 +9652,10 @@ function Layout() {
                           <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />
                         </svg>
                       </button>
-                      ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
                     `
                   : html`
-                      ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
+                      <${CartButton} onClick=${openCart} count=${cartCount} />
+                      <${MobileSettingsButton} />
                       <button
                         className="settings-button mobile-menu"
                         title="Menu"
@@ -9698,71 +9760,15 @@ function Layout() {
                     >
                       X
                     </button>
+                    <${MobileSettingsButton} />
                     <${SignedIn}>
-                <${SettingsMenu}
-                  theme=${theme}
-                  setTheme=${setTheme}
-                  toggleLightDark=${toggleLightDark}
-                  placement=${placement}
-                  setPlacement=${setPlacement}
-                  menuSide=${menuSide}
-                  setMenuSide=${setMenuSide}
-                  mobileNavStyle=${mobileNavStyle}
-                  setMobileNavStyle=${setMobileNavStyle}
-                  logoSide=${logoSide}
-                  setLogoSide=${setLogoSide}
-                  mobileLogoStyle=${mobileLogoStyle}
-                  setMobileLogoStyle=${setMobileLogoStyle}
-                  showMobileIsland=${showMobileIsland}
-                  setShowMobileIsland=${setShowMobileIsland}
-                  desktopStickyStyle=${desktopStickyStyle}
-                  setDesktopStickyStyle=${setDesktopStickyStyle}
-                  desktopStickyWide=${desktopStickyWide}
-                  setDesktopStickyWide=${setDesktopStickyWide}
-                  desktopStickyLogoStyle=${desktopStickyLogoStyle}
-                  setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
-                  uiFlashEnabled=${uiFlashEnabled}
-                  setUiFlashEnabled=${setUiFlashEnabled}
-                  toastShape=${toastShape}
-                  setToastShape=${setToastShape}
-                  onOpenChange=${setSettingsOpen}
-                  isMobile=${isMobile}
-                />
                       <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
                     <//>
                   `
                 : html`
+                    <${MobileSettingsButton} />
                     <${SignedIn}>
                       <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
-                      <${SettingsMenu}
-                        theme=${theme}
-                        setTheme=${setTheme}
-                        toggleLightDark=${toggleLightDark}
-                        placement=${placement}
-                        setPlacement=${setPlacement}
-                        menuSide=${menuSide}
-                        setMenuSide=${setMenuSide}
-                        mobileNavStyle=${mobileNavStyle}
-                        setMobileNavStyle=${setMobileNavStyle}
-                        logoSide=${logoSide}
-                        setLogoSide=${setLogoSide}
-                        mobileLogoStyle=${mobileLogoStyle}
-                        setMobileLogoStyle=${setMobileLogoStyle}
-                        showMobileIsland=${showMobileIsland}
-                        setShowMobileIsland=${setShowMobileIsland}
-                        desktopStickyStyle=${desktopStickyStyle}
-                        setDesktopStickyStyle=${setDesktopStickyStyle}
-                        desktopStickyWide=${desktopStickyWide}
-                        setDesktopStickyWide=${setDesktopStickyWide}
-                        desktopStickyLogoStyle=${desktopStickyLogoStyle}
-                        setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
-                        uiFlashEnabled=${uiFlashEnabled}
-                        setUiFlashEnabled=${setUiFlashEnabled}
-                        toastShape=${toastShape}
-                        setToastShape=${setToastShape}
-                        onOpenChange=${setSettingsOpen}
-                        isMobile=${isMobile}
-                      />
                     <//>
                     <button
                       className="signature-close"
