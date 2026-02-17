@@ -8,6 +8,7 @@ export default function AppRoutes({
   Route,
   routesLocation,
   HomePage,
+  AboutUsPage,
   NewsPage,
   StorePage,
   VotePage,
@@ -66,6 +67,7 @@ export default function AppRoutes({
           onNotificationsUpdate=${setNotifications}
         />`}
       />
+      <${Route} path="/about-us" element=${html`<${AboutUsPage} />`} />
       <${Route}
         path="/store"
         element=${html`<${StorePage}

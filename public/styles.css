@@ -1623,6 +1623,19 @@ body[data-theme="light"] .button.primary {
 .ip {
   font-size: 22px;
   font-weight: 700;
+  background: linear-gradient(270deg, var(--accent-2), var(--accent));
+  background-size: 220% 100%;
+  animation: staffReflect 2.4s ease-in-out infinite reverse;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.ip-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .join-row {
@@ -5948,6 +5961,10 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   .join-row {
     gap: 8px;
     flex-wrap: nowrap;
+  }
+
+  .ip-row {
+    gap: 8px;
   }
 
   .copy-ip-btn {

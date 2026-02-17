@@ -68,7 +68,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.37";
+const VERSION = "1.3.39";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
 const LINKED_STATUS_ICON_SVG = "/Images/SVGs/LINKED.svg";
@@ -152,6 +152,22 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.39",
+    date: "2026-02-17",
+    items: [
+      "Moved Home philosophy cards (Performance First, True to the Game, Who We Are) into a dedicated About Us page at /about-us.",
+      "Added About Us footer navigation link while keeping the top navbar unchanged.",
+    ],
+  },
+  {
+    version: "1.3.38",
+    date: "2026-02-17",
+    items: [
+      "Rearranged Home join panel so Join now and How? appear above the server IP row.",
+      "Moved Copy IP next to play.hardtale.net and added animated Hardtale accent gradient styling to the IP text.",
+    ],
+  },
   {
     version: "1.3.37",
     date: "2026-02-17",
@@ -7228,7 +7244,6 @@ function HomePage({
           </div>
         </div>
         <div ref=${playRef} className="hero-card plain">
-          <div className="ip">${SERVER_IP}</div>
           <div className="join-row">
             <strong>Join now</strong>
             <button
@@ -7238,6 +7253,9 @@ function HomePage({
             >
               How?
             </button>
+          </div>
+          <div className="ip-row">
+            <div className="ip">${SERVER_IP}</div>
             <button
               className="button primary copy-ip-btn hero-action-btn"
               onClick=${() => navigator.clipboard.writeText(SERVER_IP)}
@@ -7262,67 +7280,6 @@ function HomePage({
           </div>
         </div>
       </div>
-
-      <section className="grid fade-in">
-        <div className="card">
-          <div className="section-title">Performance First</div>
-          <p className="muted">
-            A stable, optimized realm built for long sessions and real progression.
-          </p>
-          <p className="muted">
-            Server-first architecture (Hub designed for network expansion)
-            <br />
-            Controlled world size & clean entity management
-            <br />
-            Progression systems built to scale, not inflate
-            <br />
-            Minimal unnecessary plugins  performance over bloat
-            <br />
-            Designed to support instanced content later without breaking the core world
-          </p>
-          <p className="muted">
-            Hardtale is being built to run clean before it runs big.
-          </p>
-        </div>
-        <div className="card">
-          <div className="section-title">True to the Game</div>
-          <p className="muted">
-            Vanilla-first design. MMO depth without destroying the sandbox.
-          </p>
-          <p className="muted">
-            Core survival loop remains intact
-            <br />
-            No overpowered donor kits or pay-to-win gear
-            <br />
-            RPG systems layered on top  not replacing base mechanics
-            <br />
-            Combat progression designed to complement Hytale, not override it
-            <br />
-            Scarcity and crafting still matter
-          </p>
-          <p className="muted">
-            This is Vanilla+, not a total conversion.
-          </p>
-        </div>
-        <div className="card">
-          <div className="section-title">Who We Are</div>
-          <p className="muted">
-            Hardtale isnt a quick-launch cash grab. Its a long-term project.
-          </p>
-          <p className="muted">
-            Designers focused on progression pacing and economy balance
-            <br />
-            Builders creating structured hubs and meaningful world spaces
-            <br />
-            Systems-first development before cosmetics or hype
-            <br />
-            MMO-inspired structure inside a survival sandbox
-          </p>
-          <p className="muted">
-            Were building something persistent  not seasonal.
-          </p>
-        </div>
-      </section>
 
       <section className="home-split fade-in">
         <div className="card news-sidebar">
@@ -7397,6 +7354,82 @@ function HomePage({
             <div className="muted"><strong>Leaderstats</strong> (MMO Trees) integration coming soon.</div>
             <div className="muted">Top player and progression highlights will appear here.</div>
           </div>
+        </div>
+      </section>
+    </section>
+  `;
+}
+
+function AboutUsPage() {
+  return html`
+    <section className="news-page fade-in">
+      <div className="news-hero">
+        <div>
+          <div className="news-eyebrow">About Hardtale</div>
+          <h1 className="news-title">Who We Are</h1>
+          <p className="news-copy">
+            Build philosophy, game direction, and what makes Hardtale different.
+          </p>
+        </div>
+      </div>
+      <section className="grid">
+        <div className="card">
+          <div className="section-title">Performance First</div>
+          <p className="muted">
+            A stable, optimized realm built for long sessions and real progression.
+          </p>
+          <p className="muted">
+            Server-first architecture (Hub designed for network expansion)
+            <br />
+            Controlled world size & clean entity management
+            <br />
+            Progression systems built to scale, not inflate
+            <br />
+            Minimal unnecessary plugins  performance over bloat
+            <br />
+            Designed to support instanced content later without breaking the core world
+          </p>
+          <p className="muted">
+            Hardtale is being built to run clean before it runs big.
+          </p>
+        </div>
+        <div className="card">
+          <div className="section-title">True to the Game</div>
+          <p className="muted">
+            Vanilla-first design. MMO depth without destroying the sandbox.
+          </p>
+          <p className="muted">
+            Core survival loop remains intact
+            <br />
+            No overpowered donor kits or pay-to-win gear
+            <br />
+            RPG systems layered on top  not replacing base mechanics
+            <br />
+            Combat progression designed to complement Hytale, not override it
+            <br />
+            Scarcity and crafting still matter
+          </p>
+          <p className="muted">
+            This is Vanilla+, not a total conversion.
+          </p>
+        </div>
+        <div className="card">
+          <div className="section-title">Who We Are</div>
+          <p className="muted">
+            Hardtale isnt a quick-launch cash grab. Its a long-term project.
+          </p>
+          <p className="muted">
+            Designers focused on progression pacing and economy balance
+            <br />
+            Builders creating structured hubs and meaningful world spaces
+            <br />
+            Systems-first development before cosmetics or hype
+            <br />
+            MMO-inspired structure inside a survival sandbox
+          </p>
+          <p className="muted">
+            Were building something persistent  not seasonal.
+          </p>
         </div>
       </section>
     </section>
@@ -8695,6 +8728,7 @@ function Layout() {
           Route=${Route}
           routesLocation=${routesLocation}
           HomePage=${HomePage}
+          AboutUsPage=${AboutUsPage}
           NewsPage=${NewsPage}
           StorePage=${StorePage}
           VotePage=${VotePage}
@@ -8725,6 +8759,7 @@ function Layout() {
           </div>
           <div className="footer-links">
             <${Link} className="footer-link" to="/">Home</${Link}>
+            <${Link} className="footer-link" to="/about-us">About Us</${Link}>
             <${Link} className="footer-link" to="/news">News</${Link}>
             <${Link} className="footer-link" to="/store">Store</${Link}>
             <${Link} className="footer-link" to="/vote">Vote</${Link}>
