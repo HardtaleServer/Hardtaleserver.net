@@ -12,10 +12,10 @@ function toStaffPillTitle(value) {
     .toLowerCase()
     .replace(/[\s_-]+/g, "");
   if (!normalized) return "";
-  if (normalized === "moderator" || normalized === "mod") return "Moderator [Mod]";
-  if (normalized === "developer" || normalized === "dev") return "Developer [Dev]";
-  if (normalized === "admin" || normalized === "administrator") return "Admin [Admin]";
-  if (normalized === "helper") return "Helper [Helper]";
+  if (normalized === "moderator" || normalized === "mod") return "Moderator";
+  if (normalized === "developer" || normalized === "dev") return "Developer";
+  if (normalized === "admin" || normalized === "administrator") return "Administrator";
+  if (normalized === "helper") return "Helper";
   if (normalized === "staff") return "Staff";
   return "";
 }

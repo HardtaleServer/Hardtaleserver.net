@@ -708,10 +708,21 @@ function isDonorOwnedRank(value) {
   return normalized === "Hero" || normalized === "Legend" || normalized === "Mythic";
 }
 
-function buildOwnedRankBadges(ownedRank, isStaffUser = false) {
-  if (isStaffUser) return [...OWNED_RANK_ORDER];
+function buildOwnedRankBadges(ownedRank, isStaffUser = false, options = {}) {
+  const showAllOwnedRankBadges = options?.showAllOwnedRankBadges !== false;
+  const selectedOwnedBadge = normalizeOwnedRankLabel(options?.selectedOwnedBadge || "");
+  if (isStaffUser) {
+    const staffBadges = [...OWNED_RANK_ORDER];
+    if (!showAllOwnedRankBadges && staffBadges.includes(selectedOwnedBadge)) {
+      return [selectedOwnedBadge];
+    }
+    return staffBadges;
+  }
   const tier = OWNED_RANK_TIER[normalizeOwnedRankLabel(ownedRank)] || 0;
-  return OWNED_RANK_ORDER.filter((rank) => (OWNED_RANK_TIER[rank] || 0) <= tier);
+  const unlocked = OWNED_RANK_ORDER.filter((rank) => (OWNED_RANK_TIER[rank] || 0) <= tier);
+  if (unlocked.length <= 1 || showAllOwnedRankBadges) return unlocked;
+  if (unlocked.includes(selectedOwnedBadge)) return [selectedOwnedBadge];
+  return [unlocked[unlocked.length - 1]];
 }
 
 function applyTheme(value) {
@@ -1027,10 +1038,10 @@ function toStaffPillTitle(value = "") {
     .toLowerCase()
     .replace(/[\s_-]+/g, "");
   if (!key) return "";
-  if (key === "moderator" || key === "mod") return "Moderator [Mod]";
-  if (key === "developer" || key === "dev") return "Developer [Dev]";
-  if (key === "admin" || key === "administrator") return "Admin [Admin]";
-  if (key === "helper") return "Helper [Helper]";
+  if (key === "moderator" || key === "mod") return "Moderator";
+  if (key === "developer" || key === "dev") return "Developer";
+  if (key === "admin" || key === "administrator") return "Administrator";
+  if (key === "helper") return "Helper";
   if (key === "staff") return "Staff";
   return "";
 }
@@ -1077,10 +1088,10 @@ function resolveStaffRoleClass(entry) {
 function resolveStaffPillTitle(entry) {
   if (!entry) return "";
   const explicitRole = resolveStaffRoleKey(entry);
-  if (explicitRole === "dev") return "Developer [Dev]";
-  if (explicitRole === "admin") return "Admin [Admin]";
-  if (explicitRole === "mod") return "Moderator [Mod]";
-  if (explicitRole === "helper") return "Helper [Helper]";
+  if (explicitRole === "dev") return "Developer";
+  if (explicitRole === "admin") return "Administrator";
+  if (explicitRole === "mod") return "Moderator";
+  if (explicitRole === "helper") return "Helper";
   if (explicitRole === "staff") return "Staff";
   const candidates = [
     entry?.authorRole,
@@ -1523,6 +1534,7 @@ function CommentThread({
   const [profileRankEffectsSaving, setProfileRankEffectsSaving] = useState(false);
   const [profileRankFontSaving, setProfileRankFontSaving] = useState(false);
   const [profileDonorGradientSaving, setProfileDonorGradientSaving] = useState(false);
+  const [profileOwnedBadgesSaving, setProfileOwnedBadgesSaving] = useState(false);
   const [profileAvatarVfxSaving, setProfileAvatarVfxSaving] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState([]);
@@ -1904,6 +1916,12 @@ function CommentThread({
         ownedRank,
         availableTitles: availableTitles.length > 0 ? availableTitles : fallbackTitles,
         selectedTitle: selectedTitle || ownedRank || "Unregistered",
+        canToggleOwnedBadges: Boolean(data?.canToggleOwnedBadges),
+        showAllOwnedRankBadges: data?.showAllOwnedRankBadges !== false,
+        selectedOwnedBadge: String(data?.selectedOwnedBadge || ""),
+        ownedBadgeOptions: Array.isArray(data?.ownedBadgeOptions)
+          ? data.ownedBadgeOptions.filter((rank) => OWNED_RANK_ORDER.includes(String(rank)))
+          : [],
         canToggleStaffBadge: Boolean(data?.canToggleStaffBadge),
         showStaffBadge: data?.showStaffBadge !== false,
         showStaffBadgeIcon: data?.showStaffBadgeIcon !== false,
@@ -1912,7 +1930,7 @@ function CommentThread({
         canToggleRankEffects: Boolean(data?.canToggleRankEffects),
         showRankEffects: data?.showRankEffects !== false,
         canToggleRankFont: Boolean(data?.canToggleRankFont),
-        useRankFont: data?.useRankFont !== false,
+        useRankFont: data?.useRankFont === true,
         canToggleDonorGradient: Boolean(data?.canToggleDonorGradient),
         showDonorGradient: data?.showDonorGradient !== false,
         canToggleAvatarVfx: Boolean(data?.canToggleAvatarVfx),
@@ -2266,7 +2284,7 @@ function CommentThread({
         throw new Error(data?.error || "Failed to save rank font setting.");
       }
       const data = await response.json();
-      const useRankFont = data?.useRankFont !== false;
+      const useRankFont = data?.useRankFont === true;
       setProfileUser((prev) => (prev ? { ...prev, useRankFont } : prev));
       setComments((prev) =>
         prev.map((comment) => {
@@ -2339,6 +2357,48 @@ function CommentThread({
     }
   }
 
+  async function updateOwnOwnedBadgeDisplaySettings(nextShowAll, nextSelectedBadge = "") {
+    if (!profileUser?.isOwn || !profileUser?.canToggleOwnedBadges || profileOwnedBadgesSaving) return;
+    setProfileOwnedBadgesSaving(true);
+    setProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/owned-badges", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          showAllOwnedRankBadges: Boolean(nextShowAll),
+          selectedOwnedBadge: String(nextSelectedBadge || ""),
+        }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save badge display settings.");
+      }
+      const data = await response.json();
+      const ownedBadgeOptions = Array.isArray(data?.ownedBadgeOptions)
+        ? data.ownedBadgeOptions.filter((rank) => OWNED_RANK_ORDER.includes(String(rank)))
+        : [];
+      const selectedOwnedBadge = String(data?.selectedOwnedBadge || "");
+      const showAllOwnedRankBadges = data?.showAllOwnedRankBadges !== false;
+      setProfileUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              showAllOwnedRankBadges,
+              selectedOwnedBadge,
+              ownedBadgeOptions: ownedBadgeOptions.length ? ownedBadgeOptions : prev.ownedBadgeOptions,
+            }
+          : prev,
+      );
+      setProfileTitleStatus("Saved.");
+      setTimeout(() => setProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setProfileTitleStatus(error?.message || "Failed to save badge display settings.");
+    } finally {
+      setProfileOwnedBadgesSaving(false);
+    }
+  }
+
   async function updateOwnAvatarVfxVisibility(nextVisible) {
     if (!profileUser?.isOwn || !profileUser?.canToggleAvatarVfx || profileAvatarVfxSaving) return;
     setProfileAvatarVfxSaving(true);
@@ -2400,6 +2460,10 @@ function CommentThread({
     let availableTitles = [];
     let selectedTitle = rank.label;
     let ownedRank = normalizeOwnedRankLabel(entry?.authorOwnedRank || rank.label);
+    let canToggleOwnedBadges = false;
+    let showAllOwnedRankBadges = entry?.showAllOwnedRankBadges !== false;
+    let selectedOwnedBadge = normalizeOwnedRankLabel(entry?.selectedOwnedBadge || "");
+    let ownedBadgeOptions = buildOwnedRankBadges(ownedRank, false, { showAllOwnedRankBadges: true });
     let canToggleStaffBadge = false;
     let showStaffBadge = entry?.authorShowStaffBadge !== false;
     let showStaffBadgeIcon = entry?.authorShowStaffBadgeIcon !== false;
@@ -2408,7 +2472,7 @@ function CommentThread({
     let canToggleRankEffects = false;
     let showRankEffects = entry?.authorShowRankEffects !== false;
     let canToggleRankFont = false;
-    let useRankFont = entry?.authorUseRankFont !== false;
+    let useRankFont = entry?.authorUseRankFont === true;
     let canToggleDonorGradient = false;
     let showDonorGradient = entry?.authorShowDonorGradient !== false;
     let canToggleAvatarVfx = false;
@@ -2419,6 +2483,10 @@ function CommentThread({
         ownedRank = normalizeOwnedRankLabel(settings.ownedRank);
         availableTitles = settings.availableTitles;
         selectedTitle = settings.selectedTitle || rank.label;
+        canToggleOwnedBadges = Boolean(settings.canToggleOwnedBadges);
+        showAllOwnedRankBadges = settings.showAllOwnedRankBadges !== false;
+        selectedOwnedBadge = normalizeOwnedRankLabel(settings.selectedOwnedBadge || "");
+        ownedBadgeOptions = Array.isArray(settings.ownedBadgeOptions) ? settings.ownedBadgeOptions : ownedBadgeOptions;
         canToggleStaffBadge = Boolean(settings.canToggleStaffBadge);
         showStaffBadge = settings.showStaffBadge !== false;
         showStaffBadgeIcon = settings.showStaffBadgeIcon !== false;
@@ -2427,7 +2495,7 @@ function CommentThread({
         canToggleRankEffects = Boolean(settings.canToggleRankEffects);
         showRankEffects = settings.showRankEffects !== false;
         canToggleRankFont = Boolean(settings.canToggleRankFont);
-        useRankFont = settings.useRankFont !== false;
+        useRankFont = settings.useRankFont === true;
         canToggleDonorGradient = Boolean(settings.canToggleDonorGradient);
         showDonorGradient = settings.showDonorGradient !== false;
         canToggleAvatarVfx = Boolean(settings.canToggleAvatarVfx);
@@ -2454,6 +2522,10 @@ function CommentThread({
       image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel: selectedTitle,
       ownedRank,
+      canToggleOwnedBadges,
+      showAllOwnedRankBadges,
+      selectedOwnedBadge,
+      ownedBadgeOptions,
       staff: isStaffUser && showStaffBadge && isStaffLabel(selectedTitle),
       staffRole: String(entry?.authorStaffRole || ""),
       username: formatUsernameForDisplay(entry.authorUsername),
@@ -2494,7 +2566,7 @@ function CommentThread({
   }
 
   return html`
-    <div className="comment-thread">
+    <div className=${`comment-thread ${isForumThread ? "forum-thread" : ""}`.trim()}>
       <button className="comment-toggle" type="button" onClick=${() => setOpen(!open)}>
         Comments (${commentCount})
         <span className="comment-toggle-arrow">${open ? "v" : ">"}</span>
@@ -2880,7 +2952,7 @@ function CommentThread({
                 className=${`profile-card-name ${
                   profileUser.showRankEffects === false ? "rank-effects-off" : ""
                 } ${
-                  profileUser.useRankFont === false ? "rank-font-off" : "rank-font-on"
+                  profileUser.useRankFont === true ? "rank-font-on" : "rank-font-off"
                 } ${
                   profileUser.showDonorGradient === false ? "donor-gradient-off" : "donor-gradient-on"
                 } rank-${String(profileUser.rankLabel || "Unregistered")
@@ -2938,6 +3010,43 @@ function CommentThread({
                     </select>
                   </label>`
                 : html``}
+              ${profileUser.isOwn && profileUser.canToggleOwnedBadges
+                ? html`<label className="profile-card-toggle">
+                    <input
+                      type="checkbox"
+                      checked=${profileUser.showAllOwnedRankBadges !== false}
+                      disabled=${profileOwnedBadgesSaving}
+                      onChange=${(event) =>
+                        updateOwnOwnedBadgeDisplaySettings(
+                          event.target.checked,
+                          profileUser.selectedOwnedBadge || "",
+                        )}
+                    />
+                    <span>Show all owned rank badges</span>
+                  </label>`
+                : html``}
+              ${profileUser.isOwn &&
+              profileUser.canToggleOwnedBadges &&
+              profileUser.showAllOwnedRankBadges === false &&
+              Array.isArray(profileUser.ownedBadgeOptions) &&
+              profileUser.ownedBadgeOptions.length > 1
+                ? html`<label className="profile-card-title-picker">
+                    <span className="muted">Primary owned badge</span>
+                    <select
+                      value=${profileUser.selectedOwnedBadge || profileUser.ownedBadgeOptions[profileUser.ownedBadgeOptions.length - 1]}
+                      disabled=${profileOwnedBadgesSaving}
+                      onChange=${(event) =>
+                        updateOwnOwnedBadgeDisplaySettings(
+                          profileUser.showAllOwnedRankBadges !== false,
+                          event.target.value,
+                        )}
+                    >
+                      ${profileUser.ownedBadgeOptions.map(
+                        (badge) => html`<option value=${badge}>${badge}</option>`,
+                      )}
+                    </select>
+                  </label>`
+                : html``}
               ${profileUser.isOwn && profileUser.canToggleRankEffects
                 ? html`<label className="profile-card-toggle">
                     <input
@@ -2953,7 +3062,7 @@ function CommentThread({
                 ? html`<label className="profile-card-toggle">
                     <input
                       type="checkbox"
-                      checked=${profileUser.useRankFont !== false}
+                      checked=${profileUser.useRankFont === true}
                       disabled=${profileRankFontSaving}
                       onChange=${(event) => updateOwnRankFontVisibility(event.target.checked)}
                     />
@@ -4633,6 +4742,7 @@ function ForumPage({ isAdmin = false }) {
   const [forumProfileRankEffectsSaving, setForumProfileRankEffectsSaving] = useState(false);
   const [forumProfileRankFontSaving, setForumProfileRankFontSaving] = useState(false);
   const [forumProfileDonorGradientSaving, setForumProfileDonorGradientSaving] = useState(false);
+  const [forumProfileOwnedBadgesSaving, setForumProfileOwnedBadgesSaving] = useState(false);
   const [forumProfileAvatarVfxSaving, setForumProfileAvatarVfxSaving] = useState(false);
   const [editingPostId, setEditingPostId] = useState("");
   const [editingPostTitle, setEditingPostTitle] = useState("");
@@ -4753,6 +4863,12 @@ function ForumPage({ isAdmin = false }) {
         ownedRank,
         availableTitles: availableTitles.length > 0 ? availableTitles : fallbackTitles,
         selectedTitle: selectedTitle || ownedRank || "Unregistered",
+        canToggleOwnedBadges: Boolean(data?.canToggleOwnedBadges),
+        showAllOwnedRankBadges: data?.showAllOwnedRankBadges !== false,
+        selectedOwnedBadge: String(data?.selectedOwnedBadge || ""),
+        ownedBadgeOptions: Array.isArray(data?.ownedBadgeOptions)
+          ? data.ownedBadgeOptions.filter((rank) => OWNED_RANK_ORDER.includes(String(rank)))
+          : [],
         canToggleStaffBadge: Boolean(data?.canToggleStaffBadge),
         showStaffBadge: data?.showStaffBadge !== false,
         showStaffBadgeIcon: data?.showStaffBadgeIcon !== false,
@@ -4761,7 +4877,7 @@ function ForumPage({ isAdmin = false }) {
         canToggleRankEffects: Boolean(data?.canToggleRankEffects),
         showRankEffects: data?.showRankEffects !== false,
         canToggleRankFont: Boolean(data?.canToggleRankFont),
-        useRankFont: data?.useRankFont !== false,
+        useRankFont: data?.useRankFont === true,
         canToggleDonorGradient: Boolean(data?.canToggleDonorGradient),
         showDonorGradient: data?.showDonorGradient !== false,
         canToggleAvatarVfx: Boolean(data?.canToggleAvatarVfx),
@@ -4820,6 +4936,10 @@ function ForumPage({ isAdmin = false }) {
     let availableTitles = [];
     let selectedTitle = rankLabel;
     let ownedRank = normalizeOwnedRankLabel(entry?.authorOwnedRank || rankLabel);
+    let canToggleOwnedBadges = false;
+    let showAllOwnedRankBadges = entry?.showAllOwnedRankBadges !== false;
+    let selectedOwnedBadge = normalizeOwnedRankLabel(entry?.selectedOwnedBadge || "");
+    let ownedBadgeOptions = buildOwnedRankBadges(ownedRank, false, { showAllOwnedRankBadges: true });
     let canToggleStaffBadge = false;
     let showStaffBadge = entry?.authorShowStaffBadge !== false;
     let showStaffBadgeIcon = entry?.authorShowStaffBadgeIcon !== false;
@@ -4828,7 +4948,7 @@ function ForumPage({ isAdmin = false }) {
     let canToggleRankEffects = false;
     let showRankEffects = true;
     let canToggleRankFont = false;
-    let useRankFont = entry?.authorUseRankFont !== false;
+    let useRankFont = entry?.authorUseRankFont === true;
     let canToggleDonorGradient = false;
     let showDonorGradient = entry?.authorShowDonorGradient !== false;
     let canToggleAvatarVfx = false;
@@ -4839,6 +4959,10 @@ function ForumPage({ isAdmin = false }) {
         ownedRank = normalizeOwnedRankLabel(settings.ownedRank);
         availableTitles = settings.availableTitles;
         selectedTitle = settings.selectedTitle || rankLabel;
+        canToggleOwnedBadges = Boolean(settings.canToggleOwnedBadges);
+        showAllOwnedRankBadges = settings.showAllOwnedRankBadges !== false;
+        selectedOwnedBadge = normalizeOwnedRankLabel(settings.selectedOwnedBadge || "");
+        ownedBadgeOptions = Array.isArray(settings.ownedBadgeOptions) ? settings.ownedBadgeOptions : ownedBadgeOptions;
         canToggleStaffBadge = Boolean(settings.canToggleStaffBadge);
         showStaffBadge = settings.showStaffBadge !== false;
         showStaffBadgeIcon = settings.showStaffBadgeIcon !== false;
@@ -4847,7 +4971,7 @@ function ForumPage({ isAdmin = false }) {
         canToggleRankEffects = Boolean(settings.canToggleRankEffects);
         showRankEffects = settings.showRankEffects !== false;
         canToggleRankFont = Boolean(settings.canToggleRankFont);
-        useRankFont = settings.useRankFont !== false;
+        useRankFont = settings.useRankFont === true;
         canToggleDonorGradient = Boolean(settings.canToggleDonorGradient);
         showDonorGradient = settings.showDonorGradient !== false;
         canToggleAvatarVfx = Boolean(settings.canToggleAvatarVfx);
@@ -4875,6 +4999,10 @@ function ForumPage({ isAdmin = false }) {
       image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel: selectedTitle,
       ownedRank,
+      canToggleOwnedBadges,
+      showAllOwnedRankBadges,
+      selectedOwnedBadge,
+      ownedBadgeOptions,
       staff: isStaffUser && showStaffBadge && isStaffLabel(selectedTitle),
       staffRole: String(entry?.authorStaffRole || ""),
       isStaffUser,
@@ -5159,7 +5287,7 @@ function ForumPage({ isAdmin = false }) {
         throw new Error(data?.error || "Failed to save rank font setting.");
       }
       const data = await response.json();
-      const useRankFont = data?.useRankFont !== false;
+      const useRankFont = data?.useRankFont === true;
       setForumProfileUser((prev) => (prev ? { ...prev, useRankFont } : prev));
       setPosts((prev) =>
         prev.map((post) => {
@@ -5264,7 +5392,7 @@ function ForumPage({ isAdmin = false }) {
         className=${`profile-card-name ${
           forumProfileUser.showRankEffects === false ? "rank-effects-off" : ""
         } ${
-          forumProfileUser.useRankFont === false ? "rank-font-off" : "rank-font-on"
+          forumProfileUser.useRankFont === true ? "rank-font-on" : "rank-font-off"
         } ${
           forumProfileUser.showDonorGradient === false ? "donor-gradient-off" : "donor-gradient-on"
         } rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}
@@ -5329,7 +5457,7 @@ function ForumPage({ isAdmin = false }) {
         ? html`<label className="profile-card-toggle">
             <input
               type="checkbox"
-              checked=${forumProfileUser.useRankFont !== false}
+              checked=${forumProfileUser.useRankFont === true}
               disabled=${forumProfileRankFontSaving}
               onChange=${(event) => updateOwnForumRankFontVisibility(event.target.checked)}
             />
@@ -5632,7 +5760,7 @@ function ForumPage({ isAdmin = false }) {
                       <${AuthorName}
                         value=${selectedPost.authorName || "User"}
                         isStaffLabel=${isStaffLabel}
-                        className=${`author-name ${selectedPost?.authorUseRankFont === false ? "rank-font-off" : "rank-font-on"} rank-${rankSlug(selectedPost?.authorRank || "Unregistered")}`.trim()}
+                        className=${`author-name ${selectedPost?.authorUseRankFont === true ? "rank-font-on" : "rank-font-off"} rank-${rankSlug(selectedPost?.authorRank || "Unregistered")}`.trim()}
                       />
                     </button>
                     ${forumShowStaffPill(selectedPost)
@@ -5887,7 +6015,7 @@ function ForumPage({ isAdmin = false }) {
                         <${AuthorName}
                           value=${post.authorName || "User"}
                           isStaffLabel=${isStaffLabel}
-                          className=${`author-name ${post?.authorUseRankFont === false ? "rank-font-off" : "rank-font-on"} rank-${rankSlug(post?.authorRank || "Unregistered")}`.trim()}
+                          className=${`author-name ${post?.authorUseRankFont === true ? "rank-font-on" : "rank-font-off"} rank-${rankSlug(post?.authorRank || "Unregistered")}`.trim()}
                         />
                       </button>
                       ${forumShowStaffPill(post)
@@ -6749,7 +6877,10 @@ function renderStaffBadge(entry) {
 function renderOwnedRankBadges(entry) {
   if (!entry) return html``;
   const isStaffUser = Boolean(entry.isStaffUser || entry.staff);
-  const badges = buildOwnedRankBadges(entry.ownedRank, isStaffUser);
+  const badges = buildOwnedRankBadges(entry.ownedRank, isStaffUser, {
+    showAllOwnedRankBadges: entry?.showAllOwnedRankBadges !== false,
+    selectedOwnedBadge: entry?.selectedOwnedBadge || "",
+  });
   const linkedBadgeLabel = entry.linkedAccount ? "Linked" : "Unlinked";
   const linkedBadgeIcon = entry.linkedAccount ? "🔗" : "🔓";
   const showStaffBadgeChip = isStaffUser && entry.showStaffBadge !== false;
@@ -8102,7 +8233,7 @@ function Layout() {
       showStaffBadge: item?.authorShowStaffBadge !== false,
       showStaffBadgeIcon: item?.authorShowStaffBadgeIcon !== false,
       showStaffGradient: item?.authorShowStaffGradient !== false,
-      useRankFont: item?.authorUseRankFont !== false,
+      useRankFont: item?.authorUseRankFont === true,
       showDonorGradient: item?.authorShowDonorGradient !== false,
       hytalePlayerName: linkStatus.playerName,
       hytalePlayerUuid: linkStatus.playerUuid,
@@ -8603,7 +8734,7 @@ function Layout() {
               />
               <div
                 className=${`profile-card-name ${
-                  notificationProfileUser.useRankFont === false ? "rank-font-off" : "rank-font-on"
+                  notificationProfileUser.useRankFont === true ? "rank-font-on" : "rank-font-off"
                 } ${
                   notificationProfileUser.showDonorGradient === false
                     ? "donor-gradient-off"

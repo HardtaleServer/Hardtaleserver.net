@@ -104,6 +104,7 @@ const DISPLAY_TITLES = ["Registered", "Hero", "Legend", "Mythic"];
 const STAFF_DISPLAY_TITLE = "Staff";
 const DISPLAY_TITLE_TIER = { Registered: 0, Hero: 1, Legend: 2, Mythic: 3 };
 const OWNED_RANKS = ["Unregistered", "Registered", "Hero", "Legend", "Mythic"];
+const DONOR_BADGE_ORDER = ["Hero", "Legend", "Mythic"];
 const ACHIEVEMENT_DEFS = [
   {
     key: "welcome_login",
@@ -348,7 +349,7 @@ function normalizeComment(doc) {
     authorShowStaffGradient: rest.authorShowStaffGradient !== false,
     authorShowRankEffects: rest.authorShowRankEffects !== false,
     authorShowAvatarVfx: rest.authorShowAvatarVfx !== false,
-    authorUseRankFont: rest.authorUseRankFont !== false,
+    authorUseRankFont: rest.authorUseRankFont === true,
     authorShowDonorGradient: rest.authorShowDonorGradient !== false,
   };
   if (
@@ -373,7 +374,7 @@ function normalizeComment(doc) {
         authorShowStaffGradient: reply.authorShowStaffGradient !== false,
         authorShowRankEffects: reply.authorShowRankEffects !== false,
         authorShowAvatarVfx: reply.authorShowAvatarVfx !== false,
-        authorUseRankFont: reply.authorUseRankFont !== false,
+        authorUseRankFont: reply.authorUseRankFont === true,
         authorShowDonorGradient: reply.authorShowDonorGradient !== false,
       };
       if (
@@ -865,7 +866,7 @@ function resolveAvatarVfxVisible(metadata = {}) {
 }
 
 function resolveRankFontVisible(metadata = {}) {
-  return metadata?.useRankFont !== false;
+  return metadata?.useRankFont === true;
 }
 
 function resolveDonorGradientVisible(metadata = {}) {
@@ -1242,6 +1243,25 @@ function applyLinkedOwnedRankFloor(ownedRank, linked = false) {
   const normalized = normalizeOwnedRank(ownedRank) || "Unregistered";
   if (!linked) return normalized;
   return normalized === "Unregistered" ? "Registered" : normalized;
+}
+
+function getOwnedDonorBadgeOptions(ownedRank) {
+  const tierByRank = { Hero: 1, Legend: 2, Mythic: 3 };
+  const safeOwned = normalizeOwnedRank(ownedRank) || "Unregistered";
+  const maxTier = tierByRank[safeOwned] || 0;
+  return DONOR_BADGE_ORDER.filter((rank) => (tierByRank[rank] || 0) <= maxTier);
+}
+
+function resolveShowAllOwnedRankBadgesVisible(metadata = {}) {
+  return metadata?.showAllOwnedRankBadges !== false;
+}
+
+function resolveSelectedOwnedBadge(metadata = {}, ownedRank = "Unregistered") {
+  const options = getOwnedDonorBadgeOptions(ownedRank);
+  if (options.length === 0) return "";
+  const preferred = normalizeOwnedRank(metadata?.selectedOwnedBadge);
+  if (preferred && options.includes(preferred)) return preferred;
+  return options[options.length - 1];
 }
 
 function getUnlockedDisplayTitles(ownedRank) {
@@ -1625,7 +1645,7 @@ function normalizeForumPost(doc) {
     authorShowStaffBadge: stripped.authorShowStaffBadge !== false,
     authorShowStaffBadgeIcon: stripped.authorShowStaffBadgeIcon !== false,
     authorShowStaffGradient: stripped.authorShowStaffGradient !== false,
-    authorUseRankFont: stripped.authorUseRankFont !== false,
+    authorUseRankFont: stripped.authorUseRankFont === true,
     authorShowDonorGradient: stripped.authorShowDonorGradient !== false,
     editCount: Number.isFinite(Number(stripped.editCount)) ? Number(stripped.editCount) : 0,
     editedAt: stripped.editedAt || "",
@@ -1951,6 +1971,10 @@ app.get("/api/profile/title", async (req, res) => {
       ownedRank,
       selectedTitle: displayRank,
       availableTitles,
+      canToggleOwnedBadges: getOwnedDonorBadgeOptions(ownedRank).length > 1,
+      showAllOwnedRankBadges: resolveShowAllOwnedRankBadgesVisible(user?.publicMetadata || {}),
+      selectedOwnedBadge: resolveSelectedOwnedBadge(user?.publicMetadata || {}, ownedRank),
+      ownedBadgeOptions: getOwnedDonorBadgeOptions(ownedRank),
       staffRole,
       achievements: await getUserAchievements(auth.userId),
       canToggleStaffBadge: isStaff,
@@ -1970,6 +1994,46 @@ app.get("/api/profile/title", async (req, res) => {
   } catch (error) {
     console.error("Failed to load profile title settings", error);
     return res.status(500).json({ error: "Failed to load profile title settings" });
+  }
+});
+
+app.post("/api/profile/owned-badges", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const user = await clerkClient.users.getUser(auth.userId);
+    const isStaff = isStaffUser(user);
+    const linked = await isLinkedUserId(auth.userId);
+    const rankInfo = resolveDisplayRankFromMetadata(user?.publicMetadata || {}, isStaff, linked);
+    const ownedRank = rankInfo.ownedRank;
+    const options = getOwnedDonorBadgeOptions(ownedRank);
+    if (options.length === 0) {
+      return res.status(400).json({ error: "Owned badge settings unavailable for this rank" });
+    }
+    const showAllOwnedRankBadges = req.body?.showAllOwnedRankBadges !== false;
+    const selectedRequested = normalizeOwnedRank(req.body?.selectedOwnedBadge);
+    const selectedOwnedBadge = options.includes(selectedRequested)
+      ? selectedRequested
+      : options[options.length - 1];
+
+    await clerkClient.users.updateUserMetadata(auth.userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        showAllOwnedRankBadges,
+        selectedOwnedBadge,
+      },
+    });
+
+    return res.json({
+      canToggleOwnedBadges: options.length > 1,
+      showAllOwnedRankBadges,
+      selectedOwnedBadge,
+      ownedBadgeOptions: options,
+    });
+  } catch (error) {
+    console.error("Failed to update owned badge settings", error);
+    return res.status(500).json({ error: "Failed to update owned badge settings" });
   }
 });
 
@@ -2128,7 +2192,7 @@ app.post("/api/profile/rank-font", async (req, res) => {
     if (!isStaff && rankInfo.ownedRank === "Unregistered") {
       return res.status(400).json({ error: "Rank font unavailable for Unregistered" });
     }
-    const useRankFont = req.body?.useRankFont !== false;
+    const useRankFont = req.body?.useRankFont === true;
     await clerkClient.users.updateUserMetadata(auth.userId, {
       publicMetadata: {
         ...user.publicMetadata,

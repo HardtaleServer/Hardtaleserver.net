@@ -11,7 +11,7 @@
   --accent-2: #ff3b3b;
   --accent-3: #5ef7a6;
   --rank-registered: #479284;
-  --rank-hero: #2ccf9e;
+  --rank-hero: #006647;
   --rank-legend: #9e7411;
   --rank-mythic: #e100ff;
   --rank-hero-end: #d95b54;
@@ -29,7 +29,7 @@
   --font-rank-legend: "Cinzel", "Palatino Linotype", "Book Antiqua", serif;
   --font-rank-mythic: "Orbitron", "Trebuchet MS", "Segoe UI", sans-serif;
   --rank-registered-glow: rgba(71, 146, 132, 0.72);
-  --rank-hero-glow: rgba(44, 207, 158, 0.82);
+  --rank-hero-glow: rgba(0, 102, 71, 0.82);
   --rank-legend-glow: rgba(158, 116, 17, 0.86);
   --rank-mythic-glow: rgba(225, 0, 255, 0.85);
 }
@@ -2884,7 +2884,7 @@ emoji-picker.reaction-picker-panel {
   text-align: center;
 }
 
-.comment-left.comment-left-reply .comment-avatar.small {
+.comment-thread.forum-thread .comment-left.comment-left-reply .comment-avatar.small {
   width: 46px;
   height: 46px;
 }
@@ -3169,20 +3169,35 @@ emoji-picker.reaction-picker-panel {
 
 .profile-owned-badge.rank-hero {
   color: var(--rank-hero);
-  border-color: color-mix(in srgb, var(--rank-hero) 45%, var(--stroke));
-  background: color-mix(in srgb, var(--rank-hero) 10%, var(--bg-soft));
+  border-color: color-mix(in srgb, var(--rank-hero) 45%, var(--rank-hero-end));
+  background:
+    linear-gradient(
+      110deg,
+      color-mix(in srgb, var(--rank-hero) 16%, transparent),
+      color-mix(in srgb, var(--rank-hero-end) 18%, transparent)
+    );
 }
 
 .profile-owned-badge.rank-legend {
   color: var(--rank-legend);
-  border-color: color-mix(in srgb, var(--rank-legend) 45%, var(--stroke));
-  background: color-mix(in srgb, var(--rank-legend) 10%, var(--bg-soft));
+  border-color: color-mix(in srgb, var(--rank-legend) 45%, var(--rank-legend-end));
+  background:
+    linear-gradient(
+      110deg,
+      color-mix(in srgb, var(--rank-legend) 16%, transparent),
+      color-mix(in srgb, var(--rank-legend-end) 18%, transparent)
+    );
 }
 
 .profile-owned-badge.rank-mythic {
   color: var(--rank-mythic);
-  border-color: color-mix(in srgb, var(--rank-mythic) 45%, var(--stroke));
-  background: color-mix(in srgb, var(--rank-mythic) 10%, var(--bg-soft));
+  border-color: color-mix(in srgb, var(--rank-mythic) 45%, var(--rank-mythic-end));
+  background:
+    linear-gradient(
+      110deg,
+      color-mix(in srgb, var(--rank-mythic) 16%, transparent),
+      color-mix(in srgb, var(--rank-mythic-end) 18%, transparent)
+    );
 }
 
 .profile-owned-badge.rank-registered,
@@ -3905,14 +3920,41 @@ emoji-picker.reaction-picker-panel {
 
 .store-owned-badge.rank-hero {
   color: var(--rank-hero);
+  border-color: color-mix(in srgb, var(--rank-hero) 45%, var(--rank-hero-end));
+  background:
+    linear-gradient(
+      110deg,
+      color-mix(in srgb, var(--rank-hero) 16%, transparent),
+      color-mix(in srgb, var(--rank-hero-end) 18%, transparent)
+    );
 }
 
 .store-owned-badge.rank-legend {
   color: var(--rank-legend);
+  border-color: color-mix(in srgb, var(--rank-legend) 45%, var(--rank-legend-end));
+  background:
+    linear-gradient(
+      110deg,
+      color-mix(in srgb, var(--rank-legend) 16%, transparent),
+      color-mix(in srgb, var(--rank-legend-end) 18%, transparent)
+    );
 }
 
 .store-owned-badge.rank-mythic {
   color: var(--rank-mythic);
+  border-color: color-mix(in srgb, var(--rank-mythic) 45%, var(--rank-mythic-end));
+  background:
+    linear-gradient(
+      110deg,
+      color-mix(in srgb, var(--rank-mythic) 16%, transparent),
+      color-mix(in srgb, var(--rank-mythic-end) 18%, transparent)
+    );
+}
+
+.profile-owned-badge.rank-legend span:not(.rank-icon),
+.store-owned-badge.rank-legend span:not(.rank-icon) {
+  background-size: 240% 100%;
+  animation: donorRankFlow 2.6s linear infinite;
 }
 
 .store-owned-badge.rank-linked,
