@@ -92,6 +92,18 @@ export default function AppRoutes({
         />`}
       />
       <${Route}
+        path="/link/:code"
+        element=${html`<${HomePage}
+          news=${sortedNews}
+          loading=${loading}
+          error=${error}
+          playRef=${playRef}
+          onPlayClick=${openHowModal}
+          onNewsClick=${() => navigate("/news")}
+          onHowClick=${() => openHowModal()}
+        />`}
+      />
+      <${Route}
         path="*"
         element=${html`<${NotFoundPage}
           isAdmin=${isAdmin}

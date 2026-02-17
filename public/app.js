@@ -87,7 +87,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.67";
+const VERSION = "1.3.70";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -97,6 +97,8 @@ const NOTIFICATIONS_ICON_SVG = "/Images/SVGs/ui/Notifications.svg";
 const BASKET_ICON_SVG = "/Images/SVGs/ui/Basket.svg";
 const DRAWER_MENU_ICON_SVG = "/Images/SVGs/ui/DrawerMenu.svg";
 const WARNING_STATUS_ICON_SVG = "/Images/SVGs/toasts/Warning.svg";
+const SUCCESS_STATUS_ICON_SVG = "/Images/SVGs/toasts/Success.svg";
+const ERROR_STATUS_ICON_SVG = "/Images/SVGs/toasts/Error.svg";
 const ACHIEVEMENT_STAR_ICON_SVG = "/Images/SVGs/ui/Achievement_Star.svg";
 const LEADERBOARD_ICON_SVG = "/Images/SVGs/ui/Leaderboard_SVG.svg";
 const LINKED_STATUS_ICON_SVG = "/Images/SVGs/link/LINKED.svg";
@@ -183,6 +185,33 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.70",
+    date: "2026-02-17",
+    items: [
+      "Reworked Store comparison into a visible Tebex-style rank matrix layout (rank columns + feature rows) instead of a hidden-only section.",
+      "Added `Click here to see more features` expandable secondary feature table and repeated buy-button rows for quicker rank checkout.",
+      "Kept gradient emphasis on rank labels/headings while using shared Success/Error SVG indicators for boolean feature cells.",
+    ],
+  },
+  {
+    version: "1.3.69",
+    date: "2026-02-17",
+    items: [
+      "Added a toggleable Store rank comparison matrix (`View detailed comparison`) with mobile-safe horizontal scroll.",
+      "Kept existing rank cards and gradient perk styling while adding a clearer feature-by-feature included/not-included view.",
+      "Used shared toast `Success.svg` and `Error.svg` assets for comparison status icons to keep iconography consistent.",
+    ],
+  },
+  {
+    version: "1.3.68",
+    date: "2026-02-17",
+    items: [
+      "Added Stripe webhook endpoint `/api/payments/stripe/webhook` with signature verification (`Stripe-Signature`) using `STRIPE_WEBHOOK_SECRET`.",
+      "Added server-side Checkout Session fulfillment on `checkout.session.completed` and `checkout.session.async_payment_succeeded` so purchases still enqueue while users are offline.",
+      "Kept fulfillment idempotent through existing unique purchase IDs, preserving safe plugin polling + ack flow via `/api/fulfillment/pending` and `/api/fulfillment/ack`.",
+    ],
+  },
   {
     version: "1.3.67",
     date: "2026-02-17",
@@ -4724,6 +4753,8 @@ function LoadingScreen({ show, variant }) {
 
 function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
   const [showTicket, setShowTicket] = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
+  const [activeStoreSection, setActiveStoreSection] = useState("ranks");
   const [previewItemId, setPreviewItemId] = useState("");
   const [message, setMessage] = useState("");
   const [cooldownUntil, setCooldownUntil] = useState(0);
@@ -4744,6 +4775,33 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
   const highestTierInCart = cartItems.reduce(
     (maxTier, entry) => Math.max(maxTier, RANK_TIER_ORDER[String(entry?.id || "")] || 0),
     0,
+  );
+  const coreComparisonRows = useMemo(
+    () => [
+      { label: "Chat Prefix", values: { "rank-hero": "[Hero]", "rank-legend": "[Legend]", "rank-mythic": "[Mythic]" } },
+      { label: "Passive XP Boost", values: { "rank-hero": "10%", "rank-legend": "20%", "rank-mythic": "30%" } },
+      { label: "Daily XP Boost", values: { "rank-hero": "15 min", "rank-legend": "30 min", "rank-mythic": "1 hour" } },
+      { label: "Weekly Kit", values: { "rank-hero": true, "rank-legend": true, "rank-mythic": true } },
+      { label: "Extra /home Slots", values: { "rank-hero": "+1", "rank-legend": "+2", "rank-mythic": "+3" } },
+      { label: "Global Boost Charges", values: { "rank-hero": false, "rank-legend": "1 monthly", "rank-mythic": "2 monthly" } },
+      { label: "Gradient Chat Prefix", values: { "rank-hero": true, "rank-legend": true, "rank-mythic": true } },
+      { label: "Colored Chat Messages", values: { "rank-hero": true, "rank-legend": true, "rank-mythic": true } },
+      { label: "Reduced Teleport Cooldown", values: { "rank-hero": false, "rank-legend": true, "rank-mythic": true } },
+      { label: "Priority Queue", values: { "rank-hero": false, "rank-legend": true, "rank-mythic": true } },
+      { label: "Bold Badge", values: { "rank-hero": true, "rank-legend": true, "rank-mythic": true } },
+    ],
+    [],
+  );
+  const extendedComparisonRows = useMemo(
+    () => [
+      { label: "Special Cosmetic Title Glow", values: { "rank-hero": false, "rank-legend": false, "rank-mythic": true } },
+      { label: "Particle Aura Cosmetic", values: { "rank-hero": false, "rank-legend": false, "rank-mythic": true } },
+      { label: "Guild Banner Cosmetic", values: { "rank-hero": false, "rank-legend": false, "rank-mythic": true } },
+      { label: "Resource Bundle in Kit", values: { "rank-hero": false, "rank-legend": true, "rank-mythic": false } },
+      { label: "Rare Crafting Materials in Kit", values: { "rank-hero": false, "rank-legend": false, "rank-mythic": true } },
+      { label: "No Raw Damage Bonuses", values: { "rank-hero": true, "rank-legend": true, "rank-mythic": true } },
+    ],
+    [],
   );
 
   useEffect(() => {
@@ -4830,6 +4888,43 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
     return cartItems.some((entry) => String(entry?.id || "") === id);
   }
 
+  function getStoreAddMeta(item) {
+    const alreadyInCart = isAlreadyInCart(item);
+    const tierLocked = isTierLockedInCart(item);
+    const addDisabled = !canPurchase || alreadyInCart || tierLocked;
+    const addTitle = !canPurchase
+      ? isSignedIn
+        ? "Link your game account first (/link)"
+        : "Sign in to use the store"
+      : alreadyInCart
+      ? "Already in cart"
+      : tierLocked
+      ? "A higher tier is already in your cart"
+      : "Add to cart";
+    const addLabel = !canPurchase
+      ? isSignedIn
+        ? "Link account to buy"
+        : "Sign in to buy"
+      : alreadyInCart
+      ? "In cart"
+      : tierLocked
+      ? "Tier locked"
+      : "Add to cart";
+    return { addDisabled, addTitle, addLabel };
+  }
+
+  function renderComparisonCell(value) {
+    if (typeof value === "boolean") {
+      return html`<img
+        className="store-comparison-status-icon"
+        src=${value ? SUCCESS_STATUS_ICON_SVG : ERROR_STATUS_ICON_SVG}
+        alt=${value ? "Included" : "Not included"}
+        loading="lazy"
+      />`;
+    }
+    return html`<span className="store-comparison-value-text">${String(value || "-")}</span>`;
+  }
+
   return html`
     <section className="card fade-in">
       <div className="section-title">Hardtale Store</div>
@@ -4838,79 +4933,185 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
             Your account is currently Unlinked. Use <${Link} className="ranks-link" to="/link">/link</${Link}> to unlock store purchases.
           </p>`
         : html``}
-      <div className="store-grid">
-        ${SAMPLE_STORE.map(
-          (item) => {
-            const alreadyInCart = isAlreadyInCart(item);
-            const tierLocked = isTierLockedInCart(item);
-            const addDisabled = !canPurchase || alreadyInCart || tierLocked;
-            const addTitle = !canPurchase
-              ? isSignedIn
-                ? "Link your game account first (/link)"
-                : "Sign in to use the store"
-              : alreadyInCart
-              ? "Already in cart"
-              : tierLocked
-              ? "A higher tier is already in your cart"
-              : "Add to cart";
-            const addLabel = !canPurchase
-              ? isSignedIn
-                ? "Link account to buy"
-                : "Sign in to buy"
-              : alreadyInCart
-              ? "In cart"
-              : tierLocked
-              ? "Tier locked"
-              : "Add to cart";
-            return html`<div key=${item.id} className=${`store-card rank-preview-${getStoreRankSlug(item)}`.trim()}>
-            <div className=${`comment-rank store-profile-rank rank-${getStoreRankSlug(item)}`.trim()}>
-              ${(() => {
-                const iconType = getRankIconType(getStoreRankLabel(item));
-                return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
-                  <span>${getStoreRankLabel(item)}</span>`;
-              })()}
-            </div>
-            <div className=${`comment-rank store-rank-title rank-${getStoreRankSlug(item)}`.trim()}>
-              ${(() => {
-                const iconType = getRankIconType(getStoreRankLabel(item));
-                return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
-                  <span>${item.name}</span>`;
-              })()}
-            </div>
-            <${ProfilePreviewButton}
-              onClick=${() => setPreviewItemId(item.id)}
-              title="Open profile preview"
-              avatar=${storePreviewImage}
-              name=${storePreviewName}
-              username=${storePreviewUsername}
-            >
-              ${getStoreCardBadges(item).map(
-                (label) => html`<${RankBadge} label=${label} className="store-owned-badge" />`,
-              )}
-            <//>
-            <div className="store-preview-note muted">
-              Titles unlocked: ${(STORE_PREVIEW_TITLES_BY_ID[item.id] || []).join(", ")}
-            </div>
-            <div className="store-desc">
-              <div className="store-perks">
-                ${perkBullets(item.blurb).map(
-                  (perk) => html`<div>${capitalizePerk(perk)}</div>`,
-                )}
-              </div>
-            </div>
-            <div className="store-price">$${item.price.toFixed(2)}</div>
-            <button
-              className="button store-cta"
-              onClick=${() => onAdd(item)}
-              disabled=${addDisabled}
-              title=${addTitle}
-            >
-              ${addLabel}
-            </button>
-          </div>`;
-          },
-        )}
+      <div className="store-section-tabs" role="tablist" aria-label="Store sections">
+        <button
+          type="button"
+          className=${`store-section-tab ${activeStoreSection === "ranks" ? "active" : ""}`.trim()}
+          onClick=${() => setActiveStoreSection("ranks")}
+          aria-pressed=${activeStoreSection === "ranks"}
+        >
+          [RANKS]
+        </button>
+        <button
+          type="button"
+          className=${`store-section-tab ${activeStoreSection === "gold" ? "active" : ""}`.trim()}
+          onClick=${() => setActiveStoreSection("gold")}
+          aria-pressed=${activeStoreSection === "gold"}
+        >
+          [GOLD]
+        </button>
+        <button
+          type="button"
+          className=${`store-section-tab ${activeStoreSection === "currency" ? "active" : ""}`.trim()}
+          onClick=${() => setActiveStoreSection("currency")}
+          aria-pressed=${activeStoreSection === "currency"}
+        >
+          [CURRENCY]
+        </button>
       </div>
+      ${activeStoreSection === "ranks"
+        ? html`<div className="store-grid">
+            ${SAMPLE_STORE.map(
+              (item) => {
+                const addMeta = getStoreAddMeta(item);
+                return html`<div key=${item.id} className=${`store-card rank-preview-${getStoreRankSlug(item)}`.trim()}>
+                <div className=${`comment-rank store-profile-rank rank-${getStoreRankSlug(item)}`.trim()}>
+                  ${(() => {
+                    const iconType = getRankIconType(getStoreRankLabel(item));
+                    return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                      <span>${getStoreRankLabel(item)}</span>`;
+                  })()}
+                </div>
+                <div className=${`comment-rank store-rank-title rank-${getStoreRankSlug(item)}`.trim()}>
+                  ${(() => {
+                    const iconType = getRankIconType(getStoreRankLabel(item));
+                    return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                      <span>${item.name}</span>`;
+                  })()}
+                </div>
+                <${ProfilePreviewButton}
+                  onClick=${() => setPreviewItemId(item.id)}
+                  title="Open profile preview"
+                  avatar=${storePreviewImage}
+                  name=${storePreviewName}
+                  username=${storePreviewUsername}
+                >
+                  ${getStoreCardBadges(item).map(
+                    (label) => html`<${RankBadge} label=${label} className="store-owned-badge" />`,
+                  )}
+                <//>
+                <div className="store-preview-note muted">
+                  Titles unlocked: ${(STORE_PREVIEW_TITLES_BY_ID[item.id] || []).join(", ")}
+                </div>
+                <div className="store-desc">
+                  <div className="store-perks">
+                    ${perkBullets(item.blurb).map(
+                      (perk) => html`<div>${capitalizePerk(perk)}</div>`,
+                    )}
+                  </div>
+                </div>
+                <div className="store-price">$${item.price.toFixed(2)}</div>
+                <button
+                  className="button store-cta"
+                  onClick=${() => onAdd(item)}
+                  disabled=${addMeta.addDisabled}
+                  title=${addMeta.addTitle}
+                >
+                  ${addMeta.addLabel}
+                </button>
+              </div>`;
+              },
+            )}
+          </div>
+          <div className="store-comparison-shell">
+            <div className="store-comparison-header gradient-text">Rank Comparison</div>
+            <div className="store-comparison-wrap">
+              <table className="store-comparison-table" role="table" aria-label="Rank feature comparison">
+                <thead>
+                  <tr>
+                    <th scope="col" className="store-feature-col">Feature</th>
+                    ${SAMPLE_STORE.map((item) => {
+                      const rankLabel = getStoreRankLabel(item);
+                      const rankSlug = getStoreRankSlug(item);
+                      return html`<th key=${`comparison-head-${item.id}`} scope="col" className="store-rank-col">
+                        <span className=${`store-comparison-rank rank-${rankSlug}`.trim()}>
+                          <${RankBadge} label=${rankLabel} className="store-owned-badge store-comparison-badge" />
+                        </span>
+                        <div className="store-comparison-price">$${item.price.toFixed(2)}</div>
+                      </th>`;
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  ${coreComparisonRows.map((row) => html`<tr key=${`core-row-${row.label}`}>
+                    <th scope="row" className="store-feature-label">${row.label}</th>
+                    ${SAMPLE_STORE.map((item) => html`<td key=${`core-cell-${row.label}-${item.id}`}>
+                      ${renderComparisonCell(row.values[item.id])}
+                    </td>`)}
+                  </tr>`)}
+                </tbody>
+              </table>
+            </div>
+            <div className="store-comparison-buy-row">
+              ${SAMPLE_STORE.map((item) => {
+                const addMeta = getStoreAddMeta(item);
+                return html`<button
+                  key=${`core-buy-${item.id}`}
+                  type="button"
+                  className="button store-cta store-comparison-buy-btn"
+                  onClick=${() => onAdd(item)}
+                  disabled=${addMeta.addDisabled}
+                  title=${addMeta.addTitle}
+                >
+                  ${addMeta.addLabel}
+                </button>`;
+              })}
+            </div>
+            <div className="store-comparison-toggle-row">
+              <button
+                type="button"
+                className="button ghost-btn store-comparison-toggle"
+                onClick=${() => setShowComparison((prev) => !prev)}
+              >
+                ${showComparison ? "Hide extended features" : "Click here to see more features"}
+              </button>
+            </div>
+            ${showComparison
+              ? html`<div className="store-comparison-wrap expanded">
+                  <table className="store-comparison-table" role="table" aria-label="Extended rank feature comparison">
+                    <thead>
+                      <tr>
+                        <th scope="col" className="store-feature-col">Feature</th>
+                        ${SAMPLE_STORE.map((item) => html`<th key=${`more-head-${item.id}`} scope="col" className="store-rank-col">
+                          <span className=${`store-comparison-rank rank-${getStoreRankSlug(item)}`.trim()}>
+                            <${RankBadge} label=${getStoreRankLabel(item)} className="store-owned-badge store-comparison-badge" />
+                          </span>
+                        </th>`)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${extendedComparisonRows.map((row) => html`<tr key=${`extended-row-${row.label}`}>
+                        <th scope="row" className="store-feature-label">${row.label}</th>
+                        ${SAMPLE_STORE.map((item) => html`<td key=${`extended-cell-${row.label}-${item.id}`}>
+                          ${renderComparisonCell(row.values[item.id])}
+                        </td>`)}
+                      </tr>`)}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="store-comparison-buy-row">
+                  ${SAMPLE_STORE.map((item) => {
+                    const addMeta = getStoreAddMeta(item);
+                    return html`<button
+                      key=${`extended-buy-${item.id}`}
+                      type="button"
+                      className="button store-cta store-comparison-buy-btn"
+                      onClick=${() => onAdd(item)}
+                      disabled=${addMeta.addDisabled}
+                      title=${addMeta.addTitle}
+                    >
+                      ${addMeta.addLabel}
+                    </button>`;
+                  })}
+                </div>`
+              : html``}
+          </div>`
+        : html`<div className="store-section-placeholder">
+            <div className="section-title">${activeStoreSection === "gold" ? "Gold Shop" : "Currency Shop"}</div>
+            <p className="muted">
+              This section is being prepared. Keep using <strong>Ranks</strong> for now.
+            </p>
+          </div>`}
       <p className="muted store-support-note">
         Support the server and become a local:
         <${RankBadge} label="Hero" className="store-owned-badge" />
@@ -8261,6 +8462,19 @@ function LinkPage({ onClose = null }) {
     return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   }
 
+  function extractCodeFromPathname(pathname) {
+    const rawPath = String(pathname || "").trim();
+    if (!rawPath) return "";
+    const parts = rawPath.split("/").filter(Boolean);
+    if (parts.length < 2) return "";
+    if (String(parts[0] || "").toLowerCase() !== "link") return "";
+    const normalized = normalizeCode(parts[1] || "");
+    if (normalized.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(normalized)) {
+      return normalized;
+    }
+    return "";
+  }
+
   function extractCodeFromSearch(search) {
     const rawSearch = String(search || "").replace(/^\?/, "");
     if (!rawSearch) return "";
@@ -8271,28 +8485,42 @@ function LinkPage({ onClose = null }) {
     } catch {}
 
     const params = new URLSearchParams(rawSearch);
-    const candidates = [rawSearch, decoded];
-    for (const [key, value] of params.entries()) {
-      candidates.push(key, value);
+    const prioritizedKeys = ["code", "link", "token", "redeem", "c"];
+    for (const key of prioritizedKeys) {
+      const values = params.getAll(key);
+      for (const value of values) {
+        const normalized = normalizeCode(value);
+        if (normalized.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(normalized)) {
+          return normalized;
+        }
+      }
     }
-    candidates.push(...rawSearch.split(/[&=]/g), ...decoded.split(/[&=]/g));
 
-    for (const candidate of candidates) {
-      const normalized = normalizeCode(candidate);
+    if (!rawSearch.includes("=") && !rawSearch.includes("&")) {
+      const normalized = normalizeCode(rawSearch);
       if (normalized.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(normalized)) {
         return normalized;
       }
-      const match = normalized.match(new RegExp(`[A-Z0-9]{${LINK_CODE_LENGTH}}`));
-      if (match?.[0]) {
-        return match[0];
+    }
+
+    for (const value of params.values()) {
+      const normalized = normalizeCode(value);
+      if (normalized.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(normalized)) {
+        return normalized;
       }
     }
 
     return "";
   }
 
+  function extractCodeFromLocation(pathname, search) {
+    const fromSearch = extractCodeFromSearch(search);
+    if (fromSearch) return fromSearch;
+    return extractCodeFromPathname(pathname);
+  }
+
   const [digits, setDigits] = useState(() => {
-    const initialCode = extractCodeFromSearch(location.search);
+    const initialCode = extractCodeFromLocation(location.pathname, location.search);
     return initialCode ? initialCode.split("") : [...EMPTY_CODE_ARRAY];
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -8309,10 +8537,10 @@ function LinkPage({ onClose = null }) {
   const isComplete = fullCode.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(fullCode);
 
   useEffect(() => {
-    const parsedCode = extractCodeFromSearch(location.search);
+    const parsedCode = extractCodeFromLocation(location.pathname, location.search);
     if (!parsedCode) return;
     setDigits(parsedCode.split(""));
-  }, [location.search, LINK_CODE_LENGTH]);
+  }, [location.pathname, location.search, LINK_CODE_LENGTH]);
 
   useEffect(() => {
     let cancelled = false;
@@ -8651,8 +8879,9 @@ function Layout() {
   const storedBackgroundHref = readLastNonLinkRoute();
   const linkBackgroundHref = stateBackgroundHref || storedBackgroundHref || "/";
   const [linkBackgroundPathname, linkBackgroundSearch] = linkBackgroundHref.split("?");
+  const isLinkRoute = location.pathname === "/link" || location.pathname.startsWith("/link/");
   const routesLocation =
-    location.pathname === "/link"
+    isLinkRoute
       ? {
           ...location,
           pathname: normalizeInternalRoute(linkBackgroundPathname || "/", "/"),
@@ -8948,9 +9177,9 @@ function Layout() {
   ]);
 
   useEffect(() => {
-    if (location.pathname === "/link") return;
+    if (isLinkRoute) return;
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
-  }, [location.pathname]);
+  }, [location.pathname, isLinkRoute]);
 
   useEffect(() => {
     if (visualPathname === "/" || visualPathname === "/home") {
@@ -8967,20 +9196,20 @@ function Layout() {
       setActive("support");
     } else if (visualPathname === "/subscriptions") {
       setActive("subscriptions");
-    } else if (location.pathname === "/link") {
+    } else if (isLinkRoute) {
       setActive("link");
     }
-  }, [visualPathname, location.pathname]);
+  }, [visualPathname, location.pathname, isLinkRoute]);
 
   useEffect(() => {
-    if (location.pathname === "/link") return;
+    if (isLinkRoute) return;
     setShowMobileNav(false);
-  }, [location.pathname]);
+  }, [location.pathname, isLinkRoute]);
 
   useEffect(() => {
-    if (location.pathname === "/link") return;
+    if (isLinkRoute) return;
     writeLastNonLinkRoute(`${location.pathname}${location.search || ""}`);
-  }, [location.pathname, location.search]);
+  }, [location.pathname, location.search, isLinkRoute]);
 
   useEffect(() => {
     if (location.pathname !== "/store") return;
@@ -10059,7 +10288,7 @@ function Layout() {
           copyrightIconSrc=${COPYRIGHT_ICON_SVG}
         />
       </div>
-      ${location.pathname === "/link"
+      ${isLinkRoute
         ? html`<div className="popup-overlay link-modal-overlay" onClick=${closeLinkModal}>
             <div className="popup link-modal-shell" onClick=${(event) => event.stopPropagation()}>
               <${LinkPage} onClose=${closeLinkModal} />

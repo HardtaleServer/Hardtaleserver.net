@@ -34,6 +34,26 @@
   --rank-mythic-glow: rgba(225, 0, 255, 0.85);
 }
 
+@media (max-width: 860px) {
+  .store-comparison-toggle {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .store-comparison-wrap {
+    border-radius: 12px;
+  }
+
+  .store-comparison-buy-row {
+    grid-template-columns: 1fr;
+  }
+
+  .store-section-tab {
+    flex: 1 1 calc(33.333% - 8px);
+    text-align: center;
+  }
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -4611,6 +4631,30 @@ emoji-picker.reaction-picker-panel {
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
 }
 
+.store-section-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 6px 0 12px;
+}
+
+.store-section-tab {
+  border: 1px solid var(--stroke);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: color-mix(in srgb, var(--bg-soft) 88%, transparent);
+  color: var(--muted);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+
+.store-section-tab.active {
+  color: #fff;
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--accent-2));
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+}
+
 .store-card {
   border: 1px solid var(--stroke);
   border-radius: 16px;
@@ -4883,6 +4927,134 @@ body[data-theme="dark"] .store-cta {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+
+.store-comparison-toggle-row {
+  margin-top: 6px;
+  display: flex;
+  justify-content: center;
+}
+
+.store-comparison-toggle {
+  min-width: 240px;
+}
+
+.store-comparison-wrap {
+  margin-top: 10px;
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  overflow-x: auto;
+  background: color-mix(in srgb, var(--bg-soft) 90%, transparent);
+}
+
+.store-comparison-shell {
+  margin-top: 12px;
+  border: 1px solid var(--stroke);
+  border-radius: 16px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--bg-soft) 84%, transparent);
+}
+
+.store-comparison-header {
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.store-comparison-table {
+  width: 100%;
+  min-width: 640px;
+  border-collapse: collapse;
+}
+
+.store-comparison-table th,
+.store-comparison-table td {
+  border-bottom: 1px solid var(--stroke);
+  padding: 10px 12px;
+}
+
+.store-comparison-table thead th {
+  position: sticky;
+  top: 0;
+  background: color-mix(in srgb, var(--bg) 86%, transparent);
+  z-index: 1;
+}
+
+.store-feature-col {
+  text-align: left;
+  min-width: 250px;
+}
+
+.store-feature-label {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.store-rank-col {
+  text-align: center;
+  min-width: 120px;
+}
+
+.store-comparison-price {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.store-comparison-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.store-comparison-badge {
+  font-size: 11px;
+}
+
+.store-comparison-table td {
+  text-align: center;
+}
+
+.store-comparison-value-text {
+  background-image: linear-gradient(90deg, var(--accent), var(--accent-2));
+  background-size: 220% 100%;
+  animation: staffReflect 2.6s ease-in-out infinite;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  font-weight: 700;
+}
+
+.store-comparison-status-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-block;
+  object-fit: contain;
+}
+
+.store-comparison-table tr:last-child th,
+.store-comparison-table tr:last-child td {
+  border-bottom: none;
+}
+
+.store-comparison-buy-row {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+}
+
+.store-comparison-buy-btn {
+  width: 100%;
+}
+
+.store-section-placeholder {
+  border: 1px dashed var(--stroke);
+  border-radius: 14px;
+  padding: 16px;
+  margin-top: 10px;
 }
 
 .store-support-rank {

@@ -146,6 +146,13 @@ const LINK_SERVICE_AUTH_TOKEN = String(process.env.LINK_SERVICE_AUTH_TOKEN || ""
 const LINKING_ENABLED = String(
   process.env.LINKING_ENABLED || process.env.LINK_REDEEM_ENABLED || "false",
 ).toLowerCase() === "true";
+const LINK_SERVICE_REDEEM_PATHS = String(
+  process.env.LINK_SERVICE_REDEEM_PATHS || "/api/v1/link/redeem,/api/link/redeem,/link/redeem",
+)
+  .split(",")
+  .map((entry) => String(entry || "").trim())
+  .filter(Boolean)
+  .map((entry) => (entry.startsWith("/") ? entry : `/${entry}`));
 const LINK_SERVICE_LOCALHOST_PATTERN = /^https?:\/\/(localhost|127(?:\.\d{1,3}){3})(:\d+)?(?:\/|$)/i;
 const LINK_SERVICE_TIMEOUT_MS = Math.max(
   2000,
@@ -162,6 +169,7 @@ const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || "").trim();
 const STRIPE_PUBLISHABLE_KEY = String(
   process.env.STRIPE_PUBLISHABLE_KEY || process.env.VITE_STRIPE_PUBLISHABLE_KEY || "",
 ).trim();
+const STRIPE_WEBHOOK_SECRET = String(process.env.STRIPE_WEBHOOK_SECRET || "").trim();
 const STRIPE_CURRENCY = String(process.env.STRIPE_CURRENCY || "usd")
   .trim()
   .toLowerCase();
@@ -172,9 +180,6 @@ const stripeClient = STRIPE_ENABLED
       apiVersion: "2024-06-20",
     })
   : null;
-
-app.use(express.json({ limit: "100kb" }));
-app.use("/api", clerkMiddleware());
 
 const publicDir = path.join(__dirname, "public");
 const imagesDir = path.join(__dirname, "Images");
@@ -837,50 +842,69 @@ async function redeemLinkCodeWithGameServer({ code, webUserId, idempotencyKey })
     return { ok: false, status: 503, code: "SERVER_UNAVAILABLE", error: "Link service auth token is not configured" };
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), LINK_SERVICE_TIMEOUT_MS);
-  const endpoint = `${LINK_SERVICE_BASE_URL.replace(/\/+$/, "")}/api/v1/link/redeem`;
+  const baseUrl = LINK_SERVICE_BASE_URL.replace(/\/+$/, "");
+  const endpointPaths = LINK_SERVICE_REDEEM_PATHS.length > 0
+    ? LINK_SERVICE_REDEEM_PATHS
+    : ["/api/v1/link/redeem"];
   const requestBody = JSON.stringify({ code, webUserId });
+  let lastNotFound = "";
 
-  try {
-    const response = await fetch(endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${LINK_SERVICE_AUTH_TOKEN}`,
-        "X-Service-Auth": LINK_SERVICE_AUTH_TOKEN,
-        "X-Idempotency-Key": idempotencyKey,
-      },
-      body: requestBody,
-      signal: controller.signal,
-    });
-    const rawBody = await response.text();
-    const parsedBody = parseJsonSafely(rawBody);
-    if (!response.ok) {
-      const mappedCode = normalizeLinkServiceErrorCode(parsedBody?.code, response.status);
+  for (const endpointPath of endpointPaths) {
+    const endpoint = `${baseUrl}${endpointPath}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), LINK_SERVICE_TIMEOUT_MS);
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${LINK_SERVICE_AUTH_TOKEN}`,
+          "X-Service-Auth": LINK_SERVICE_AUTH_TOKEN,
+          "X-Idempotency-Key": idempotencyKey,
+        },
+        body: requestBody,
+        signal: controller.signal,
+      });
+      const rawBody = await response.text();
+      const parsedBody = parseJsonSafely(rawBody);
+      if (!response.ok) {
+        if (response.status === 404) {
+          lastNotFound = endpointPath;
+          continue;
+        }
+        const mappedCode = normalizeLinkServiceErrorCode(parsedBody?.code, response.status);
+        return {
+          ok: false,
+          status: response.status,
+          code: mappedCode,
+          error:
+            normalizeText(parsedBody?.error || parsedBody?.message || rawBody || "Redeem failed", 200) ||
+            "Redeem failed",
+        };
+      }
+      return { ok: true, status: response.status, data: parsedBody || {} };
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        return { ok: false, status: 504, code: "SERVER_UNAVAILABLE", error: "Redeem request timed out" };
+      }
       return {
         ok: false,
-        status: response.status,
-        code: mappedCode,
-        error:
-          normalizeText(parsedBody?.error || parsedBody?.message || rawBody || "Redeem failed", 200) ||
-          "Redeem failed",
+        status: 502,
+        code: "SERVER_UNAVAILABLE",
+        error: `Failed to reach link service at ${LINK_SERVICE_BASE_URL}`,
       };
+    } finally {
+      clearTimeout(timeout);
     }
-    return { ok: true, status: response.status, data: parsedBody || {} };
-  } catch (error) {
-    if (error?.name === "AbortError") {
-      return { ok: false, status: 504, code: "SERVER_UNAVAILABLE", error: "Redeem request timed out" };
-    }
-    return {
-      ok: false,
-      status: 502,
-      code: "SERVER_UNAVAILABLE",
-      error: `Failed to reach link service at ${LINK_SERVICE_BASE_URL}`,
-    };
-  } finally {
-    clearTimeout(timeout);
   }
+
+  const attempted = endpointPaths.join(", ");
+  return {
+    ok: false,
+    status: 404,
+    code: "SERVER_UNAVAILABLE",
+    error: `Link service redeem endpoint not found. Tried: ${attempted}. Last missing path: ${lastNotFound || "n/a"}`,
+  };
 }
 
 function buildMockRedeemResult({ code }) {
@@ -2090,6 +2114,89 @@ function isAdminUser(user) {
     (entry) => ADMIN_EMAIL_SET.has(entry.emailAddress?.toLowerCase()),
   );
 }
+
+async function fulfillStripeCheckoutSession(session, source = "manual") {
+  const sessionId = normalizeText(session?.id, 160);
+  if (!sessionId) {
+    return { success: false, skipped: true, reason: "missing_session_id" };
+  }
+  const paymentStatus = String(session?.payment_status || "").toLowerCase();
+  if (paymentStatus !== "paid") {
+    return { success: false, skipped: true, reason: "payment_not_paid" };
+  }
+  const userId = normalizeText(session?.client_reference_id || session?.metadata?.userId, 128);
+  if (!userId) {
+    return { success: false, skipped: true, reason: "missing_user_id" };
+  }
+  const result = await processCartCheckout(userId, {
+    purchaseId: sessionId,
+    purchaseProvider: "STRIPE",
+    paymentStatus: "PAID",
+    stripeSessionId: sessionId,
+    source,
+  });
+  return { success: true, ...result };
+}
+
+app.post(
+  "/api/payments/stripe/webhook",
+  express.raw({ type: "application/json", limit: "1mb" }),
+  async (req, res) => {
+    try {
+      if (!(await requireMongoReady(res))) return;
+      if (!stripeClient || !STRIPE_ENABLED) {
+        return res.status(503).json({ error: "Stripe checkout is not configured" });
+      }
+      if (!STRIPE_WEBHOOK_SECRET) {
+        return res.status(503).json({ error: "Stripe webhook secret is not configured" });
+      }
+
+      const signature = req.headers["stripe-signature"];
+      if (!signature) {
+        return res.status(400).json({ error: "Missing Stripe signature" });
+      }
+
+      const rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(String(req.body || ""));
+      let event;
+      try {
+        event = stripeClient.webhooks.constructEvent(rawBody, signature, STRIPE_WEBHOOK_SECRET);
+      } catch (err) {
+        return res.status(400).json({ error: "Invalid Stripe signature" });
+      }
+
+      if (
+        event.type === "checkout.session.completed" ||
+        event.type === "checkout.session.async_payment_succeeded"
+      ) {
+        const session = event.data?.object || null;
+        const outcome = await fulfillStripeCheckoutSession(session, `webhook:${event.type}`);
+        return res.json({
+          received: true,
+          handled: true,
+          eventId: normalizeText(event.id, 120),
+          eventType: event.type,
+          processed: Boolean(outcome?.success),
+          alreadyProcessed: Boolean(outcome?.alreadyProcessed),
+          skipped: Boolean(outcome?.skipped),
+          reason: normalizeText(outcome?.reason || "", 80),
+        });
+      }
+
+      return res.json({
+        received: true,
+        handled: false,
+        eventId: normalizeText(event.id, 120),
+        eventType: event.type,
+      });
+    } catch (error) {
+      console.error("Failed to process Stripe webhook", error);
+      return res.status(500).json({ error: "Failed to process Stripe webhook" });
+    }
+  },
+);
+
+app.use(express.json({ limit: "100kb" }));
+app.use("/api", clerkMiddleware());
 
 app.get("/api/me", async (req, res) => {
   try {
@@ -4089,12 +4196,10 @@ app.post("/api/payments/stripe/complete", async (req, res) => {
       return res.status(400).json({ error: "Payment has not completed yet" });
     }
 
-    const result = await processCartCheckout(auth.userId, {
-      purchaseId: session.id,
-      purchaseProvider: "STRIPE",
-      paymentStatus: "PAID",
-      stripeSessionId: session.id,
-    });
+    const result = await fulfillStripeCheckoutSession(session, "checkout-complete");
+    if (!result?.success) {
+      return res.status(400).json({ error: "Unable to fulfill checkout session" });
+    }
 
     return res.json({
       success: true,
