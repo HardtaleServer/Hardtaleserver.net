@@ -3,9 +3,11 @@ const RANK_ICON_BY_LABEL = {
   unlinked: "unlinked",
   registered: "linked",
   linked: "linked",
-  hero: "shield",
+  hero: "hero",
   legend: "crown",
   mythic: "star",
+  moderator: "mod",
+  mod: "mod",
 };
 
 const RANK_DISPLAY_BY_LABEL = {
@@ -26,4 +28,3 @@ export function getRankDisplayLabel(label) {
   if (RANK_DISPLAY_BY_LABEL[normalized]) return RANK_DISPLAY_BY_LABEL[normalized];
   return raw || "Unlinked";
 }
-

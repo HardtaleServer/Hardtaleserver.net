@@ -10,6 +10,7 @@ export default function AppRoutes({
   HomePage,
   AboutUsPage,
   NewsPage,
+  StoreGatewayPage,
   StorePage,
   VotePage,
   ForumPage,
@@ -26,6 +27,7 @@ export default function AppRoutes({
   setNews,
   setNotifications,
   addToCart,
+  removeFromCart,
   isLinkedAccount,
   cart,
 }) {
@@ -70,10 +72,36 @@ export default function AppRoutes({
       <${Route} path="/about-us" element=${html`<${AboutUsPage} />`} />
       <${Route}
         path="/store"
+        element=${html`<${StoreGatewayPage} />`}
+      />
+      <${Route}
+        path="/store/ranks"
         element=${html`<${StorePage}
           onAdd=${addToCart}
+          onRemove=${removeFromCart}
           isLinkedAccount=${isLinkedAccount}
           cart=${cart}
+          section="ranks"
+        />`}
+      />
+      <${Route}
+        path="/store/gold"
+        element=${html`<${StorePage}
+          onAdd=${addToCart}
+          onRemove=${removeFromCart}
+          isLinkedAccount=${isLinkedAccount}
+          cart=${cart}
+          section="gold"
+        />`}
+      />
+      <${Route}
+        path="/store/currency"
+        element=${html`<${StorePage}
+          onAdd=${addToCart}
+          onRemove=${removeFromCart}
+          isLinkedAccount=${isLinkedAccount}
+          cart=${cart}
+          section="currency"
         />`}
       />
       <${Route} path="/vote" element=${html`<${VotePage} />`} />

@@ -3989,8 +3989,8 @@ app.post("/api/payments/stripe/create-checkout-session", async (req, res) => {
       payment_method_types: ["card"],
       line_items: lineItems,
       client_reference_id: auth.userId,
-      success_url: `${baseUrl}/store?stripe=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${baseUrl}/store?stripe=cancel`,
+      success_url: `${baseUrl}/store/ranks?stripe=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/store/ranks?stripe=cancel`,
       metadata: {
         userId: auth.userId,
         cartItemIds: items.map((entry) => entry.id).join(","),

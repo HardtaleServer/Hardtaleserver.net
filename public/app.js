@@ -32,6 +32,7 @@ import NotificationsPanel from "./components/NotificationsPanel.js";
 import SiteFooter from "./components/SiteFooter.js";
 import SubscriptionsPage from "./components/SubscriptionsPage.js";
 import CopyAction from "./components/CopyAction.js";
+import GradientScrollArea from "./components/GradientScrollArea.js";
 import { markdownExcerpt } from "./components/forumMarkdown.js";
 import { getRankDisplayLabel, getRankIconType } from "./components/rankConfig.js";
 import {
@@ -87,7 +88,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.70";
+const VERSION = "1.3.75";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -99,6 +100,8 @@ const DRAWER_MENU_ICON_SVG = "/Images/SVGs/ui/DrawerMenu.svg";
 const WARNING_STATUS_ICON_SVG = "/Images/SVGs/toasts/Warning.svg";
 const SUCCESS_STATUS_ICON_SVG = "/Images/SVGs/toasts/Success.svg";
 const ERROR_STATUS_ICON_SVG = "/Images/SVGs/toasts/Error.svg";
+const HERO_RANK_ICON_SVG = "/Images/SVGs/ranks/RANK_HERO.svg";
+const MOD_RANK_ICON_SVG = "/Images/SVGs/ranks/RANK_MOD.svg";
 const ACHIEVEMENT_STAR_ICON_SVG = "/Images/SVGs/ui/Achievement_Star.svg";
 const LEADERBOARD_ICON_SVG = "/Images/SVGs/ui/Leaderboard_SVG.svg";
 const LINKED_STATUS_ICON_SVG = "/Images/SVGs/link/LINKED.svg";
@@ -185,6 +188,48 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.75",
+    date: "2026-02-17",
+    items: [
+      "Added Store gateway artwork tiles using new PNG assets for `Ranks`, `Gold`, and `Currency` cards.",
+      "Applied staff-style animated gradient treatment to Store gateway section titles.",
+    ],
+  },
+  {
+    version: "1.3.74",
+    date: "2026-02-17",
+    items: [
+      "Changed Store routing flow: `/store` is now a section gateway and the previous rank store experience moved to `/store/ranks`.",
+      "Added large icon-based Store section buttons (`Ranks`, `Gold`, `Currency`) without bracket styling.",
+      "Updated comparison buy rows so only one set is visible at a time (core row hides when extended feature rows are expanded).",
+    ],
+  },
+  {
+    version: "1.3.73",
+    date: "2026-02-17",
+    items: [
+      "Adjusted Checkout popup sizing: wider desktop layout with internal scrolling and mobile max-height reduced so it no longer fills the entire screen.",
+      "Added reusable `GradientScrollArea` component and applied custom gradient scrollbar styling for checkout/cart scrolling regions.",
+    ],
+  },
+  {
+    version: "1.3.72",
+    date: "2026-02-17",
+    items: [
+      "Switched Hero rank icon rendering to the dedicated `Images/SVGs/ranks/RANK_HERO.svg` asset.",
+      "Added moderator rank icon mapping to `Images/SVGs/ranks/RANK_MOD.svg` (shield).",
+      "Updated Hero rank palette to a blue-tint gradient with matching glow treatment.",
+    ],
+  },
+  {
+    version: "1.3.71",
+    date: "2026-02-17",
+    items: [
+      "Added direct remove-from-cart action on Store rank cards via top-right bin button when a tier is already in cart.",
+      "Kept the main CTA focused on add/lock states while enabling instant cart removal without opening the cart popup.",
+    ],
+  },
   {
     version: "1.3.70",
     date: "2026-02-17",
@@ -4751,10 +4796,90 @@ function LoadingScreen({ show, variant }) {
   `;
 }
 
-function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
+function StoreGatewayPage() {
+  const navigate = useNavigate();
+  const { isSignedIn } = useAuth();
+  const { openSignIn } = useClerk();
+  const [pendingPath, setPendingPath] = useState("");
+  const options = [
+    {
+      id: "ranks",
+      title: "Ranks",
+      path: "/store/ranks",
+      iconType: "hero",
+      imageSrc: "/Images/SVGs/store/Store_Ranks.png",
+      copy: "Rank perks, prefixes, and account upgrades.",
+    },
+    {
+      id: "gold",
+      title: "Gold",
+      path: "/store/gold",
+      iconType: "crown",
+      imageSrc: "/Images/SVGs/store/Store_Gold_Chest.png",
+      copy: "In-game premium currency bundles and offers.",
+    },
+    {
+      id: "currency",
+      title: "Currency",
+      path: "/store/currency",
+      iconType: "star",
+      imageSrc: "/Images/SVGs/store/Store_Boosts_Potion.png",
+      copy: "Additional store currencies and exchange packs.",
+    },
+  ];
+
+  function openSection(path) {
+    const target = String(path || "").trim();
+    if (!target) return;
+    if (!isSignedIn) {
+      setPendingPath(target);
+      if (openSignIn) openSignIn({});
+      return;
+    }
+    navigate(target);
+  }
+
+  useEffect(() => {
+    if (!pendingPath || !isSignedIn) return;
+    navigate(pendingPath);
+    setPendingPath("");
+  }, [pendingPath, isSignedIn, navigate]);
+
+  return html`
+    <section className="card fade-in store-gateway">
+      <div className="section-title">Store</div>
+      <p className="muted">
+        Choose a section to continue. Sign-in is required before entering a store section.
+      </p>
+      <ul className="blocks-list" role="list">
+        ${options.map(
+          (entry) => html`<li key=${entry.id} className="blocks-item" id=${`block-${entry.id}`}>
+            <a
+              href=${entry.path}
+              title=${entry.title}
+              className="blocks-item-link"
+              onClick=${(event) => {
+                event.preventDefault();
+                openSection(entry.path);
+              }}
+            >
+              <span className=${`block-icon ${entry.id}`.trim()} role="img" aria-hidden="true">
+                ${renderRankIcon(entry.iconType)}
+              </span>
+              <img className="block-icon-image" src=${entry.imageSrc} alt="" aria-hidden="true" loading="lazy" />
+              <p className="blocks-item-title">${entry.title}</p>
+              <span className="blocks-item-copy">${entry.copy}</span>
+            </a>
+          </li>`,
+        )}
+      </ul>
+    </section>
+  `;
+}
+
+function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart = [], section = "ranks" }) {
   const [showTicket, setShowTicket] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
-  const [activeStoreSection, setActiveStoreSection] = useState("ranks");
   const [previewItemId, setPreviewItemId] = useState("");
   const [message, setMessage] = useState("");
   const [cooldownUntil, setCooldownUntil] = useState(0);
@@ -4771,6 +4896,8 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
   const storePreviewUsername = isSignedIn ? formatUsernameForDisplay(user?.username) : "";
   const previewItem = SAMPLE_STORE.find((item) => item.id === previewItemId) || null;
   const canPurchase = Boolean(isSignedIn && isLinkedAccount);
+  const normalizedSection = String(section || "ranks").trim().toLowerCase();
+  const isRanksSection = normalizedSection === "ranks";
   const cartItems = Array.isArray(cart) ? cart : [];
   const highestTierInCart = cartItems.reduce(
     (maxTier, entry) => Math.max(maxTier, RANK_TIER_ORDER[String(entry?.id || "")] || 0),
@@ -4910,7 +5037,7 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
       : tierLocked
       ? "Tier locked"
       : "Add to cart";
-    return { addDisabled, addTitle, addLabel };
+    return { addDisabled, addTitle, addLabel, alreadyInCart, tierLocked };
   }
 
   function renderComparisonCell(value) {
@@ -4933,38 +5060,23 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
             Your account is currently Unlinked. Use <${Link} className="ranks-link" to="/link">/link</${Link}> to unlock store purchases.
           </p>`
         : html``}
-      <div className="store-section-tabs" role="tablist" aria-label="Store sections">
-        <button
-          type="button"
-          className=${`store-section-tab ${activeStoreSection === "ranks" ? "active" : ""}`.trim()}
-          onClick=${() => setActiveStoreSection("ranks")}
-          aria-pressed=${activeStoreSection === "ranks"}
-        >
-          [RANKS]
-        </button>
-        <button
-          type="button"
-          className=${`store-section-tab ${activeStoreSection === "gold" ? "active" : ""}`.trim()}
-          onClick=${() => setActiveStoreSection("gold")}
-          aria-pressed=${activeStoreSection === "gold"}
-        >
-          [GOLD]
-        </button>
-        <button
-          type="button"
-          className=${`store-section-tab ${activeStoreSection === "currency" ? "active" : ""}`.trim()}
-          onClick=${() => setActiveStoreSection("currency")}
-          aria-pressed=${activeStoreSection === "currency"}
-        >
-          [CURRENCY]
-        </button>
-      </div>
-      ${activeStoreSection === "ranks"
+      ${isRanksSection
         ? html`<div className="store-grid">
             ${SAMPLE_STORE.map(
               (item) => {
                 const addMeta = getStoreAddMeta(item);
                 return html`<div key=${item.id} className=${`store-card rank-preview-${getStoreRankSlug(item)}`.trim()}>
+                ${addMeta.alreadyInCart
+                  ? html`<button
+                      type="button"
+                      className="store-card-remove"
+                      title="Remove from cart"
+                      aria-label="Remove from cart"
+                      onClick=${() => onRemove(item.id)}
+                    >
+                      <img src=${DELETE_ICON_SVG} alt="" aria-hidden="true" />
+                    </button>`
+                  : html``}
                 <div className=${`comment-rank store-profile-rank rank-${getStoreRankSlug(item)}`.trim()}>
                   ${(() => {
                     const iconType = getRankIconType(getStoreRankLabel(item));
@@ -5042,21 +5154,23 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
                 </tbody>
               </table>
             </div>
-            <div className="store-comparison-buy-row">
-              ${SAMPLE_STORE.map((item) => {
-                const addMeta = getStoreAddMeta(item);
-                return html`<button
-                  key=${`core-buy-${item.id}`}
-                  type="button"
-                  className="button store-cta store-comparison-buy-btn"
-                  onClick=${() => onAdd(item)}
-                  disabled=${addMeta.addDisabled}
-                  title=${addMeta.addTitle}
-                >
-                  ${addMeta.addLabel}
-                </button>`;
-              })}
-            </div>
+            ${!showComparison
+              ? html`<div className="store-comparison-buy-row">
+                  ${SAMPLE_STORE.map((item) => {
+                    const addMeta = getStoreAddMeta(item);
+                    return html`<button
+                      key=${`core-buy-${item.id}`}
+                      type="button"
+                      className="button store-cta store-comparison-buy-btn"
+                      onClick=${() => onAdd(item)}
+                      disabled=${addMeta.addDisabled}
+                      title=${addMeta.addTitle}
+                    >
+                      ${addMeta.addLabel}
+                    </button>`;
+                  })}
+                </div>`
+              : html``}
             <div className="store-comparison-toggle-row">
               <button
                 type="button"
@@ -5107,9 +5221,9 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
               : html``}
           </div>`
         : html`<div className="store-section-placeholder">
-            <div className="section-title">${activeStoreSection === "gold" ? "Gold Shop" : "Currency Shop"}</div>
+            <div className="section-title">${normalizedSection === "gold" ? "Gold Shop" : "Currency Shop"}</div>
             <p className="muted">
-              This section is being prepared. Keep using <strong>Ranks</strong> for now.
+              This section is being prepared. Use <${Link} className="ranks-link" to="/store/ranks">Ranks</${Link}> for now.
             </p>
           </div>`}
       <p className="muted store-support-note">
@@ -7894,6 +8008,10 @@ function renderDeleteLabel(label = "Delete") {
 
 function renderRankIcon(type) {
   switch (type) {
+    case "hero":
+      return html`<img className="rank-icon-image" src=${HERO_RANK_ICON_SVG} alt="" aria-hidden="true" />`;
+    case "mod":
+      return html`<img className="rank-icon-image" src=${MOD_RANK_ICON_SVG} alt="" aria-hidden="true" />`;
     case "crown":
       return html`<svg viewBox="0 0 24 24" aria-hidden="true">
         <path fill="currentColor" d="M3 7l4 3 5-6 5 6 4-3-2 12H5L3 7zm4 12h10l.3-2H6.7l.3 2z" />
@@ -9184,7 +9302,7 @@ function Layout() {
   useEffect(() => {
     if (visualPathname === "/" || visualPathname === "/home") {
       setActive("home");
-    } else if (visualPathname === "/store") {
+    } else if (visualPathname === "/store" || visualPathname.startsWith("/store/")) {
       setActive("store");
     } else if (visualPathname === "/news") {
       setActive("news");
@@ -9212,7 +9330,7 @@ function Layout() {
   }, [location.pathname, location.search, isLinkRoute]);
 
   useEffect(() => {
-    if (location.pathname !== "/store") return;
+    if (!(location.pathname === "/store" || location.pathname === "/store/ranks")) return;
     const params = new URLSearchParams(location.search || "");
     const stripeState = String(params.get("stripe") || "").trim().toLowerCase();
     const sessionId = String(params.get("session_id") || "").trim();
@@ -9226,7 +9344,7 @@ function Layout() {
         message: "Your Stripe checkout was canceled. Your cart is still saved.",
         duration: 4500,
       });
-      navigate("/store", { replace: true });
+      navigate("/store/ranks", { replace: true });
       return;
     }
 
@@ -9261,7 +9379,7 @@ function Layout() {
         });
         setCartStatus("");
         setShowCart(false);
-        navigate("/store", { replace: true });
+        navigate("/store/ranks", { replace: true });
       } catch (error) {
         setCartStatus("Stripe payment finalize failed.");
         pushToast({
@@ -9271,7 +9389,7 @@ function Layout() {
           message: String(error?.message || "Please contact support if you were charged."),
           duration: 9000,
         });
-        navigate("/store", { replace: true });
+        navigate("/store/ranks", { replace: true });
       }
     })();
   }, [location.pathname, location.search, isSignedIn, userId, getToken, navigate]);
@@ -10259,6 +10377,7 @@ function Layout() {
           HomePage=${HomePage}
           AboutUsPage=${AboutUsPage}
           NewsPage=${NewsPage}
+          StoreGatewayPage=${StoreGatewayPage}
           StorePage=${StorePage}
           VotePage=${VotePage}
           ForumPage=${ForumPage}
@@ -10275,6 +10394,7 @@ function Layout() {
           setNews=${setNews}
           setNotifications=${setNotifications}
           addToCart=${addToCart}
+          removeFromCart=${removeItem}
           isLinkedAccount=${isLinkedAccount}
           cart=${cart}
         />
@@ -10372,10 +10492,10 @@ function Layout() {
       `
         : html``}
 
-      <${PopUp} show=${showCart} onClose=${() => setShowCart(false)} title="Checkout">
+      <${PopUp} show=${showCart} onClose=${() => setShowCart(false)} title="Checkout" className="checkout-overlay">
         ${cart.length === 0
           ? html`<p className="muted">Your cart is empty.</p>`
-          : html`<div className="cart-list">
+          : html`<${GradientScrollArea} className="cart-list">
               ${cart.map(
                 (item) => html`<div key=${item.id} className="cart-row">
                   <div className="cart-info">
@@ -10407,7 +10527,7 @@ function Layout() {
                 <span>Total</span>
                 <span>$${total().toFixed(2)}</span>
               </div>
-            </div>`}
+            <//>`}
         ${cart.length > 0 && STRIPE_PUBLISHABLE_KEY
           ? html`<div className="stripe-inline-panel">
               <div className="stripe-inline-title">Secure Card Payment</div>
