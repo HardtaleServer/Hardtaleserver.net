@@ -22,6 +22,7 @@ import ProfileCardLayout from "./components/ProfileCardLayout.js";
 import ProfileAchievementsCard from "./components/ProfileAchievementsCard.js";
 import ForumRichEditor, { ForumRenderedMarkdown } from "./components/ForumRichEditor.js";
 import ToastSystem, { APP_TOAST_EVENT, createToastPayload, emitAppToast } from "./components/ToastSystem.js";
+import SeoManager from "./components/SeoManager.js";
 import { markdownExcerpt } from "./components/forumMarkdown.js";
 import { getRankDisplayLabel, getRankIconType } from "./components/rankConfig.js";
 import {
@@ -77,7 +78,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.42";
+const VERSION = "1.3.44";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/Copyright.svg";
@@ -165,6 +166,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.44",
+    date: "2026-02-17",
+    items: [
+      "Added route-aware SEO manager for dynamic title, description, canonical URL, Open Graph, and Twitter metadata updates.",
+      "Added structured data (JSON-LD WebSite schema) for consistent search-engine context.",
+      "Improved runtime performance with external connection prewarming and deferred Stripe script loading in index head.",
+    ],
+  },
   {
     version: "1.3.43",
     date: "2026-02-17",
@@ -9558,6 +9568,10 @@ function Layout() {
 
   return html`
     <div className=${`page ${showMobileNav ? "drawer-open" : ""} ${mobileNavStyle === "solid" ? "nav-solid" : "nav-transparent"} ${isMobile && !showMobileIsland ? "hide-mobile-island" : ""}`}>
+      <${SeoManager}
+        pathname=${visualPathname}
+        search=${routesLocation.search || ""}
+      />
       <${LoadingScreen} show=${showLoader} variant=${loaderVariant} />
         ${isMobile
           ? html`<div
