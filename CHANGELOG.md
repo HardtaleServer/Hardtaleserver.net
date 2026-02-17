@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.86)
+- Reordered Store rank detail popup so the rank badge is centered directly below the rank title.
+- Moved rank detail price to centered footer position below the Add to cart button for all rank popups.
+
 ## 2026-02-17 (v1.3.85)
 - Reworked `/api/link/redeem` to enforce signed-in web auth first, before any JWT/code linking branch.
 - Added dual-link strategy routing: verify Hytale JWT first (when provided/configured), then fallback to code redeem only when JWT is missing/invalid and a code is present.

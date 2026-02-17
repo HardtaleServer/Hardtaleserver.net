@@ -88,7 +88,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.84";
+const VERSION = "1.3.86";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -189,6 +189,22 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.86",
+    date: "2026-02-17",
+    items: [
+      "Reordered Store rank detail popup layout so rank badge is centered directly under rank title.",
+      "Moved rank detail price to centered footer position below Add to cart button for all ranks.",
+    ],
+  },
+  {
+    version: "1.3.85",
+    date: "2026-02-17",
+    items: [
+      "Reworked `/api/link/redeem` to enforce signed-in web auth before JWT/code strategy selection.",
+      "Added JWT-first linking with code fallback, normalized downstream `502 DOWNSTREAM_FAILURE`, and persisted `linkSource`/`linkedAt`.",
+    ],
+  },
   {
     version: "1.3.84",
     date: "2026-02-17",
@@ -5473,6 +5489,9 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
                   <span>${rankDetailItem.name}</span>`;
               })()}
             </div>
+            <div className="store-rank-detail-badge">
+              <${RankBadge} label=${getStoreRankLabel(rankDetailItem)} className="store-owned-badge" />
+            </div>
             <img
               className="store-rank-detail-art"
               src=${STORE_CARD_ART_BY_ID[rankDetailItem.id] || "/Images/store/Store_Ranks.png"}
@@ -5480,10 +5499,6 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
               aria-hidden="true"
               loading="lazy"
             />
-            <div className="store-rank-detail-meta">
-              <div className="store-rank-detail-price">$${rankDetailItem.price.toFixed(2)}</div>
-              <${RankBadge} label=${getStoreRankLabel(rankDetailItem)} className="store-owned-badge" />
-            </div>
             <div className="store-rank-detail-perks">
               ${perkBullets(rankDetailItem.blurb).slice(0, 5).map(
                 (perk) => html`<div>${capitalizePerk(perk)}</div>`,
@@ -5504,6 +5519,7 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
                 ${addMeta.addLabel}
               </button>`;
             })()}
+            <div className="store-rank-detail-price">$${rankDetailItem.price.toFixed(2)}</div>
           </div>`
         : html``}
     <//>

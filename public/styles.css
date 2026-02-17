@@ -5321,6 +5321,11 @@ body[data-theme="dark"] .store-cta {
   gap: 12px;
 }
 
+.store-rank-detail-badge {
+  display: flex;
+  justify-content: center;
+}
+
 .store-rank-detail-art {
   width: 100%;
   height: clamp(150px, 32vw, 210px);
@@ -5330,14 +5335,8 @@ body[data-theme="dark"] .store-cta {
   background: color-mix(in srgb, var(--bg-soft) 90%, transparent);
 }
 
-.store-rank-detail-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
 .store-rank-detail-price {
+  text-align: center;
   font-size: 16px;
   font-weight: 800;
   color: var(--text);
