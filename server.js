@@ -2508,6 +2508,15 @@ async function unlockAchievement(userId, key, { notify = true } = {}) {
   return inserted;
 }
 
+async function syncLoginAchievements(userId, { notify = true } = {}) {
+  const safeUserId = normalizeText(userId, 128);
+  if (!safeUserId || !userAchievementsCollection) return;
+  await unlockAchievement(safeUserId, "welcome_login", { notify }).catch(() => {});
+  const linked = await isLinkedUserId(safeUserId).catch(() => false);
+  if (!linked) return;
+  await unlockAchievement(safeUserId, "linking_up", { notify }).catch(() => {});
+}
+
 function normalizeNewsItem(item) {
   const title = String(item?.title || "").trim().slice(0, 120);
   const description = String(item?.description || "").trim();
@@ -3045,7 +3054,7 @@ app.get("/api/me", async (req, res) => {
       return res.json({ isAdmin: false, isStaff: false, staffRole: "" });
     }
     if (userAchievementsCollection) {
-      await unlockAchievement(auth.userId, "welcome_login", { notify: true }).catch(() => {});
+      await syncLoginAchievements(auth.userId, { notify: true }).catch(() => {});
     }
     const user = await clerkClient.users.getUser(auth.userId);
     const staffRole = resolveStaffRoleForUser(user);
@@ -5625,6 +5634,9 @@ app.get("/api/link/status", async (req, res) => {
     }
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
+    if (userAchievementsCollection) {
+      await syncLoginAchievements(auth.userId, { notify: true }).catch(() => {});
+    }
     const doc = await linkedAccountsCollection.findOne({ webUserId: auth.userId });
     if (!doc) {
       const authUser = await clerkClient.users.getUser(auth.userId).catch(() => null);

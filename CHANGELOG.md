@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.4.01)
+- Awarded `Linked Up` achievement automatically for already-linked users on next login/status bootstrap.
+- Preserved existing achievement notification flow so the unlock toast appears once without duplicate spam.
+- Added heartbeat-driven Home server status rendering (online/offline + active players) using existing routes and auth.
+
 ## 2026-02-17 (v1.4.00)
 - Added clean auth separation for linking/fulfillment API layers:
   - Browser/user flow stays Clerk-protected (`POST /api/link/claim`, `POST /api/link/redeem` compatibility).

@@ -92,7 +92,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.95";
+const VERSION = "1.4.01";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -193,6 +193,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.4.01",
+    date: "2026-02-17",
+    items: [
+      "Awarded `Linked Up` achievement automatically for already-linked users on next login/status bootstrap.",
+      "Ensured linked achievement unlock still uses existing notification flow so achievement toast appears once.",
+      "Added heartbeat-driven server online/offline + player count status to Home via existing backend routes.",
+    ],
+  },
   {
     version: "1.3.95",
     date: "2026-02-17",
