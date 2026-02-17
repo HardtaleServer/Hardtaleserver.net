@@ -6928,6 +6928,9 @@ function NotificationsPanel({ notifications, onView, onOpenProfile }) {
     <div className="notif-list">
       ${notifications.map((item) => {
         const authorLabel = String(item?.authorName || item?.author || "System");
+        const authorRank = getRankDisplayLabel(item?.authorRank || "Registered");
+        const authorRankSlug = rankSlug(authorRank || "Registered");
+        const authorImage = String(item?.authorImage || "/assets/HardTale_H_GreyScale.png");
         const authorUserId = String(item?.authorUserId || "").trim();
         const isSystemAuthor = /^system$/i.test(authorLabel) || authorUserId === "";
         const canOpenProfile =
@@ -6943,23 +6946,40 @@ function NotificationsPanel({ notifications, onView, onOpenProfile }) {
           <div className="notif-author-row">
             <div className="notif-author">
               <${TimestampText} value=${item.createdAt} formatTimestamp=${formatTimestamp} />
-              <span>
-                Sent by <${AuthorName} value=${authorLabel} isStaffLabel=${isStaffLabel} />
-              </span>
+              <div className="notif-author-line">
+                <span className="notif-author-prefix">Sent by</span>
+                ${canOpenProfile
+                  ? html`<button
+                      className="notif-profile-peek"
+                      type="button"
+                      onClick=${() => onOpenProfile(item)}
+                      title="Open profile card"
+                      aria-label="Open profile card"
+                    >
+                      <img className="notif-profile-avatar" src=${authorImage} alt=${authorLabel} />
+                    </button>`
+                  : html`<span className="notif-profile-peek static" aria-hidden="true">
+                      <img className="notif-profile-avatar" src=${authorImage} alt=${authorLabel} />
+                    </span>`}
+                ${canOpenProfile
+                  ? html`<button
+                      className="notif-author-name-btn"
+                      type="button"
+                      onClick=${() => onOpenProfile(item)}
+                      title="Open profile card"
+                    >
+                      <${AuthorName} value=${authorLabel} isStaffLabel=${isStaffLabel} />
+                    </button>`
+                  : html`<span className="notif-author-name-static">
+                      <${AuthorName} value=${authorLabel} isStaffLabel=${isStaffLabel} />
+                    </span>`}
+                ${isSystemAuthor
+                  ? html``
+                  : html`<span className=${`profile-owned-badge notif-rank-pill rank-${authorRankSlug}`.trim()}>
+                      <span>${authorRank}</span>
+                    </span>`}
+              </div>
             </div>
-            ${canOpenProfile
-              ? html`<button
-                  className="notif-profile-peek"
-                  type="button"
-                  onClick=${() => onOpenProfile(item)}
-                  title="Open profile card"
-                  aria-label="Open profile card"
-                >
-                  <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <path fill="currentColor" d="M12 3a5 5 0 100 10 5 5 0 000-10zm0 12c-4.2 0-7.5 2.2-8.6 5.4-.2.6.3 1.1.9 1.1h15.4c.6 0 1.1-.6.9-1.1C19.5 17.2 16.2 15 12 15z"></path>
-                  </svg>
-                </button>`
-              : html``}
           </div>
           ${item.readMoreUrl
             ? html`<div className="notif-actions">

@@ -4867,7 +4867,7 @@ body[data-theme="dark"] .store-cta {
 .notif-author-row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 10px;
 }
 
@@ -4879,6 +4879,18 @@ body[data-theme="dark"] .store-cta {
   gap: 2px;
   margin-top: 2px;
   min-width: 0;
+}
+
+.notif-author-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.notif-author-prefix {
+  color: var(--muted);
 }
 
 .notif-profile-peek {
@@ -4893,16 +4905,47 @@ body[data-theme="dark"] .store-cta {
   justify-content: center;
   cursor: pointer;
   flex: 0 0 auto;
+  padding: 0;
+  overflow: hidden;
 }
 
-.notif-profile-peek svg {
-  width: 14px;
-  height: 14px;
+.notif-profile-peek.static {
+  cursor: default;
+}
+
+.notif-profile-avatar {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .notif-profile-peek:hover {
   color: var(--accent);
   border-color: var(--accent);
+}
+
+.notif-author-name-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.notif-author-name-btn:hover .author-name {
+  text-decoration: underline;
+}
+
+.notif-author-name-static {
+  display: inline-flex;
+  align-items: center;
+}
+
+.notif-rank-pill {
+  font-size: 11px;
+  padding: 3px 8px;
 }
 
 .notif-card .notification-timestamp {
