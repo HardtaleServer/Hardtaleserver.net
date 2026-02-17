@@ -88,7 +88,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.75";
+const VERSION = "1.3.77";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -188,6 +188,24 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.77",
+    date: "2026-02-17",
+    items: [
+      "Applied mobile-only sticky store comparison table behavior for `/store/ranks` (sticky first column + sticky header row).",
+      "Updated mobile table cell spacing/border treatment to a separated-column style with alternating row backgrounds for readability.",
+    ],
+  },
+  {
+    version: "1.3.76",
+    date: "2026-02-17",
+    items: [
+      "Moved Settings to modal-first behavior and removed the old inline dropdown interaction.",
+      "Added desktop cart icon hover gradient treatment to match notifications/settings hover style.",
+      "Moved mobile drawer Settings control below the profile preview card with side-aware left/right alignment.",
+      "Updated Store gateway cards to PNG-first presentation (removed top SVG icon above artwork) and scaled artwork larger.",
+    ],
+  },
   {
     version: "1.3.75",
     date: "2026-02-17",
@@ -4429,23 +4447,10 @@ function SettingsMenu({
   const [spinning, setSpinning] = useState(false);
   const [showLogoPicker, setShowLogoPicker] = useState(false);
   const [showDesktopLogoPicker, setShowDesktopLogoPicker] = useState(false);
-  const menuRef = useRef(null);
   const isMobileView =
     typeof window !== "undefined"
       ? isMobile || window.matchMedia("(max-width: 860px)").matches
       : isMobile;
-
-  useEffect(() => {
-    function onDocClick(event) {
-      if (!open) return;
-      if (menuRef.current && !menuRef.current.contains(event.target)) {
-        setOpen(false);
-        if (onOpenChange) onOpenChange(false);
-      }
-    }
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, [open]);
 
   function handleClick(event) {
     const buttonEl = event?.currentTarget;
@@ -4460,7 +4465,7 @@ function SettingsMenu({
   }
 
   return html`
-    <div className="settings" ref=${menuRef}>
+    <div className="settings">
       <button
         className=${`settings-button ${spinning ? "spin" : ""}`}
         title="Settings"
@@ -4476,7 +4481,16 @@ function SettingsMenu({
         <span className="settings-icon-mask" aria-hidden="true"></span>
       </button>
       ${open
-        ? html`<div className=${`settings-menu ${!isMobileView && placement === "right" ? "menu-right" : ""} ${!isMobileView && desktopStickyWide ? "menu-short" : ""}`}>
+        ? html`<${PopUp}
+            show=${open}
+            onClose=${() => {
+              setOpen(false);
+              if (onOpenChange) onOpenChange(false);
+            }}
+            title="Settings"
+            className="settings-modal-overlay"
+          >
+            <div className="settings-menu settings-modal-body">
             ${!isMobileView
               ? html`
                   <div className="settings-row">
@@ -4727,7 +4741,8 @@ function SettingsMenu({
                   </div>
                 </div>`
               : html``}
-          </div>`
+          </div>
+          <//>`
         : html``}
     </div>
   `;
@@ -4863,9 +4878,6 @@ function StoreGatewayPage() {
                 openSection(entry.path);
               }}
             >
-              <span className=${`block-icon ${entry.id}`.trim()} role="img" aria-hidden="true">
-                ${renderRankIcon(entry.iconType)}
-              </span>
               <img className="block-icon-image" src=${entry.imageSrc} alt="" aria-hidden="true" loading="lazy" />
               <p className="blocks-item-title">${entry.title}</p>
               <span className="blocks-item-copy">${entry.copy}</span>
@@ -10307,7 +10319,6 @@ function Layout() {
               <div className=${`mobile-top-actions ${menuSide === "left" ? "menu-left" : "menu-right"}`}>
                 ${menuSide === "left"
                   ? html`
-                      <${MobileSettingsButton} />
                       <${CartButton} onClick=${openCart} count=${cartCount} />
                       <button
                         className="settings-button mobile-menu"
@@ -10323,7 +10334,6 @@ function Layout() {
                     `
                   : html`
                       <${CartButton} onClick=${openCart} count=${cartCount} />
-                      <${MobileSettingsButton} />
                       <button
                         className="settings-button mobile-menu"
                         title="Menu"
@@ -10432,13 +10442,11 @@ function Layout() {
                     >
                       X
                     </button>
-                    <${MobileSettingsButton} />
                     <${SignedIn}>
                       <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
                     <//>
                   `
                 : html`
-                    <${MobileSettingsButton} />
                     <${SignedIn}>
                       <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
                     <//>
@@ -10484,6 +10492,9 @@ function Layout() {
                     className="store-owned-badge"
                   />
                 <//>
+              </div>
+              <div className=${`drawer-settings-row ${menuSide === "left" ? "left" : "right"}`.trim()}>
+                <${MobileSettingsButton} />
               </div>
             <//>
           </div>

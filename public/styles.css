@@ -608,7 +608,8 @@ body[data-theme="dark"] {
   }
 
   .settings-button:hover .settings-icon-mask,
-  .settings-button.notif:hover .notif-icon-mask {
+  .settings-button.notif:hover .notif-icon-mask,
+  .settings-button.cart-button:hover .cart-icon-mask {
     background: linear-gradient(270deg, var(--accent-2), var(--accent));
   }
 }
@@ -837,6 +838,21 @@ body[data-theme="dark"] {
   gap: 12px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
   z-index: 50;
+}
+
+.settings-modal-overlay .popup {
+  width: min(680px, 94vw);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.settings-modal-body {
+  position: static;
+  right: auto;
+  top: auto;
+  min-width: 0;
+  width: 100%;
+  box-shadow: none;
 }
 
 @keyframes badgeShine {
@@ -4699,8 +4715,8 @@ emoji-picker.reaction-picker-panel {
 
 .block-icon-image {
   width: 100%;
-  max-width: 220px;
-  height: 92px;
+  max-width: 320px;
+  height: 161px;
   object-fit: contain;
   filter: drop-shadow(0 8px 22px rgba(0, 0, 0, 0.28));
 }
@@ -6027,6 +6043,65 @@ body[data-theme="dark"] .store-cta {
     max-width: 100%;
   }
 
+  .store-comparison-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .store-comparison-table {
+    border: 0;
+    border-collapse: separate;
+    border-spacing: 6px 0;
+    width: 100%;
+    min-width: 760px;
+    text-align: left;
+  }
+
+  .store-comparison-table th,
+  .store-comparison-table td {
+    font-weight: 700;
+    min-width: 170px;
+    padding: 10px 25px;
+    text-align: center;
+    vertical-align: middle;
+    border: 1px solid var(--stroke);
+    border-left-width: 2px !important;
+    border-right-width: 2px !important;
+    background: var(--bg-soft);
+  }
+
+  .store-comparison-table thead tr:not(:last-child) th {
+    border-bottom: none;
+  }
+
+  .store-comparison-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: var(--bg-soft);
+    border-color: var(--stroke);
+    color: var(--text);
+  }
+
+  .store-comparison-table tr > th:first-child,
+  .store-comparison-table tr > td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    text-align: left;
+    background: color-mix(in srgb, var(--bg-soft) 96%, var(--bg) 4%);
+  }
+
+  .store-comparison-table thead tr > th:first-child {
+    background-color: transparent !important;
+    border-color: transparent !important;
+    z-index: 4;
+  }
+
+  .store-comparison-table tbody tr:nth-child(odd) td {
+    background: color-mix(in srgb, var(--bg-soft) 88%, var(--bg) 12%);
+  }
+
   .checkout-overlay .popup {
     width: min(94vw, 760px);
     max-height: 82vh;
@@ -6634,6 +6709,19 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   width: 100%;
   margin-bottom: 40px;
   transform: translateY(-16px);
+}
+
+.drawer-settings-row {
+  display: flex;
+  margin-top: -28px;
+}
+
+.drawer-settings-row.right {
+  justify-content: flex-end;
+}
+
+.drawer-settings-row.left {
+  justify-content: flex-start;
 }
 
 .drawer-user-right {
