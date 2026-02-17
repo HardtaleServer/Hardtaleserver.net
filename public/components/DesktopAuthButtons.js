@@ -94,7 +94,7 @@ export default function DesktopAuthButtons({
         <//>
         <${SignedIn}>
           <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
-          ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
+          <${CartButton} onClick=${openCart} count=${cartCount} />
           <span className="user-button">
             <button
               className="user-button-trigger"

@@ -86,7 +86,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.62";
+const VERSION = "1.3.63";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -177,6 +177,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.63",
+    date: "2026-02-17",
+    items: [
+      "Reduced desktop navbar hover re-renders to stop nav/cart flicker while mousing between top navigation buttons.",
+      "Kept desktop cart button mounted even with zero items so it no longer disappears between auth/cart state updates.",
+      "Expanded bug report/support flows with dedicated image/video evidence URL support and clickable link rendering in support threads.",
+    ],
+  },
   {
     version: "1.3.62",
     date: "2026-02-17",
@@ -971,6 +980,26 @@ function buildTicketBodyWithAttachedError(baseBody, errorContext) {
     SUPPORT_ERROR_MARKER_END,
   ].join("\n");
   return `${body}\n\n${marker}`.trim();
+}
+
+function parseEvidenceLinks(rawValue) {
+  const unique = new Set();
+  String(rawValue || "")
+    .split(/\r?\n|,/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .forEach((entry) => {
+      if (/^https?:\/\//i.test(entry)) unique.add(entry);
+    });
+  return [...unique].slice(0, 10);
+}
+
+function appendEvidenceLinksToBody(baseBody, rawLinks) {
+  const body = String(baseBody || "").trim();
+  const links = parseEvidenceLinks(rawLinks);
+  if (links.length === 0) return body;
+  const evidenceBlock = ["### Evidence Links", ...links.map((link) => `- ${link}`)].join("\n");
+  return body ? `${body}\n\n${evidenceBlock}` : evidenceBlock;
 }
 
 function serializeCartItems(cart = []) {
@@ -4918,6 +4947,7 @@ function SupportPage({ isAdmin }) {
   const [newSubject, setNewSubject] = useState("");
   const [newCategory, setNewCategory] = useState("support");
   const [newBody, setNewBody] = useState("");
+  const [newEvidenceLinks, setNewEvidenceLinks] = useState("");
   const [errorContextOptions, setErrorContextOptions] = useState(() => readSupportErrorContexts());
   const [selectedErrorContextId, setSelectedErrorContextId] = useState("");
   const [chatDraft, setChatDraft] = useState("");
@@ -4988,7 +5018,8 @@ function SupportPage({ isAdmin }) {
     const selectedErrorContext = errorContextOptions.find(
       (entry) => entry.id === selectedErrorContextId,
     );
-    const ticketBody = buildTicketBodyWithAttachedError(newBody, selectedErrorContext);
+    const ticketBodyBase = appendEvidenceLinksToBody(newBody, newEvidenceLinks);
+    const ticketBody = buildTicketBodyWithAttachedError(ticketBodyBase, selectedErrorContext);
     setStatus("Creating ticket...");
     try {
       const response = await apiFetchWithToken(getToken, true, "/api/forum/tickets", {
@@ -5006,6 +5037,7 @@ function SupportPage({ isAdmin }) {
       setNewSubject("");
       setNewCategory("support");
       setNewBody("");
+      setNewEvidenceLinks("");
       setSelectedErrorContextId("");
       setStatus("Ticket created.");
       await loadTickets();
@@ -5115,6 +5147,8 @@ function SupportPage({ isAdmin }) {
                 setNewCategory=${setNewCategory}
                 newBody=${newBody}
                 setNewBody=${setNewBody}
+                newEvidenceLinks=${newEvidenceLinks}
+                setNewEvidenceLinks=${setNewEvidenceLinks}
                 errorContextOptions=${errorContextOptions}
                 selectedErrorContextId=${selectedErrorContextId}
                 setSelectedErrorContextId=${setSelectedErrorContextId}
@@ -5157,13 +5191,13 @@ function getForumTemplateOptions(sectionId) {
         id: "bug-repro",
         label: "Bug reproduction report",
         content:
-          "## Bug Report\n\n### Summary\nShort summary of the bug.\n\n### Environment\n- Game version:\n- Region:\n- Device/OS:\n\n### Steps to Reproduce\n1. Step one\n2. Step two\n3. Step three\n\n### Expected Result\n\n### Actual Result\n\n### Screenshots / Video\n",
+          "## Bug Report\n\n### Summary\nShort summary of the bug.\n\n### Environment\n- Web version:\n- Region:\n- Device/OS:\n\n### Steps to Reproduce\n1. Step one\n2. Step two\n3. Step three\n\n### Expected Result\n\n### Actual Result\n\n### Screenshots / Video Links\n- Image URL:\n- Video URL:\n",
       },
       {
         id: "bug-crash",
         label: "Crash report",
         content:
-          "## Crash Report\n\n### What happened\nDescribe the crash.\n\n### Last action before crash\n\n### Error text\nPaste exact error text if available.\n\n### Frequency\n- [ ] Once\n- [ ] Sometimes\n- [ ] Every time\n\n### Extra context\n",
+          "## Crash Report\n\n### What happened\nDescribe the crash.\n\n### Last action before crash\n\n### Error text\nPaste exact error text if available.\n\n### Frequency\n- [ ] Once\n- [ ] Sometimes\n- [ ] Every time\n\n### Screenshots / Video Links\n- Image URL:\n- Video URL:\n\n### Extra context\n",
       },
     ];
   }
@@ -7041,6 +7075,7 @@ function NotFoundPage({
   const [newSubject, setNewSubject] = useState("");
   const [newCategory, setNewCategory] = useState("support");
   const [newBody, setNewBody] = useState("");
+  const [newEvidenceLinks, setNewEvidenceLinks] = useState("");
   const [errorContextOptions, setErrorContextOptions] = useState(() => readSupportErrorContexts());
   const [selectedErrorContextId, setSelectedErrorContextId] = useState("");
   const [chatDraft, setChatDraft] = useState("");
@@ -7123,7 +7158,8 @@ function NotFoundPage({
     const selectedErrorContext = errorContextOptions.find(
       (entry) => entry.id === selectedErrorContextId,
     );
-    const ticketBody = buildTicketBodyWithAttachedError(newBody, selectedErrorContext);
+    const ticketBodyBase = appendEvidenceLinksToBody(newBody, newEvidenceLinks);
+    const ticketBody = buildTicketBodyWithAttachedError(ticketBodyBase, selectedErrorContext);
     setTicketStatus("Creating ticket...");
     try {
       const response = await apiFetchWithToken(getToken, true, "/api/forum/tickets", {
@@ -7141,6 +7177,7 @@ function NotFoundPage({
       setNewSubject("");
       setNewCategory("support");
       setNewBody("");
+      setNewEvidenceLinks("");
       setSelectedErrorContextId("");
       setTicketStatus("Ticket created.");
       await loadTickets();
@@ -7393,6 +7430,8 @@ function NotFoundPage({
                 setNewCategory=${setNewCategory}
                 newBody=${newBody}
                 setNewBody=${setNewBody}
+                newEvidenceLinks=${newEvidenceLinks}
+                setNewEvidenceLinks=${setNewEvidenceLinks}
                 errorContextOptions=${errorContextOptions}
                 selectedErrorContextId=${selectedErrorContextId}
                 setSelectedErrorContextId=${setSelectedErrorContextId}
@@ -9472,7 +9511,7 @@ function Layout() {
   }, [lockedNavHover, navActive]);
 
   function handleDesktopNavEnter(id) {
-    if (lockedNavHover) return;
+    if (!lockedNavHover) return;
     setHoveredNav(id);
   }
 
@@ -9499,7 +9538,7 @@ function Layout() {
               onClick=${item.onClick}
               onEnter=${() => handleDesktopNavEnter(item.id)}
               onLeave=${() => {
-                if (!lockedNavHover) setHoveredNav("");
+                if (lockedNavHover) setHoveredNav(navActive);
               }}
             />`,
           )}

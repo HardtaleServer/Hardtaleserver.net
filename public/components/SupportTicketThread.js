@@ -4,6 +4,7 @@ import htm from "htm";
 const html = htm.bind(React.createElement);
 const ERROR_MARKER_START = "[ATTACHED_ERROR_CONTEXT]";
 const ERROR_MARKER_END = "[/ATTACHED_ERROR_CONTEXT]";
+const URL_PATTERN = /(https?:\/\/[^\s]+)/gi;
 
 function parseMessageErrorContext(bodyValue) {
   const body = String(bodyValue || "");
@@ -31,6 +32,41 @@ function parseMessageErrorContext(bodyValue) {
       details: detailLines.join("\n").trim(),
     },
   };
+}
+
+function renderLinkedText(text) {
+  const value = String(text || "");
+  const parts = [];
+  let lastIndex = 0;
+  let match;
+  URL_PATTERN.lastIndex = 0;
+  while ((match = URL_PATTERN.exec(value))) {
+    const start = match.index;
+    const end = start + match[0].length;
+    if (start > lastIndex) {
+      parts.push(value.slice(lastIndex, start));
+    }
+    parts.push(
+      html`<a href=${match[0]} target="_blank" rel="noopener noreferrer">
+        ${match[0]}
+      </a>`,
+    );
+    lastIndex = end;
+  }
+  if (lastIndex < value.length) {
+    parts.push(value.slice(lastIndex));
+  }
+  return parts;
+}
+
+function renderMultilineBody(bodyValue) {
+  const lines = String(bodyValue || "").split(/\r?\n/);
+  return lines.map((line, index) =>
+    html`<span key=${`line-${index}`}>
+      ${renderLinkedText(line)}
+      ${index < lines.length - 1 ? html`<br />` : html``}
+    </span>`,
+  );
 }
 
 export default function SupportTicketThread({
@@ -74,7 +110,7 @@ export default function SupportTicketThread({
               <div className="changelog-date">${formatTimestamp(message.createdAt)}</div>
             </div>
             <div className="muted">${message.role.toUpperCase()}</div>
-            <p>${parsed.cleanBody}</p>
+            <p>${renderMultilineBody(parsed.cleanBody)}</p>
             ${isAdmin && parsed.errorContext
               ? html`<div className="ticket-error-context">
                   <div className="ticket-error-context-title">Attached Error Context</div>

@@ -11,6 +11,8 @@ export default function SupportTicketForm({
   setNewCategory,
   newBody,
   setNewBody,
+  newEvidenceLinks,
+  setNewEvidenceLinks,
   errorContextOptions = [],
   selectedErrorContextId = "",
   setSelectedErrorContextId,
@@ -40,6 +42,12 @@ export default function SupportTicketForm({
         onInput=${(event) => setNewBody(event.target.value)}
         required
       ></textarea>
+      <textarea
+        placeholder="Evidence links (image/video URLs, one per line)"
+        value=${newEvidenceLinks || ""}
+        onInput=${(event) => setNewEvidenceLinks && setNewEvidenceLinks(event.target.value)}
+      ></textarea>
+      <div className="muted">Accepted evidence links start with https:// or http://.</div>
       ${Array.isArray(errorContextOptions) && errorContextOptions.length > 0
         ? html`<label className="settings-row">
             <span>Attach redacted error context</span>
