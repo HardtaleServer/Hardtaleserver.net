@@ -18,6 +18,7 @@ import SupportTicketThread from "./components/SupportTicketThread.js";
 import AppRoutes from "./components/AppRoutes.js";
 import RankBadge from "./components/RankBadge.js";
 import ProfilePreviewButton from "./components/ProfilePreviewButton.js";
+import ProfileCardLayout from "./components/ProfileCardLayout.js";
 import ProfileAchievementsCard from "./components/ProfileAchievementsCard.js";
 import ForumRichEditor, { ForumRenderedMarkdown } from "./components/ForumRichEditor.js";
 import ToastSystem, { APP_TOAST_EVENT, createToastPayload, emitAppToast } from "./components/ToastSystem.js";
@@ -4585,21 +4586,22 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
       className="store-profile-preview-overlay"
     >
       ${previewItem
-        ? html`<div className="profile-card store-profile-preview-card">
-            <img className="profile-card-avatar" src=${storePreviewImage} alt=${storePreviewName} />
-            <div className=${`profile-card-name rank-${getStoreRankSlug(previewItem)}`.trim()}>
-              ${storePreviewName}
-            </div>
-            ${storePreviewUsername
-              ? html`<div className="profile-card-username">@${storePreviewUsername}</div>`
-              : html``}
-            <div className=${`comment-rank profile-card-rank rank-${getStoreRankSlug(previewItem)}`.trim()}>
+        ? html`<${ProfileCardLayout}
+            className="store-profile-preview-card"
+            avatarClassName="profile-card-avatar"
+            avatarSrc=${storePreviewImage}
+            avatarAlt=${storePreviewName}
+            nameClassName=${`profile-card-name rank-${getStoreRankSlug(previewItem)}`.trim()}
+            name=${storePreviewName}
+            username=${storePreviewUsername}
+            rankNode=${html`<div className=${`comment-rank profile-card-rank rank-${getStoreRankSlug(previewItem)}`.trim()}>
               ${(() => {
                 const iconType = getRankIconType(getStoreRankLabel(previewItem));
                 return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
                   <span>${getStoreRankLabel(previewItem)}</span>`;
               })()}
-            </div>
+            </div>`}
+          >
             <div className=${`comment-rank store-rank-title rank-${getStoreRankSlug(previewItem)}`.trim()}>
               ${(() => {
                 const iconType = getRankIconType(getStoreRankLabel(previewItem));
@@ -4615,7 +4617,7 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
                 )}
               </div>
             </div>
-          </div>`
+          <//>`
         : html``}
     <//>
     <${PopUp} show=${showTicket} onClose=${() => setShowTicket(false)} title="Send a Ticket">
@@ -9863,45 +9865,34 @@ function Layout() {
         className="profile-card-overlay"
       >
         ${notificationProfileUser
-          ? html`<div className="profile-card">
-              <img
-                className=${`profile-card-avatar avatar-rank-${String(
-                  notificationProfileUser.rankLabel || "Unregistered",
-                )
-                  .trim()
-                  .toLowerCase()
-                  .replace(/[^a-z0-9]+/g, "-")}`.trim()}
-                src=${notificationProfileUser.image}
-                alt=${notificationProfileUser.name}
-              />
-              <div
-                className=${`profile-card-name ${
-                  notificationProfileUser.useRankFont === true ? "rank-font-on" : "rank-font-off"
-                } ${
-                  notificationProfileUser.showDonorGradient === false
-                    ? "donor-gradient-off"
-                    : "donor-gradient-on"
-                } rank-${String(
-                  notificationProfileUser.rankLabel || "Unregistered",
-                )
-                  .trim()
-                  .toLowerCase()
-                  .replace(/[^a-z0-9]+/g, "-")}`.trim()}
-              >
-                ${notificationProfileUser.name}
-              </div>
-              ${notificationProfileUser.username
-                ? html`<div className="profile-card-username">@${notificationProfileUser.username}</div>`
-                : html``}
-              <div className="profile-card-link-meta">
-                <span className="muted">Hytale</span>
-                <span>${notificationProfileUser.hytalePlayerName || "N/A"}</span>
-              </div>
-              <div className="profile-card-link-meta">
-                <span className="muted">UUID</span>
-                <span>${notificationProfileUser.hytalePlayerUuid || "N/A"}</span>
-              </div>
-              <div
+          ? html`<${ProfileCardLayout}
+              avatarClassName=${`profile-card-avatar avatar-rank-${String(
+                notificationProfileUser.rankLabel || "Unregistered",
+              )
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-")}`.trim()}
+              avatarSrc=${notificationProfileUser.image}
+              avatarAlt=${notificationProfileUser.name}
+              nameClassName=${`profile-card-name ${
+                notificationProfileUser.useRankFont === true ? "rank-font-on" : "rank-font-off"
+              } ${
+                notificationProfileUser.showDonorGradient === false
+                  ? "donor-gradient-off"
+                  : "donor-gradient-on"
+              } rank-${String(
+                notificationProfileUser.rankLabel || "Unregistered",
+              )
+                .trim()
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-")}`.trim()}
+              name=${notificationProfileUser.name}
+              username=${notificationProfileUser.username}
+              metaRows=${[
+                { label: "Hytale", value: notificationProfileUser.hytalePlayerName || "N/A" },
+                { label: "UUID", value: notificationProfileUser.hytalePlayerUuid || "N/A" },
+              ]}
+              rankNode=${html`<div
                 className=${`comment-rank ${
                   notificationProfileUser.staff
                     ? `staff ${resolveStaffRoleClass(notificationProfileUser)}`.trim()
@@ -9926,7 +9917,8 @@ function Layout() {
                   return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
                     <span>${getRankDisplayLabel(notificationProfileUser.rankLabel || "Unregistered")}</span>`;
                 })()}
-              </div>
+              </div>`}
+            >
               <div className="profile-card-subtabs" role="tablist" aria-label="Profile details">
                 <button
                   type="button"
@@ -9946,7 +9938,7 @@ function Layout() {
               ${notificationProfileInfoTab === "groups"
                 ? html`${renderProfileGroupsCard(notificationProfileUser)}`
                 : html`${renderStaffBadge(notificationProfileUser)}${renderOwnedRankBadges(notificationProfileUser)}`}
-            </div>`
+            <//>`
           : html``}
       <//>
       <${PopUp}
