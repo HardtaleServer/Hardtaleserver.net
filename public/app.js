@@ -87,13 +87,15 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.66";
+const VERSION = "1.3.67";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
 const FEATURED_BADGE_ICON_SVG = "/Images/SVGs/ui/Featured.svg";
 const DELETE_ICON_SVG = "/Images/SVGs/ui/Delete.svg";
 const NOTIFICATIONS_ICON_SVG = "/Images/SVGs/ui/Notifications.svg";
+const BASKET_ICON_SVG = "/Images/SVGs/ui/Basket.svg";
+const DRAWER_MENU_ICON_SVG = "/Images/SVGs/ui/DrawerMenu.svg";
 const WARNING_STATUS_ICON_SVG = "/Images/SVGs/toasts/Warning.svg";
 const ACHIEVEMENT_STAR_ICON_SVG = "/Images/SVGs/ui/Achievement_Star.svg";
 const LEADERBOARD_ICON_SVG = "/Images/SVGs/ui/Leaderboard_SVG.svg";
@@ -101,9 +103,10 @@ const LINKED_STATUS_ICON_SVG = "/Images/SVGs/link/LINKED.svg";
 const UNLINKED_STATUS_ICON_SVG = "/Images/SVGs/link/UNLINKED.svg";
 const DEFAULT_PROFILE_AVATAR_SVG = "/Images/SVGs/ui/DEFAULT_PROFILE_AVATAR.svg";
 const STORE_RANK_ICON_SVG = {
-  star: "/Images/SVGs/ranks/RANK_HERO.svg",
+  star: "/Images/SVGs/ranks/RANK_PLACEHOLDER.svg",
   crown: "/Images/SVGs/ranks/RANK_LEGEND.svg",
-  shield: "/Images/SVGs/ranks/RANK_MYTHIC.svg",
+  shield: "/Images/SVGs/ranks/RANK_HERO.svg",
+  mythic: "/Images/SVGs/ranks/RANK_MYTHIC.svg",
 };
 const STAFF_EMAILS = new Set([
   "chashsmurfis@gmail.com",
@@ -135,6 +138,8 @@ const DESKTOP_LOGO_MAP = MOBILE_LOGO_MAP;
 const CRITICAL_IMAGE_SOURCES = [
   LOGO_SRC,
   "/Images/SVGs/ui/SETTINGS_SVG.svg",
+  BASKET_ICON_SVG,
+  DRAWER_MENU_ICON_SVG,
   "/assets/HardTale_H_Fiery.png",
   "/assets/HardTale_H_Golden.png",
   "/assets/HardTale_H_GreyScale.png",
@@ -178,6 +183,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.67",
+    date: "2026-02-17",
+    items: [
+      "Moved mobile basket and drawer menu buttons to the new dedicated UI SVG assets for stable icon rendering.",
+      "Renamed donor-rank SVG assets for cleaner conventions (`RANK_MYTHIC` now points to the new Mythic art, previous file moved to `RANK_PLACEHOLDER`).",
+      "Updated shared rank icon mapping constants to match the new mythic/placeholder naming scheme.",
+    ],
+  },
   {
     version: "1.3.66",
     date: "2026-02-17",
@@ -4664,9 +4678,11 @@ function CartButton({ onClick, count }) {
       title="Cart"
       onClick=${onClick}
     >
-      <svg viewBox="0 0 24 24" aria-hidden="true">
-        <path d="M7 18a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm10 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM6.2 6h15.1l-1.6 8.1a2 2 0 0 1-2 1.6H8.1a2 2 0 0 1-2-1.6L4.4 3H2V1h3a1 1 0 0 1 1 .8L6.2 6z" />
-      </svg>
+      <span
+        className="cart-icon-mask"
+        aria-hidden="true"
+        style=${{ "--cart-icon": `url(${BASKET_ICON_SVG})` }}
+      ></span>
       ${count > 0 ? html`<span className="cart-badge" key=${count}>${count}</span>` : html``}
     </button>
   `;
@@ -9951,9 +9967,11 @@ function Layout() {
                         title="Menu"
                         onClick=${() => setShowMobileNav(true)}
                       >
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />
-                        </svg>
+                        <span
+                          className="mobile-menu-icon-mask"
+                          aria-hidden="true"
+                          style=${{ "--menu-icon": `url(${DRAWER_MENU_ICON_SVG})` }}
+                        ></span>
                       </button>
                     `
                   : html`
@@ -9964,9 +9982,11 @@ function Layout() {
                         title="Menu"
                         onClick=${() => setShowMobileNav(true)}
                       >
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M4 6h16v2H4V6zm0 5h16v2H4v-2zm0 5h16v2H4v-2z" />
-                        </svg>
+                        <span
+                          className="mobile-menu-icon-mask"
+                          aria-hidden="true"
+                          style=${{ "--menu-icon": `url(${DRAWER_MENU_ICON_SVG})` }}
+                        ></span>
                       </button>
                     `}
               </div>
@@ -10310,11 +10330,16 @@ function Layout() {
             <p className="muted connect-tip">Use <strong>CTRL+V</strong> to paste quickly.</p>
           </div>
           <div className="connect-ip">
-            <span>${SERVER_IP}</span>
+            <span className="connect-ip-value">${SERVER_IP}</span>
             <${CopyAction}
-              className="button primary"
+              className="connect-ip-copy"
+              mode="icon"
+              hoverGradient=${true}
               label="Copy IP"
               valueToCopy=${SERVER_IP}
+              toastEnabled=${true}
+              toastMessage=${`${SERVER_IP} copied to clipboard.`}
+              title="Copy IP"
             />
           </div>
         </div>

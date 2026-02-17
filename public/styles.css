@@ -621,7 +621,9 @@ body[data-theme="dark"] {
 }
 
 .settings-icon-mask,
-.notif-icon-mask {
+.notif-icon-mask,
+.cart-icon-mask,
+.mobile-menu-icon-mask {
   width: 18px;
   height: 18px;
   display: block;
@@ -642,6 +644,16 @@ body[data-theme="dark"] {
 .notif-icon-mask {
   -webkit-mask-image: var(--notif-icon, url("/Images/SVGs/ui/Notifications.svg"));
   mask-image: var(--notif-icon, url("/Images/SVGs/ui/Notifications.svg"));
+}
+
+.cart-icon-mask {
+  -webkit-mask-image: var(--cart-icon, url("/Images/SVGs/ui/Basket.svg"));
+  mask-image: var(--cart-icon, url("/Images/SVGs/ui/Basket.svg"));
+}
+
+.mobile-menu-icon-mask {
+  -webkit-mask-image: var(--menu-icon, url("/Images/SVGs/ui/DrawerMenu.svg"));
+  mask-image: var(--menu-icon, url("/Images/SVGs/ui/DrawerMenu.svg"));
 }
 
 .settings-button.spin .settings-icon-mask {
@@ -697,7 +709,7 @@ body[data-theme="dark"] {
   animation: cartDrop 0.25s ease;
 }
 
-.cart-button.cart-pop svg {
+.cart-button.cart-pop .cart-icon-mask {
   animation: cartDrop 0.25s ease;
 }
 
@@ -1773,13 +1785,21 @@ body[data-theme="light"] .button.primary {
 .connect-ip {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  border: 1px solid var(--stroke);
-  border-radius: 12px;
-  padding: 10px 12px;
-  background: var(--bg-soft);
+  justify-content: center;
+  gap: 8px;
   font-weight: 600;
+}
+
+.connect-ip-value {
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  background-image: linear-gradient(270deg, var(--accent-2), var(--accent));
+  background-size: 220% 100%;
+  animation: staffReflect 2.4s ease-in-out infinite reverse;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
 }
 
 .grid {
@@ -3646,6 +3666,28 @@ emoji-picker.reaction-picker-panel {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+}
+
+.copy-action-btn.icon-only {
+  gap: 0;
+  padding: 0;
+  min-width: 16px;
+  min-height: 16px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+}
+
+.copy-action-btn.icon-only .copy-action-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.copy-action-btn.hover-staff-gradient:hover .copy-action-icon,
+.copy-action-btn.hover-staff-gradient:focus-visible .copy-action-icon {
+  background-image: linear-gradient(270deg, var(--accent-2), var(--accent));
+  background-size: 220% 100%;
+  animation: staffReflect 2.4s ease-in-out infinite reverse;
 }
 
 .copy-action-icon {
