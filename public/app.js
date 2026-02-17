@@ -8883,7 +8883,7 @@ function VotePage() {
   `;
 }
 
-function LinkPage({ onClose = null }) {
+function LinkPage({ onClose = null, isLinkedAccount = false }) {
   const location = useLocation();
   const { getToken, isSignedIn, isLoaded: isAuthLoaded } = useAuth();
   const { openSignIn } = useClerk();
@@ -8966,10 +8966,11 @@ function LinkPage({ onClose = null }) {
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [cooldownLeft, setCooldownLeft] = useState(0);
   const [linkedInfo, setLinkedInfo] = useState({
-    linked: false,
+    linked: Boolean(isLinkedAccount),
     maskedPlayerUuid: "",
     playerName: "",
   });
+  const [linkStatusInitialized, setLinkStatusInitialized] = useState(Boolean(isLinkedAccount));
   const [linkDebugInfo, setLinkDebugInfo] = useState({
     loading: false,
     error: "",
@@ -8987,6 +8988,12 @@ function LinkPage({ onClose = null }) {
   const urlCode = strictQuery.code;
   const isCooldownActive = cooldownLeft > 0;
   const debugCode = isComplete ? fullCode : urlCode;
+
+  useEffect(() => {
+    if (!isLinkedAccount) return;
+    setLinkedInfo((prev) => ({ ...prev, linked: true }));
+    setLinkStatusInitialized(true);
+  }, [isLinkedAccount]);
 
   useEffect(() => {
     const parsedCode = strictQuery.code;
@@ -9046,13 +9053,14 @@ function LinkPage({ onClose = null }) {
 
   useEffect(() => {
     if (!isAuthLoaded) return;
+    if (!linkStatusInitialized) return;
     if (linkedInfo.linked) return;
     if (!urlCode || !LINK_CODE_REGEX.test(urlCode)) return;
     if (autoSubmittedCodeRef.current === urlCode) return;
     if (isSubmitting || isCooldownActive) return;
     autoSubmittedCodeRef.current = urlCode;
     onVerifyClick();
-  }, [urlCode, isAuthLoaded, isSubmitting, isCooldownActive, linkedInfo.linked]);
+  }, [urlCode, isAuthLoaded, linkStatusInitialized, isSubmitting, isCooldownActive, linkedInfo.linked]);
 
   useEffect(() => {
     let cancelled = false;
@@ -9200,6 +9208,10 @@ function LinkPage({ onClose = null }) {
         });
       } catch {
         // noop
+      } finally {
+        if (!cancelled) {
+          setLinkStatusInitialized(true);
+        }
       }
     }
     loadStatus();
@@ -9796,6 +9808,11 @@ function Layout() {
         setIsLinkedAccount(false);
         return;
       }
+      const onStoreRanksRoute = location.pathname === "/store/ranks";
+      const onLinkRoute = location.pathname === "/link";
+      if (isLinkedAccount && !onStoreRanksRoute && !onLinkRoute) {
+        return;
+      }
       try {
         const response = await apiFetchWithToken(getToken, true, "/api/link/status");
         const data = await response.json().catch(() => ({}));
@@ -9810,7 +9827,7 @@ function Layout() {
     return () => {
       alive = false;
     };
-  }, [isAuthLoaded, isSignedIn, userId, location.pathname, getToken]);
+  }, [isAuthLoaded, isSignedIn, userId, location.pathname, getToken, isLinkedAccount]);
 
   useEffect(() => {
     let alive = true;
@@ -11010,7 +11027,7 @@ function Layout() {
       ${isLinkRoute
         ? html`<div className="popup-overlay link-modal-overlay" onClick=${closeLinkModal}>
             <div className="popup link-modal-shell" onClick=${(event) => event.stopPropagation()}>
-              <${LinkPage} onClose=${closeLinkModal} />
+              <${LinkPage} onClose=${closeLinkModal} isLinkedAccount=${isLinkedAccount} />
             </div>
           </div>`
         : html``}
