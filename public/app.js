@@ -88,7 +88,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.87";
+const VERSION = "1.3.88";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -189,6 +189,14 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.88",
+    date: "2026-02-17",
+    items: [
+      "Increased `/store/ranks` card artwork size substantially and rebalanced card row heights so lower content shifts down cleanly.",
+      "Slightly increased rank display typography sizing for Hero/Legend/Mythic card labels to match larger artwork presentation.",
+    ],
+  },
   {
     version: "1.3.87",
     date: "2026-02-17",

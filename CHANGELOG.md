@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.88)
+- Increased `/store/ranks` card artwork size significantly and rebalanced card grid row heights so lower card content shifts down cleanly.
+- Slightly increased rank label typography size on rank cards to better match the larger artwork presentation.
+
 ## 2026-02-17 (v1.3.87)
 - Adjusted Rank Comparison sticky header offset so rank header cards sit higher and reduce overlap with top feature rows.
 - Removed the `Feature` label from the extended comparison table first column header.

@@ -4770,7 +4770,7 @@ emoji-picker.reaction-picker-panel {
   padding: 16px;
   position: relative;
   display: grid;
-  grid-template-rows: 88px 32px 34px 94px 26px minmax(160px, auto) auto auto;
+  grid-template-rows: 154px 36px 40px 96px 28px minmax(160px, auto) auto auto;
   align-items: start;
   gap: 10px;
   background: var(--bg-soft);
@@ -4836,8 +4836,8 @@ emoji-picker.reaction-picker-panel {
 
 .store-rank-card-art {
   width: 100%;
-  max-width: 168px;
-  height: 80px;
+  max-width: 100%;
+  height: clamp(132px, 24vw, 188px);
   object-fit: cover;
   border-radius: 12px;
   border: 1px solid var(--stroke);
@@ -4945,15 +4945,15 @@ emoji-picker.reaction-picker-panel {
 
 .store-profile-rank {
   justify-content: flex-start;
-  font-size: 12px;
-  min-height: 32px;
+  font-size: 14px;
+  min-height: 36px;
 }
 
 .store-rank-title {
   justify-content: center;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
-  min-height: 34px;
+  min-height: 40px;
 }
 
 .store-name {
