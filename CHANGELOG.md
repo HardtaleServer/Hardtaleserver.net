@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.89)
+- Scaled `/store` gateway PNG artwork up significantly on desktop and mobile for stronger visual coverage.
+- Adjusted gateway card image sizing so artwork spans card width more effectively above section text.
+
 ## 2026-02-17 (v1.3.88)
 - Increased `/store/ranks` card artwork size significantly and rebalanced card grid row heights so lower card content shifts down cleanly.
 - Slightly increased rank label typography size on rank cards to better match the larger artwork presentation.
