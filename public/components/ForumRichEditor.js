@@ -14,18 +14,6 @@ import {
 const html = htm.bind(React.createElement);
 const EMOJI_SET = ["😀", "😅", "🔥", "✅", "🎉", "💡", "⚠️", "🛠️", "❤️", "🙏"];
 
-function applyWithSelection(textarea, value, onChange, transform) {
-  if (!textarea || typeof onChange !== "function") return;
-  const start = textarea.selectionStart || 0;
-  const end = textarea.selectionEnd || start;
-  const result = transform(String(value || ""), start, end);
-  onChange(result.value);
-  requestAnimationFrame(() => {
-    textarea.focus();
-    textarea.setSelectionRange(result.selectionStart, result.selectionEnd);
-  });
-}
-
 function ForumRenderedMarkdown({ value = "", className = "" }) {
   const htmlValue = useMemo(() => markdownToSafeHtml(value), [value]);
   return html`<div className=${`forum-markdown-render ${className}`.trim()} dangerouslySetInnerHTML=${{ __html: htmlValue }} />`;
@@ -44,13 +32,72 @@ export default function ForumRichEditor({
 }) {
   const textareaRef = useRef(null);
   const fileRef = useRef(null);
+  const undoStackRef = useRef([]);
+  const redoStackRef = useRef([]);
+  const historyLimitRef = useRef(200);
+  const previousValueRef = useRef(String(value || ""));
   const [mode, setMode] = useState(initialMode);
   const [draftStatus, setDraftStatus] = useState("");
   const [showEmoji, setShowEmoji] = useState(false);
   const [toolbarExpanded, setToolbarExpanded] = useState(false);
+  const [historyTick, setHistoryTick] = useState(0);
   const draftKey = useMemo(() => buildDraftStorageKey("forum-editor-draft", draftScope), [draftScope]);
   const count = String(value || "").length;
   const tooShort = count > 0 && count < minLength;
+  const canUndo = undoStackRef.current.length > 0;
+  const canRedo = redoStackRef.current.length > 0;
+
+  function touchHistory() {
+    setHistoryTick((prev) => prev + 1);
+  }
+
+  function pushUndoSnapshot(snapshot) {
+    const text = String(snapshot || "");
+    const undo = undoStackRef.current;
+    if (undo.length > 0 && undo[undo.length - 1] === text) return;
+    undo.push(text);
+    if (undo.length > historyLimitRef.current) undo.shift();
+  }
+
+  function applyEditorValue(nextValue, options = {}) {
+    const current = String(value || "");
+    const next = String(nextValue || "");
+    if (next === current) return;
+    const track = options.track !== false;
+    if (track) {
+      pushUndoSnapshot(current);
+      redoStackRef.current = [];
+      touchHistory();
+    }
+    previousValueRef.current = next;
+    if (typeof onChange === "function") onChange(next);
+    const selection = options.selection;
+    if (selection && textareaRef.current) {
+      requestAnimationFrame(() => {
+        if (!textareaRef.current) return;
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(selection.start, selection.end);
+      });
+    }
+  }
+
+  function undo() {
+    if (undoStackRef.current.length === 0) return;
+    const current = String(value || "");
+    const previous = String(undoStackRef.current.pop() || "");
+    redoStackRef.current.push(current);
+    touchHistory();
+    applyEditorValue(previous, { track: false });
+  }
+
+  function redo() {
+    if (redoStackRef.current.length === 0) return;
+    const current = String(value || "");
+    const next = String(redoStackRef.current.pop() || "");
+    undoStackRef.current.push(current);
+    touchHistory();
+    applyEditorValue(next, { track: false });
+  }
 
   useEffect(() => {
     if (!autosaveEnabled) return;
@@ -73,22 +120,48 @@ export default function ForumRichEditor({
     return () => clearTimeout(timer);
   }, [value, autosaveEnabled, draftKey]);
 
+  useEffect(() => {
+    previousValueRef.current = String(value || "");
+  }, [value, historyTick]);
+
+  useEffect(() => {
+    undoStackRef.current = [];
+    redoStackRef.current = [];
+    previousValueRef.current = String(value || "");
+    touchHistory();
+  }, [draftKey]);
+
   function wrap(open, close = open) {
-    applyWithSelection(textareaRef.current, value, onChange, (text, start, end) =>
-      applyWrap(text, start, end, open, close),
-    );
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || start;
+    const result = applyWrap(String(value || ""), start, end, open, close);
+    applyEditorValue(result.value, {
+      selection: { start: result.selectionStart, end: result.selectionEnd },
+    });
   }
 
   function prefix(prefixValue) {
-    applyWithSelection(textareaRef.current, value, onChange, (text, start, end) =>
-      applyLinePrefix(text, start, end, prefixValue),
-    );
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || start;
+    const result = applyLinePrefix(String(value || ""), start, end, prefixValue);
+    applyEditorValue(result.value, {
+      selection: { start: result.selectionStart, end: result.selectionEnd },
+    });
   }
 
   function insert(text) {
-    applyWithSelection(textareaRef.current, value, onChange, (base, start, end) =>
-      insertAtSelection(base, start, end, text),
-    );
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || start;
+    const result = insertAtSelection(String(value || ""), start, end, text);
+    applyEditorValue(result.value, {
+      selection: { start: result.selectionStart, end: result.selectionEnd },
+    });
   }
 
   function onKeyDown(event) {
@@ -106,17 +179,30 @@ export default function ForumRichEditor({
       if (!url) return;
       const label = window.prompt("Display text", "Link") || "Link";
       insert(`[${label}](${url})`);
+    } else if (key === "z" && event.shiftKey) {
+      event.preventDefault();
+      redo();
+    } else if (key === "z") {
+      event.preventDefault();
+      undo();
+    } else if (key === "y") {
+      event.preventDefault();
+      redo();
     }
   }
 
   function applyTemplate(valueKey) {
     if (!valueKey || !onChange) return;
     if (valueKey === "help") {
-      onChange("## Help Request\n\n### Issue\nDescribe your issue.\n\n### Tried\n- Step 1\n- Step 2\n\n### Expected\nWhat should happen?");
+      applyEditorValue(
+        "## Help Request\n\n### Issue\nDescribe your issue.\n\n### Tried\n- Step 1\n- Step 2\n\n### Expected\nWhat should happen?",
+      );
     } else if (valueKey === "bug") {
-      onChange("## Bug Report\n\n### Summary\nShort summary.\n\n### Steps to Reproduce\n1. First step\n2. Second step\n\n### Expected\n\n### Actual\n");
+      applyEditorValue(
+        "## Bug Report\n\n### Summary\nShort summary.\n\n### Steps to Reproduce\n1. First step\n2. Second step\n\n### Expected\n\n### Actual\n",
+      );
     } else if (valueKey === "appeal") {
-      onChange("## Appeal\n\n### Context\nWhat happened?\n\n### Why Appeal\n\n### Additional Notes\n");
+      applyEditorValue("## Appeal\n\n### Context\nWhat happened?\n\n### Why Appeal\n\n### Additional Notes\n");
     }
   }
 
@@ -133,6 +219,8 @@ export default function ForumRichEditor({
 
       <div className=${`forum-editor-toolbar ${toolbarExpanded ? "expanded" : ""}`.trim()}>
         <button type="button" className="ghost-btn forum-editor-toolbar-toggle" onClick=${() => setToolbarExpanded((prev) => !prev)}>Tools</button>
+        <button type="button" className="ghost-btn" onClick=${undo} disabled=${!canUndo} title="Undo (Ctrl+Z)">Undo</button>
+        <button type="button" className="ghost-btn" onClick=${redo} disabled=${!canRedo} title="Redo (Ctrl+Y)">Redo</button>
         <button type="button" className="ghost-btn" onClick=${() => wrap("**")}><strong>B</strong></button>
         <button type="button" className="ghost-btn" onClick=${() => wrap("*")}><em>I</em></button>
         <button type="button" className="ghost-btn" onClick=${() => wrap("++")}>U</button>
@@ -186,7 +274,7 @@ export default function ForumRichEditor({
         />
         <button type="button" className="ghost-btn" onClick=${() => insert("\n---\n")}>HR</button>
         <button type="button" className="ghost-btn" onClick=${() => setShowEmoji((prev) => !prev)}>Emoji</button>
-        <button type="button" className="ghost-btn" onClick=${() => onChange(clearMarkdownFormatting(value))}>Clear</button>
+        <button type="button" className="ghost-btn" onClick=${() => applyEditorValue(clearMarkdownFormatting(value))}>Clear</button>
       </div>
 
       ${showEmoji
@@ -217,7 +305,7 @@ export default function ForumRichEditor({
               value=${value}
               maxLength=${maxLength}
               onKeyDown=${onKeyDown}
-              onInput=${(event) => onChange(event.target.value)}
+              onInput=${(event) => applyEditorValue(event.target.value)}
             ></textarea>`
           : html``}
         ${(mode === "preview" || mode === "split")
@@ -233,3 +321,4 @@ export default function ForumRichEditor({
 }
 
 export { ForumRenderedMarkdown };
+
