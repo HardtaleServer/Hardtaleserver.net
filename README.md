@@ -29,3 +29,13 @@ npm run dev
 
 ## License
 Private / internal use.
+
+## Forum Post Storage & Safe Rendering
+- Forum posts are now stored as Markdown in `forum_posts.body` with `forum_posts.bodyFormat = "markdown"` for new/edited posts.
+- Backwards compatibility is preserved: older records without `bodyFormat` continue to load and render.
+- Rendering is client-side through a safe Markdown renderer that:
+  - Escapes raw HTML
+  - Allows only safe links (`http`, `https`, `mailto`)
+  - Allows images from `http`, `https`, and `data:image/*`
+  - Blocks raw script/event payloads by construction (no raw HTML execution)
+- Preview and final post rendering use the same renderer so what users see in Preview matches published output.

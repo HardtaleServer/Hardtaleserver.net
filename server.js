@@ -1669,6 +1669,11 @@ function normalizeForumBody(value) {
   return normalizeText(value, 4000);
 }
 
+function normalizeForumBodyFormat(value) {
+  const format = normalizeText(value, 20).toLowerCase();
+  return format === "markdown" ? "markdown" : "plain";
+}
+
 function normalizeForumPost(doc) {
   if (!doc) return null;
   const stripped = stripMongoId(doc);
@@ -1686,6 +1691,7 @@ function normalizeForumPost(doc) {
     section: normalizeForumSection(stripped.section),
     title: normalizeForumTitle(stripped.title),
     body: normalizeForumBody(stripped.body),
+    bodyFormat: normalizeForumBodyFormat(stripped.bodyFormat),
     createdBy: normalizeText(stripped.createdBy, 128),
     authorName,
     authorRank: normalizeText(stripped.authorRank, 20) || "Unregistered",
@@ -3965,6 +3971,7 @@ app.post("/api/forum/posts", async (req, res) => {
     const section = normalizeForumSection(req.body?.section);
     const title = normalizeForumTitle(req.body?.title);
     const body = normalizeForumBody(req.body?.body);
+    const bodyFormat = normalizeForumBodyFormat(req.body?.bodyFormat || "markdown");
     if (!section || !title || !body) {
       return res.status(400).json({ error: "Missing or invalid forum post fields" });
     }
@@ -3990,6 +3997,7 @@ app.post("/api/forum/posts", async (req, res) => {
       section,
       title,
       body,
+      bodyFormat,
       createdBy: auth.userId,
       authorName: getUserDisplayName(user),
       authorRank,
@@ -4046,6 +4054,7 @@ app.patch("/api/forum/posts/:id", async (req, res) => {
 
     const nextTitle = normalizeForumTitle(req.body?.title);
     const nextBody = normalizeForumBody(req.body?.body);
+    const nextBodyFormat = normalizeForumBodyFormat(req.body?.bodyFormat || doc.bodyFormat || "markdown");
     if (!nextTitle || !nextBody) {
       return res.status(400).json({ error: "Missing or invalid forum post fields" });
     }
@@ -4077,6 +4086,7 @@ app.patch("/api/forum/posts/:id", async (req, res) => {
         $set: {
           title: nextTitle,
           body: nextBody,
+          bodyFormat: nextBodyFormat,
           updatedAt: now,
           editedAt: now,
           editedByUserId: auth.userId,

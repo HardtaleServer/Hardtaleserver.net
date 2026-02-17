@@ -18,6 +18,8 @@ import SupportTicketThread from "./components/SupportTicketThread.js";
 import AppRoutes from "./components/AppRoutes.js";
 import RankBadge from "./components/RankBadge.js";
 import ProfileAchievementsCard from "./components/ProfileAchievementsCard.js";
+import ForumRichEditor, { ForumRenderedMarkdown } from "./components/ForumRichEditor.js";
+import { markdownExcerpt } from "./components/forumMarkdown.js";
 import { getRankDisplayLabel, getRankIconType } from "./components/rankConfig.js";
 import {
   BrowserRouter,
@@ -4821,12 +4823,10 @@ function ForumPage({ isAdmin = false }) {
   const [forumHistoryTitle, setForumHistoryTitle] = useState("Post Edit History");
   const [forumSelfChooserOpen, setForumSelfChooserOpen] = useState(false);
   const [forumSelfChooserEntry, setForumSelfChooserEntry] = useState(null);
+  const FORUM_BODY_MIN_LENGTH = 30;
 
   function getForumPreviewText(body, limit = 220) {
-    const text = String(body || "").trim();
-    if (!text) return "";
-    if (text.length <= limit) return text;
-    return `${text.slice(0, limit).trimEnd()}...`;
+    return markdownExcerpt(body, limit);
   }
 
   function rankSlug(value) {
@@ -5697,7 +5697,16 @@ function ForumPage({ isAdmin = false }) {
   async function submitPost(event) {
     event.preventDefault();
     if (!selectedSectionId || !isSignedIn) return;
-    if (!newPostTitle.trim() || !newPostBody.trim()) return;
+    const trimmedTitle = newPostTitle.trim();
+    const trimmedBody = newPostBody.trim();
+    if (!trimmedTitle || !trimmedBody) {
+      setCreateStatus("Title and body are required.");
+      return;
+    }
+    if (trimmedBody.length < FORUM_BODY_MIN_LENGTH) {
+      setCreateStatus(`Body must be at least ${FORUM_BODY_MIN_LENGTH} characters.`);
+      return;
+    }
     setCreateStatus("Posting...");
     try {
       const response = await apiFetchWithToken(getToken, true, "/api/forum/posts", {
@@ -5705,8 +5714,9 @@ function ForumPage({ isAdmin = false }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           section: selectedSectionId,
-          title: newPostTitle,
-          body: newPostBody,
+          title: trimmedTitle,
+          body: trimmedBody,
+          bodyFormat: "markdown",
         }),
       });
       if (!response.ok) throw new Error("Failed");
@@ -5745,8 +5755,14 @@ function ForumPage({ isAdmin = false }) {
     if (!post || !editingPostId) return;
     const postId = String(post.id || "");
     if (!postId || postId !== editingPostId) return;
-    if (!editingPostTitle.trim() || !editingPostBody.trim()) {
+    const trimmedTitle = editingPostTitle.trim();
+    const trimmedBody = editingPostBody.trim();
+    if (!trimmedTitle || !trimmedBody) {
       setEditingPostStatus("Title and body are required.");
+      return;
+    }
+    if (trimmedBody.length < FORUM_BODY_MIN_LENGTH) {
+      setEditingPostStatus(`Body must be at least ${FORUM_BODY_MIN_LENGTH} characters.`);
       return;
     }
     setEditingPostStatus("Saving...");
@@ -5759,8 +5775,9 @@ function ForumPage({ isAdmin = false }) {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            title: editingPostTitle,
-            body: editingPostBody,
+            title: trimmedTitle,
+            body: trimmedBody,
+            bodyFormat: "markdown",
           }),
         },
       );
@@ -5911,13 +5928,15 @@ function ForumPage({ isAdmin = false }) {
                           onInput=${(event) => setEditingPostTitle(event.target.value)}
                           required
                         />
-                        <textarea
-                          rows="6"
+                        <${ForumRichEditor}
                           value=${editingPostBody}
-                          maxLength="4000"
-                          onInput=${(event) => setEditingPostBody(event.target.value)}
-                          required
-                        ></textarea>
+                          onChange=${setEditingPostBody}
+                          maxLength=${4000}
+                          minLength=${FORUM_BODY_MIN_LENGTH}
+                          draftScope=${`edit:${String(selectedPost.id || "")}`}
+                          showTemplatePicker=${false}
+                          placeholder="Update your post..."
+                        />
                         <div className="comment-actions right">
                           <button className="button primary" type="submit">Save</button>
                           <button className="button ghost-btn" type="button" onClick=${cancelEditPost}>
@@ -5926,11 +5945,10 @@ function ForumPage({ isAdmin = false }) {
                         </div>
                         ${editingPostStatus ? html`<div className="muted">${editingPostStatus}</div>` : html``}
                       </form>`
-                    : html`<p className=${`news-body-paragraph ${isForumPostForcedEdit(selectedPost) ? "forum-post-forced-body" : ""}`.trim()}>
-                        ${isForumPostForcedEdit(selectedPost)
-                          ? html`<strong>(STAFF FORCED EDIT): </strong>`
-                          : html``}${selectedPost.body}
-                      </p>`}
+                    : html`<${ForumRenderedMarkdown}
+                        value=${selectedPost.body}
+                        className=${`news-body-paragraph ${isForumPostForcedEdit(selectedPost) ? "forum-post-forced-body" : ""}`.trim()}
+                      />`}
                     <div className="forum-post-status-row">
                     ${isForumPostForcedEdit(selectedPost)
                       ? html`<span className="forum-post-forced-pill">STAFF FORCED EDIT</span>`
@@ -6157,7 +6175,6 @@ function ForumPage({ isAdmin = false }) {
                         </div>
                       </div>
                       <p className=${`news-body-paragraph forum-post-preview ${isForumPostForcedEdit(post) ? "forum-post-forced-body" : ""}`.trim()}>
-                        ${isForumPostForcedEdit(post) ? html`<strong>(STAFF FORCED EDIT): </strong>` : html``}
                         ${getForumPreviewText(post.body)}
                       </p>
                     </${Link}>
@@ -6200,13 +6217,15 @@ function ForumPage({ isAdmin = false }) {
                             onInput=${(event) => setEditingPostTitle(event.target.value)}
                             required
                           />
-                          <textarea
-                            rows="5"
+                          <${ForumRichEditor}
                             value=${editingPostBody}
-                            maxLength="4000"
-                            onInput=${(event) => setEditingPostBody(event.target.value)}
-                            required
-                          ></textarea>
+                            onChange=${setEditingPostBody}
+                            maxLength=${4000}
+                            minLength=${FORUM_BODY_MIN_LENGTH}
+                            draftScope=${`edit:${String(post.id || "")}`}
+                            showTemplatePicker=${false}
+                            placeholder="Update your post..."
+                          />
                           <div className="comment-actions right">
                             <button className="button primary" type="submit">Save</button>
                             <button className="button ghost-btn" type="button" onClick=${cancelEditPost}>
@@ -6313,14 +6332,15 @@ function ForumPage({ isAdmin = false }) {
               maxLength="140"
               required
             />
-            <textarea
-              rows="5"
-              placeholder="Write your post..."
+            <${ForumRichEditor}
               value=${newPostBody}
-              onInput=${(event) => setNewPostBody(event.target.value)}
-              maxLength="4000"
-              required
-            ></textarea>
+              onChange=${setNewPostBody}
+              maxLength=${4000}
+              minLength=${FORUM_BODY_MIN_LENGTH}
+              draftScope=${`create:${selectedSectionId}`}
+              showTemplatePicker=${true}
+              placeholder="Write your post..."
+            />
             <div className="comment-actions right">
               <span className="muted">Posting as ${getUserDisplayName(user)}</span>
               <button className="button primary" type="submit">Post</button>
