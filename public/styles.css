@@ -948,13 +948,25 @@ body[data-theme="dark"] {
 }
 
 .forum-editor-toolbar {
-  display: flex;
+  display: none;
   flex-wrap: wrap;
   gap: 6px;
 }
 
+.forum-editor-toolbar.expanded {
+  display: flex;
+}
+
 .forum-editor-toolbar-toggle {
   display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.forum-editor-tools-icon {
+  width: 13px;
+  height: 13px;
+  object-fit: contain;
 }
 
 .forum-editor-emoji-row {
@@ -1392,18 +1404,6 @@ body[data-theme="dark"] {
   .forum-create-inline {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .forum-editor-toolbar {
-    display: none;
-  }
-
-  .forum-editor-toolbar.expanded {
-    display: flex;
-  }
-
-  .forum-editor-toolbar-toggle {
-    display: inline-flex;
   }
 
   .forum-editor-body.mode-split {

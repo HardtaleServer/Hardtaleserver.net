@@ -12,6 +12,7 @@ import {
 } from "./forumEditorUtils.js";
 
 const html = htm.bind(React.createElement);
+const ADMIN_PANEL_ICON_SVG = "/Images/SVGs/ui/Admin_Panel.svg";
 function ToolIcon({ name }) {
   if (name === "undo") {
     return html`<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 5a7 7 0 00-6.2 3.8L3 6v7h7l-2.7-2.7A5 5 0 1112 17h-1v2h1a7 7 0 000-14z"/></svg>`;
@@ -261,6 +262,9 @@ export default function ForumRichEditor({
     } else if (key === "i") {
       event.preventDefault();
       wrap("*");
+    } else if (key === "u") {
+      event.preventDefault();
+      wrap("++");
     } else if (key === "k") {
       event.preventDefault();
       const url = window.prompt("Enter URL (https://...)");
@@ -295,8 +299,17 @@ export default function ForumRichEditor({
               <button type="button" className=${`ghost-btn ${mode === "preview" ? "active" : ""}`} onClick=${() => setMode("preview")}>Preview</button>
               <button type="button" className=${`ghost-btn ${mode === "split" ? "active" : ""}`} onClick=${() => setMode("split")}>Split</button>
             </div>`
-          : html`<div className="forum-editor-mode-group muted">Write mode</div>`}
-        <button type="button" className="ghost-btn forum-editor-toolbar-toggle" onClick=${() => setToolbarExpanded((prev) => !prev)}>Tools</button>
+          : html``}
+        <button
+          type="button"
+          className="ghost-btn forum-editor-toolbar-toggle"
+          onClick=${() => setToolbarExpanded((prev) => !prev)}
+          aria-expanded=${toolbarExpanded ? "true" : "false"}
+          title="Toggle tools"
+        >
+          <img className="forum-editor-tools-icon" src=${ADMIN_PANEL_ICON_SVG} alt="" aria-hidden="true" />
+          <span>Tools</span>
+        </button>
         <div className="forum-editor-status muted">${draftStatus}</div>
       </div>
 
