@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.94)
+- Updated donor base rank colors in shared site palette: Legend -> `#F7C627`, Mythic -> `#E45579`.
+
+## 2026-02-17 (v1.3.93)
+- Added reusable `CountBadge` component for shared count-pill UI usage.
+- Migrated cart/notification counters and store dropdown counters to use the shared count badge component.
+- Added forum/news section count pills for quicker post-volume context.
+
 ## 2026-02-17 (v1.3.92)
 - Restored empty-cart visibility behavior so the cart button hides when cart count is zero.
 

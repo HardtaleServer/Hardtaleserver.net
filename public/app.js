@@ -34,6 +34,7 @@ import SubscriptionsPage from "./components/SubscriptionsPage.js";
 import CopyAction from "./components/CopyAction.js";
 import GradientScrollArea from "./components/GradientScrollArea.js";
 import InlineDropdownToggle from "./components/InlineDropdownToggle.js";
+import CountBadge from "./components/CountBadge.js";
 import { markdownExcerpt } from "./components/forumMarkdown.js";
 import { getRankDisplayLabel, getRankIconType } from "./components/rankConfig.js";
 import {
@@ -89,7 +90,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.92";
+const VERSION = "1.3.94";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -190,6 +191,22 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.94",
+    date: "2026-02-17",
+    items: [
+      "Updated donor base rank colors: Legend now `#F7C627` and Mythic now `#E45579` across shared rank palette styling.",
+    ],
+  },
+  {
+    version: "1.3.93",
+    date: "2026-02-17",
+    items: [
+      "Added reusable `CountBadge` component for shared count-pill UI across cart, notifications, dropdown toggles, and section headers.",
+      "Migrated cart/notification counters and store perks dropdown counter to `CountBadge` for consistent styling/behavior.",
+      "Added forum/news header count pills (`News & Updates`, `Forum Highlights`, and `Posts in ...`) to surface post volume quickly.",
+    ],
+  },
   {
     version: "1.3.92",
     date: "2026-02-17",
@@ -4922,7 +4939,7 @@ function CartButton({ onClick, count }) {
         aria-hidden="true"
         style=${{ "--cart-icon": `url(${BASKET_ICON_SVG})` }}
       ></span>
-      ${count > 0 ? html`<span className="cart-badge" key=${count}>${count}</span>` : html``}
+      ${count > 0 ? html`<${CountBadge} count=${count} className="cart-badge" />` : html``}
     </button>
   `;
 }
@@ -4947,7 +4964,7 @@ function NotificationsButton({ count, onClick, flashEnabled }) {
         aria-hidden="true"
         style=${{ "--notif-icon": `url(${NOTIFICATIONS_ICON_SVG})` }}
       ></span>
-      ${count > 0 ? html`<span className="cart-badge notif-badge">${count}</span>` : html``}
+      ${count > 0 ? html`<${CountBadge} count=${count} className="cart-badge notif-badge" />` : html``}
     </button>
   `;
 }
@@ -7485,7 +7502,10 @@ function ForumPage({ isAdmin = false }) {
             </section>`}
 
         <section className="card forum-post-feed">
-          <div className="section-title">Posts in ${selectedSection.title}</div>
+          <div className="section-title-row">
+            <div className="section-title">Posts in ${selectedSection.title}</div>
+            <${CountBadge} count=${posts.length} className="section-count-badge" />
+          </div>
           ${postsLoading
             ? html`<p className="muted">Loading posts...</p>`
             : posts.length === 0
