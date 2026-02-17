@@ -5227,10 +5227,15 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
     return { addDisabled, addTitle, addLabel, alreadyInCart, tierLocked };
   }
 
-  function renderComparisonCell(value) {
+  function renderComparisonCell(value, rowLabel = "", item = null) {
+    if (rowLabel === "In-game Name Color" && item) {
+      const rankSlug = getStoreRankSlug(item);
+      const comparisonName = storePreviewUsername ? `@${storePreviewUsername}` : storePreviewName;
+      return html`<span className=${`store-comparison-name-color rank-${rankSlug}`.trim()}>${comparisonName}</span>`;
+    }
     if (typeof value === "boolean") {
       return html`<img
-        className="store-comparison-status-icon"
+        className=${`store-comparison-status-icon ${value ? "is-success" : "is-error"}`.trim()}
         src=${value ? SUCCESS_STATUS_ICON_SVG : ERROR_STATUS_ICON_SVG}
         alt=${value ? "Included" : "Not included"}
         loading="lazy"
@@ -5254,6 +5259,16 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
     const perks = perkBullets(item.blurb).slice(0, 2).map((entry) => capitalizePerk(entry));
     return html`<th key=${`${keyPrefix}-head-${item.id}`} scope="col" className="store-rank-col store-rank-head-cell">
       <div className="store-rank-head">
+        <div className=${`store-sticky-rank-name rank-${rankSlug}`.trim()}>${rankLabel}</div>
+        <div className="store-rank-head-profile">
+          <img className="store-rank-head-avatar" src=${storePreviewImage} alt=${storePreviewName} loading="lazy" />
+          <div className="store-rank-head-meta">
+            <div className="store-rank-head-name">${storePreviewName}</div>
+            ${storePreviewUsername
+              ? html`<div className=${`store-rank-head-username rank-${rankSlug}`.trim()}>@${storePreviewUsername}</div>`
+              : html``}
+          </div>
+        </div>
         <button
           type="button"
           className="store-rank-head-art-btn"
@@ -5268,14 +5283,6 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
             loading="lazy"
           />
         </button>
-        <div className=${`store-sticky-rank-name rank-${rankSlug}`.trim()}>${rankLabel}</div>
-        <div className="store-rank-head-profile">
-          <img className="store-rank-head-avatar" src=${storePreviewImage} alt=${storePreviewName} loading="lazy" />
-          <div className="store-rank-head-meta">
-            <div className="store-rank-head-name">${storePreviewName}</div>
-            ${storePreviewUsername ? html`<div className="store-rank-head-username">@${storePreviewUsername}</div>` : html``}
-          </div>
-        </div>
         <div className="store-rank-head-badges">
           <${RankBadge} label=${rankLabel} className="store-owned-badge store-comparison-badge" />
         </div>
@@ -5285,7 +5292,6 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
             : html``}
           ${perks.map((perk, index) => html`<div key=${`${item.id}-perk-${index}`}>${perk}</div>`)}
         </div>
-        <div className="store-comparison-price">$${item.price.toFixed(2)}</div>
         ${includeBuy
           ? html`<button
               type="button"
@@ -5297,26 +5303,9 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
               ${addMeta.addLabel}
             </button>`
           : html``}
+        <div className="store-comparison-price">$${item.price.toFixed(2)}</div>
       </div>
     </th>`;
-  }
-
-  function renderComparisonBuyRow(keyPrefix = "comparison") {
-    return html`<div className="store-comparison-buy-row">
-      ${SAMPLE_STORE.map((item) => {
-        const addMeta = getStoreAddMeta(item);
-        return html`<button
-          key=${`${keyPrefix}-buy-${item.id}`}
-          type="button"
-          className="button store-cta store-comparison-buy-btn"
-          onClick=${() => onAdd(item)}
-          disabled=${addMeta.addDisabled}
-          title=${addMeta.addTitle}
-        >
-          ${addMeta.addLabel}
-        </button>`;
-      })}
-    </div>`;
   }
 
   return html`
@@ -5434,7 +5423,7 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
               <table className="store-comparison-table" role="table" aria-label="Rank feature comparison">
                 <thead>
                   <tr>
-                    <th scope="col" className="store-feature-col">Feature</th>
+                    <th scope="col" className="store-feature-col" aria-label="Rank features"></th>
                     ${SAMPLE_STORE.map((item) => renderComparisonHeaderCell(item, "comparison", true))}
                   </tr>
                 </thead>
@@ -5442,7 +5431,7 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
                   ${coreComparisonRows.map((row) => html`<tr key=${`core-row-${row.label}`}>
                     <th scope="row" className="store-feature-label">${row.label}</th>
                     ${SAMPLE_STORE.map((item) => html`<td key=${`core-cell-${row.label}-${item.id}`}>
-                      ${renderComparisonCell(row.values[item.id])}
+                      ${renderComparisonCell(row.values[item.id], row.label, item)}
                     </td>`)}
                   </tr>`)}
                 </tbody>
@@ -5464,13 +5453,12 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
                       ${extendedComparisonRows.map((row) => html`<tr key=${`extended-row-${row.label}`}>
                         <th scope="row" className="store-feature-label">${row.label}</th>
                         ${SAMPLE_STORE.map((item) => html`<td key=${`extended-cell-${row.label}-${item.id}`}>
-                          ${renderComparisonCell(row.values[item.id])}
+                          ${renderComparisonCell(row.values[item.id], row.label, item)}
                         </td>`)}
                       </tr>`)}
                     </tbody>
                   </table>
                 </div>
-                ${renderComparisonBuyRow("extended")}
                 `
               : html``}
           </div>`
@@ -8905,11 +8893,32 @@ function LinkPage({ onClose = null }) {
     const hasAnyQuery = rawSearch.length > 0;
     const params = new URLSearchParams(rawSearch);
     const codeValues = params.getAll("code");
-    const normalizedCode = normalizeCode(codeValues[0] || "");
-    const unexpectedKeys = Array.from(new Set(Array.from(params.keys()).filter((key) => key !== "code"))).slice(0, 12);
+    const normalizedCodeFromNamedParam = normalizeCode(codeValues[0] || "");
+    const rawEntries = Array.from(params.entries());
+    const namedCodeValid = codeValues.length > 0 && LINK_CODE_REGEX.test(normalizedCodeFromNamedParam);
+    let derivedBareCode = "";
+    if (!namedCodeValid && codeValues.length === 0 && rawEntries.length === 1) {
+      const [rawKey, rawValue] = rawEntries[0];
+      if (String(rawValue || "") === "") {
+        const normalizedBare = normalizeCode(rawKey);
+        if (LINK_CODE_REGEX.test(normalizedBare)) {
+          derivedBareCode = normalizedBare;
+        }
+      }
+    }
+    const normalizedCode = namedCodeValid ? normalizedCodeFromNamedParam : derivedBareCode;
+    const unexpectedKeys = Array.from(
+      new Set(
+        Array.from(params.keys()).filter((key) => {
+          if (key === "code") return false;
+          if (derivedBareCode && normalizeCode(key) === derivedBareCode) return false;
+          return true;
+        }),
+      ),
+    ).slice(0, 12);
     const hasMultipleCode = codeValues.length > 1;
     const hasUnexpectedKeys = unexpectedKeys.length > 0;
-    const hasCode = codeValues.length > 0;
+    const hasCode = codeValues.length > 0 || Boolean(derivedBareCode);
     const isValidCode = hasCode && !hasMultipleCode && !hasUnexpectedKeys && LINK_CODE_REGEX.test(normalizedCode);
     const queryIssue = hasAnyQuery && !isValidCode;
     return {
@@ -8941,10 +8950,23 @@ function LinkPage({ onClose = null }) {
     maskedPlayerUuid: "",
     playerName: "",
   });
+  const [linkDebugInfo, setLinkDebugInfo] = useState({
+    loading: false,
+    error: "",
+    code: "",
+    status: "",
+    valid: null,
+    isClaimed: null,
+    isExpired: null,
+    expiresAt: "",
+    playerUuidMasked: "",
+    fetchedAt: "",
+  });
   const fullCode = digits.join("");
   const isComplete = fullCode.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(fullCode);
   const urlCode = strictQuery.code;
   const isCooldownActive = cooldownLeft > 0;
+  const debugCode = isComplete ? fullCode : urlCode;
 
   useEffect(() => {
     const parsedCode = strictQuery.code;
@@ -9010,6 +9032,80 @@ function LinkPage({ onClose = null }) {
     autoSubmittedCodeRef.current = urlCode;
     onVerifyClick();
   }, [urlCode, isAuthLoaded, isSubmitting, isCooldownActive]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!debugCode || !LINK_CODE_REGEX.test(debugCode)) {
+      setLinkDebugInfo((prev) => ({
+        ...prev,
+        loading: false,
+        error: "",
+        code: debugCode || "",
+        status: "",
+        valid: null,
+        isClaimed: null,
+        isExpired: null,
+        expiresAt: "",
+        playerUuidMasked: "",
+      }));
+      return () => {
+        cancelled = true;
+      };
+    }
+    setLinkDebugInfo((prev) => ({
+      ...prev,
+      loading: true,
+      error: "",
+      code: debugCode,
+    }));
+    fetch(`/api/link/info?code=${encodeURIComponent(debugCode)}`)
+      .then(async (response) => {
+        const data = await response.json().catch(() => ({}));
+        if (cancelled) return;
+        if (!response.ok) {
+          setLinkDebugInfo((prev) => ({
+            ...prev,
+            loading: false,
+            code: debugCode,
+            error: String(data?.error || `HTTP ${response.status}`),
+            status: String(data?.status || ""),
+            valid: typeof data?.valid === "boolean" ? data.valid : null,
+            isClaimed: typeof data?.isClaimed === "boolean" ? data.isClaimed : null,
+            isExpired: typeof data?.isExpired === "boolean" ? data.isExpired : null,
+            expiresAt: String(data?.expiresAt || ""),
+            playerUuidMasked: String(data?.playerUuidMasked || ""),
+            fetchedAt: new Date().toISOString(),
+          }));
+          return;
+        }
+        setLinkDebugInfo((prev) => ({
+          ...prev,
+          loading: false,
+          error: "",
+          code: debugCode,
+          status: String(data?.status || ""),
+          valid: typeof data?.valid === "boolean" ? data.valid : null,
+          isClaimed: typeof data?.isClaimed === "boolean" ? data.isClaimed : null,
+          isExpired: typeof data?.isExpired === "boolean" ? data.isExpired : null,
+          expiresAt: String(data?.expiresAt || ""),
+          playerUuidMasked: String(data?.playerUuidMasked || ""),
+          fetchedAt: new Date().toISOString(),
+        }));
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        setLinkDebugInfo((prev) => ({
+          ...prev,
+          loading: false,
+          code: debugCode,
+          error: String(error?.message || "Failed to fetch link info"),
+          fetchedAt: new Date().toISOString(),
+        }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [debugCode, LINK_CODE_REGEX]);
 
   function formatCooldown(ms) {
     const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
@@ -9113,11 +9209,18 @@ function LinkPage({ onClose = null }) {
     setStatusType("");
     setStatusMessage("");
     try {
-      const response = await apiFetchWithToken(getToken, true, "/api/link/claim", {
+      let response = await apiFetchWithToken(getToken, true, "/api/link/redeem", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ code: fullCode }),
       });
+      if (response.status === 404) {
+        response = await apiFetchWithToken(getToken, true, "/api/link/claim", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: fullCode }),
+        });
+      }
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         if (response.status === 401) {
@@ -9206,9 +9309,9 @@ function LinkPage({ onClose = null }) {
             </button>`
           : html``}
         <div className="link-eyebrow">Account Linking</div>
-        <h1 className="link-title">Link Hardtale UUID to Clerk</h1>
+        <h1 className="link-title">Link Hardtale Account</h1>
         <p className="link-copy">
-          Enter your 8-character link code. This page is prepared for the upcoming HardtaleNetwork plugin auth flow.
+          Enter your 8-character link code to connect your game account to your website profile.
         </p>
         ${strictQuery.queryIssue
           ? html`<div className="link-status link-status-error">
@@ -9279,6 +9382,39 @@ function LinkPage({ onClose = null }) {
               }`}>${statusMessage}</div>`
             : html``}
           <div className="muted link-hint">Use /link in-game soon to generate this code from your UUID.</div>
+          <div className="link-debug-panel">
+            <div className="link-debug-title">Link Debug</div>
+            <div className="link-debug-grid">
+              <div className="muted">Route query</div>
+              <div>${strictQuery.rawSearch ? `?${strictQuery.rawSearch}` : "(none)"}</div>
+              <div className="muted">Parsed code</div>
+              <div>${strictQuery.code || "(invalid/empty)"}</div>
+              <div className="muted">Current input code</div>
+              <div>${debugCode || "(incomplete)"}</div>
+              <div className="muted">Auth signed in</div>
+              <div>${isSignedIn ? "yes" : "no"}</div>
+              <div className="muted">Link mode</div>
+              <div>${linkMode}</div>
+              <div className="muted">Linking enabled</div>
+              <div>${linkingEnabled ? "yes" : "no"}</div>
+              <div className="muted">Code lookup</div>
+              <div>${linkDebugInfo.loading ? "loading..." : linkDebugInfo.error ? `error: ${linkDebugInfo.error}` : "ok"}</div>
+              <div className="muted">Backend status</div>
+              <div>${linkDebugInfo.status || "(n/a)"}</div>
+              <div className="muted">Valid</div>
+              <div>${linkDebugInfo.valid === null ? "(n/a)" : linkDebugInfo.valid ? "true" : "false"}</div>
+              <div className="muted">Claimed</div>
+              <div>${linkDebugInfo.isClaimed === null ? "(n/a)" : linkDebugInfo.isClaimed ? "true" : "false"}</div>
+              <div className="muted">Expired</div>
+              <div>${linkDebugInfo.isExpired === null ? "(n/a)" : linkDebugInfo.isExpired ? "true" : "false"}</div>
+              <div className="muted">UUID mask</div>
+              <div>${linkDebugInfo.playerUuidMasked || "(n/a)"}</div>
+              <div className="muted">Expires</div>
+              <div>${linkDebugInfo.expiresAt || "(n/a)"}</div>
+              <div className="muted">Fetched at</div>
+              <div>${linkDebugInfo.fetchedAt || "(n/a)"}</div>
+            </div>
+          </div>
         </div>
       </div>
     </section>

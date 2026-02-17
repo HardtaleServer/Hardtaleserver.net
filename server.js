@@ -677,6 +677,13 @@ function requireCommentAuth(req, res) {
   return auth;
 }
 
+function secretFingerprint(value) {
+  const token = String(value || "");
+  if (!token) return "len=0";
+  if (token.length <= 8) return `len=${token.length} value=${"*".repeat(token.length)}`;
+  return `len=${token.length} value=${token.slice(0, 4)}...${token.slice(-4)}`;
+}
+
 function requireFulfillmentAuth(req, res, routeLabel = "server_api") {
   if (PLUGIN_API_TOKENS.length === 0) {
     console.warn(`[server.auth] ${routeLabel} denied: no server API token configured`);
@@ -686,15 +693,22 @@ function requireFulfillmentAuth(req, res, routeLabel = "server_api") {
   const authHeader = String(req.headers?.authorization || "");
   const prefix = "Bearer ";
   const bearerToken = authHeader.startsWith(prefix) ? authHeader.slice(prefix.length).trim() : "";
+  const headerServerSecret = normalizeText(req.headers?.["x-server-secret"], 4096);
   const serviceToken = normalizeText(req.headers?.["x-service-auth"], 4096);
-  const token = bearerToken || serviceToken;
+  const token = bearerToken || headerServerSecret || serviceToken;
   if (!token) {
-    console.warn(`[server.auth] ${routeLabel} denied: missing auth header`);
+    console.warn(
+      `[server.auth] ${routeLabel} denied: missing auth header (accepted: Authorization Bearer / X-Server-Secret / X-Service-Auth)`,
+    );
     res.status(401).json({ error: "Missing Authorization bearer token" });
     return false;
   }
   if (!PLUGIN_API_TOKENS.includes(token)) {
-    console.warn(`[server.auth] ${routeLabel} denied: invalid server secret`);
+    const expectedFingerprints = PLUGIN_API_TOKENS.map((entry) => secretFingerprint(entry)).join(", ");
+    console.warn(
+      `[server.auth] ${routeLabel} denied: invalid server secret ` +
+        `(incoming=${secretFingerprint(token)} hasBearer=${Boolean(bearerToken)} hasXServerSecret=${Boolean(headerServerSecret)} hasXServiceAuth=${Boolean(serviceToken)} expected=[${expectedFingerprints}])`,
+    );
     res.status(403).json({ error: "Invalid server secret" });
     return false;
   }
@@ -708,14 +722,25 @@ function requireServerSecret(req, res, routeLabel = "server_api") {
     return false;
   }
   const authHeader = String(req.headers?.authorization || "");
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+  const headerServerSecret = normalizeText(req.headers?.["x-server-secret"], 4096);
+  const headerServiceAuth = normalizeText(req.headers?.["x-service-auth"], 4096);
+  const token = bearerToken || headerServerSecret || headerServiceAuth;
   if (!token) {
-    console.warn(`[server.auth] ${routeLabel} denied: missing_authorization`);
-    res.status(403).json({ error: "missing_authorization" });
+    console.warn(
+      `[server.auth] ${routeLabel} denied: missing_secret_header (accepted: Authorization Bearer / X-Server-Secret / X-Service-Auth)`,
+    );
+    res.status(403).json({
+      error: "missing_authorization",
+      acceptedHeaders: ["Authorization: Bearer <secret>", "X-Server-Secret: <secret>", "X-Service-Auth: <secret>"],
+    });
     return false;
   }
   if (token !== SERVER_SECRET) {
-    console.warn(`[server.auth] ${routeLabel} denied: invalid_server_secret`);
+    console.warn(
+      `[server.auth] ${routeLabel} denied: invalid_server_secret ` +
+        `(incoming=${secretFingerprint(token)} expected=${secretFingerprint(SERVER_SECRET)} hasBearer=${Boolean(bearerToken)} hasXServerSecret=${Boolean(headerServerSecret)} hasXServiceAuth=${Boolean(headerServiceAuth)})`,
+    );
     res.status(403).json({ error: "invalid_server_secret" });
     return false;
   }
@@ -6200,7 +6225,7 @@ app.listen(PORT, HOST, () => {
   }
   if (!LINK_REDEEM_DOWNSTREAM_FALLBACK_ENABLED) {
     console.log(
-      "Hosted link-code mode active: /api/link/redeem uses Mongo link codes; downstream plugin redeem fallback is disabled.",
+      "[startup.info] Hosted link-code mode active (expected): /api/link/redeem uses Mongo link codes; downstream plugin redeem fallback is disabled.",
     );
   }
 });

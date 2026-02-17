@@ -4436,6 +4436,32 @@ emoji-picker.reaction-picker-panel {
   color: #8ec2ff;
 }
 
+.link-debug-panel {
+  margin-top: 6px;
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--bg-soft) 92%, transparent);
+}
+
+.link-debug-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+
+.link-debug-grid {
+  display: grid;
+  grid-template-columns: minmax(110px, 160px) 1fr;
+  gap: 4px 10px;
+  font-size: 12px;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
 .popup-overlay.link-modal-overlay {
   z-index: 11000;
 }
@@ -5299,7 +5325,7 @@ body[data-theme="dark"] .store-cta {
 
 .store-feature-col {
   text-align: left;
-  min-width: 250px;
+  min-width: 210px;
 }
 
 .store-feature-label {
@@ -5310,7 +5336,7 @@ body[data-theme="dark"] .store-cta {
 
 .store-rank-col {
   text-align: center;
-  min-width: 120px;
+  min-width: 140px;
 }
 
 .store-rank-head-cell {
@@ -5321,6 +5347,7 @@ body[data-theme="dark"] .store-cta {
   display: grid;
   gap: 8px;
   align-items: start;
+  min-height: 100%;
 }
 
 .store-rank-head-art-btn {
@@ -5387,6 +5414,18 @@ body[data-theme="dark"] .store-cta {
   color: var(--muted);
 }
 
+.store-rank-head-username.rank-hero {
+  color: var(--rank-hero);
+}
+
+.store-rank-head-username.rank-legend {
+  color: var(--rank-legend);
+}
+
+.store-rank-head-username.rank-mythic {
+  color: var(--rank-mythic);
+}
+
 .store-rank-head-badges {
   display: flex;
   justify-content: center;
@@ -5402,7 +5441,7 @@ body[data-theme="dark"] .store-cta {
 }
 
 .store-comparison-price {
-  margin-top: 4px;
+  margin-top: 6px;
   font-size: 12px;
   color: var(--muted);
 }
@@ -5422,13 +5461,7 @@ body[data-theme="dark"] .store-cta {
 }
 
 .store-comparison-value-text {
-  background-image: linear-gradient(90deg, var(--accent), var(--accent-2));
-  background-size: 220% 100%;
-  animation: staffReflect 2.6s ease-in-out infinite;
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
-  -webkit-text-fill-color: transparent;
+  color: var(--text);
   font-weight: 700;
 }
 
@@ -5437,6 +5470,30 @@ body[data-theme="dark"] .store-cta {
   height: 18px;
   display: inline-block;
   object-fit: contain;
+}
+
+.store-comparison-status-icon.is-success {
+  filter: hue-rotate(70deg) saturate(1.8) brightness(1.08);
+}
+
+.store-comparison-status-icon.is-error {
+  filter: hue-rotate(-35deg) saturate(2.2) brightness(0.95);
+}
+
+.store-comparison-name-color {
+  font-weight: 800;
+}
+
+.store-comparison-name-color.rank-hero {
+  color: var(--rank-hero);
+}
+
+.store-comparison-name-color.rank-legend {
+  color: var(--rank-legend);
+}
+
+.store-comparison-name-color.rank-mythic {
+  color: var(--rank-mythic);
 }
 
 .store-comparison-table tr:last-child th,
@@ -5455,11 +5512,12 @@ body[data-theme="dark"] .store-cta {
   width: 100%;
 }
 .store-rank-head .store-comparison-buy-btn {
-  transform: translateY(-7px);
+  margin-top: auto;
+  transform: none;
 }
 
 .store-rank-detail-overlay .popup {
-  width: min(560px, 94vw);
+  width: min(720px, 96vw);
 }
 
 .store-rank-detail {
@@ -5474,8 +5532,8 @@ body[data-theme="dark"] .store-cta {
 
 .store-rank-detail-art {
   width: 100%;
-  height: clamp(150px, 32vw, 210px);
-  object-fit: cover;
+  height: clamp(170px, 36vw, 300px);
+  object-fit: contain;
   border-radius: 14px;
   border: 1px solid var(--stroke);
   background: color-mix(in srgb, var(--bg-soft) 90%, transparent);
