@@ -32,7 +32,7 @@ function renderRankIcon(type) {
   }
 }
 
-export default function RankBadge({ label, className = "", showIcon = true }) {
+function RankBadge({ label, className = "", showIcon = true }) {
   const rankLabel = String(label || "Unregistered");
   const slug = rankLabel.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-");
   const iconType = getRankIconType(rankLabel);
@@ -41,3 +41,5 @@ export default function RankBadge({ label, className = "", showIcon = true }) {
     <span>${getRankDisplayLabel(rankLabel)}</span>
   </span>`;
 }
+
+export default React.memo(RankBadge);

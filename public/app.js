@@ -8616,21 +8616,50 @@ function Layout() {
   }, [sortedNotifications, notificationsLoading, isSignedIn, userId]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      fetch("/api/news")
-        .then((res) => res.json())
-        .then((data) => {
-          setNews(Array.isArray(data.news) ? data.news : []);
-        })
-        .catch(() => {});
-      apiFetchWithToken(getToken, true, "/api/notifications")
-        .then((res) => (res.ok ? res.json() : { notifications: [] }))
-        .then((data) => {
-          setNotifications(Array.isArray(data.notifications) ? data.notifications : []);
-        })
-        .catch(() => {});
-    }, 30000);
-    return () => clearInterval(interval);
+    let alive = true;
+    let inFlight = false;
+
+    async function refreshLiveFeeds() {
+      if (!alive || inFlight) return;
+      if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+      inFlight = true;
+      try {
+        const [newsResult, notificationsResult] = await Promise.all([
+          fetch("/api/news")
+            .then((res) => res.json())
+            .catch(() => ({ news: [] })),
+          apiFetchWithToken(getToken, true, "/api/notifications")
+            .then((res) => (res.ok ? res.json() : { notifications: [] }))
+            .catch(() => ({ notifications: [] })),
+        ]);
+        if (!alive) return;
+        setNews(Array.isArray(newsResult?.news) ? newsResult.news : []);
+        setNotifications(
+          Array.isArray(notificationsResult?.notifications)
+            ? notificationsResult.notifications
+            : [],
+        );
+      } finally {
+        inFlight = false;
+      }
+    }
+
+    const interval = setInterval(refreshLiveFeeds, 30000);
+    const onVisibilityChange = () => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        refreshLiveFeeds();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
+    return () => {
+      alive = false;
+      clearInterval(interval);
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
+    };
   }, [setNews, setNotifications, getToken]);
 
   useEffect(() => {
