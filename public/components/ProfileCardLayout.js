@@ -39,7 +39,7 @@ function ProfileCardLayout({
             : typeof row?.onClick === "function"
             ? html`<button
                 type="button"
-                className="copy-action-btn subtle profile-copy-action"
+                className=${`copy-action-btn subtle profile-copy-action ${row?.className || ""}`.trim()}
                 onClick=${row.onClick}
                 title=${row?.title || row?.value || "Open"}
               >

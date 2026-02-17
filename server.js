@@ -98,6 +98,10 @@ const STORE_RANK_PRODUCTS = {
   "rank-legend": { id: "rank-legend", name: "Legend Rank", price: 14.0, rank: "Legend", tier: 2 },
   "rank-mythic": { id: "rank-mythic", name: "Mythic Rank", price: 24.0, rank: "Mythic", tier: 3 },
 };
+const STORE_RANK_PRODUCT_BY_TIER = Object.values(STORE_RANK_PRODUCTS).reduce((map, product) => {
+  if (product?.tier) map[product.tier] = product;
+  return map;
+}, {});
 const STORE_PRODUCT_IDS = new Set(Object.keys(STORE_RANK_PRODUCTS));
 const STORE_RANK_BY_LABEL = { Hero: 1, Legend: 2, Mythic: 3 };
 const DONOR_RANK_SET = new Set(["Hero", "Legend", "Mythic"]);
@@ -669,12 +673,13 @@ async function processCartCheckout(userId, options = {}) {
     throw createHttpError(400, "Cart is empty");
   }
 
-  const total = items.reduce((sum, entry) => sum + (STORE_RANK_PRODUCTS[entry.id]?.price || 0), 0);
+  const user = await clerkClient.users.getUser(userId);
+  const currentOwnedRank = applyLinkedOwnedRankFloor(user?.publicMetadata?.rank, true);
+  const pricing = calculateCartPricing(items, currentOwnedRank);
   const purchasedHighestRank = getHighestRankFromItems(items);
 
   let awardedRank = "";
   if (purchasedHighestRank) {
-    const user = await clerkClient.users.getUser(userId);
     const currentRank = String(user?.publicMetadata?.rank || "Unregistered");
     awardedRank = maxRankLabel(currentRank, purchasedHighestRank);
     if (awardedRank !== currentRank) {
@@ -712,7 +717,9 @@ async function processCartCheckout(userId, options = {}) {
       stripeSessionId: stripeSessionId || null,
       stripePaymentIntentId: stripePaymentIntentId || null,
       items,
-      total,
+      total: pricing.total,
+      subtotal: pricing.subtotal,
+      discount: pricing.discount,
       awardedRank: awardedRank || null,
       createdAt: nowIso,
       updatedAt: nowIso,
@@ -748,6 +755,7 @@ async function processCartCheckout(userId, options = {}) {
     purchaseId,
     awardedRank: awardedRank || null,
     cartItems: [],
+    pricing,
     alreadyProcessed: false,
   };
 }
@@ -1368,6 +1376,55 @@ function getHighestRankFromItems(items = []) {
     }
   }
   return best;
+}
+
+function toCurrencyNumberFromCents(cents) {
+  return Math.max(0, Number(cents || 0)) / 100;
+}
+
+function calculateCartPricing(items = [], ownedRank = "Unregistered") {
+  const ownedTier = STORE_RANK_BY_LABEL[normalizeOwnedRank(ownedRank)] || 0;
+  let subtotalCents = 0;
+  let discountCents = 0;
+  const lines = [];
+
+  for (const entry of items) {
+    const product = STORE_RANK_PRODUCTS[entry?.id];
+    if (!product) continue;
+    const lineSubtotalCents = toStripeUnitAmount(product.price);
+    let lineDiscountCents = 0;
+    if (product.tier && ownedTier > 0 && product.tier > ownedTier) {
+      const ownedProduct = STORE_RANK_PRODUCT_BY_TIER[ownedTier];
+      lineDiscountCents = toStripeUnitAmount(ownedProduct?.price || 0);
+      if (lineDiscountCents > lineSubtotalCents) {
+        lineDiscountCents = lineSubtotalCents;
+      }
+    }
+    const lineTotalCents = Math.max(0, lineSubtotalCents - lineDiscountCents);
+    subtotalCents += lineSubtotalCents;
+    discountCents += lineDiscountCents;
+    lines.push({
+      id: product.id,
+      name: product.name,
+      rank: product.rank,
+      subtotal: toCurrencyNumberFromCents(lineSubtotalCents),
+      discount: toCurrencyNumberFromCents(lineDiscountCents),
+      total: toCurrencyNumberFromCents(lineTotalCents),
+      isUpgradeDiscount: lineDiscountCents > 0,
+    });
+  }
+
+  const totalCents = Math.max(0, subtotalCents - discountCents);
+  return {
+    ownedRank: normalizeOwnedRank(ownedRank) || "Unregistered",
+    subtotal: toCurrencyNumberFromCents(subtotalCents),
+    discount: toCurrencyNumberFromCents(discountCents),
+    total: toCurrencyNumberFromCents(totalCents),
+    subtotalCents,
+    discountCents,
+    totalCents,
+    lines,
+  };
 }
 
 function buildFulfillmentGrants(items = []) {
@@ -3689,7 +3746,12 @@ app.get("/api/cart", async (req, res) => {
       return res.status(401).json({ error: "Not authenticated" });
     }
     const cart = await cartsCollection.findOne({ userId: auth.userId });
-    return res.json({ items: normalizeCartItems(cart?.items || []) });
+    const items = normalizeCartItems(cart?.items || []);
+    const linked = await isLinkedUserId(auth.userId);
+    const user = await clerkClient.users.getUser(auth.userId);
+    const ownedRank = applyLinkedOwnedRankFloor(user?.publicMetadata?.rank, linked);
+    const pricing = calculateCartPricing(items, ownedRank);
+    return res.json({ items, pricing });
   } catch (error) {
     console.error("Failed to load cart", error);
     return res.status(500).json({ error: "Failed to load cart" });
@@ -3709,6 +3771,9 @@ app.post("/api/cart", async (req, res) => {
     }
 
     const items = normalizeCartItems(req.body?.items);
+    const user = await clerkClient.users.getUser(auth.userId);
+    const ownedRank = applyLinkedOwnedRankFloor(user?.publicMetadata?.rank, true);
+    const pricing = calculateCartPricing(items, ownedRank);
     await cartsCollection.updateOne(
       { userId: auth.userId },
       {
@@ -3720,7 +3785,7 @@ app.post("/api/cart", async (req, res) => {
       },
       { upsert: true },
     );
-    return res.json({ items });
+    return res.json({ items, pricing });
   } catch (error) {
     console.error("Failed to save cart", error);
     return res.status(500).json({ error: "Failed to save cart" });
@@ -3742,6 +3807,7 @@ app.post("/api/cart/checkout", async (req, res) => {
     return res.json({
       success: true,
       cart: { items: result.cartItems },
+      pricing: result.pricing,
       purchaseId: result.purchaseId,
       awardedRank: result.awardedRank,
       alreadyProcessed: result.alreadyProcessed,
@@ -3777,14 +3843,21 @@ app.post("/api/payments/stripe/create-checkout-session", async (req, res) => {
       return res.status(400).json({ error: "Cart is empty" });
     }
 
+    const user = await clerkClient.users.getUser(auth.userId);
+    const ownedRank = applyLinkedOwnedRankFloor(user?.publicMetadata?.rank, true);
+    const pricing = calculateCartPricing(items, ownedRank);
+    const pricingById = new Map((pricing.lines || []).map((entry) => [entry.id, entry]));
+
     const lineItems = items
       .map((entry) => STORE_RANK_PRODUCTS[entry?.id])
       .filter(Boolean)
-      .map((product) => ({
+      .map((product) => {
+        const pricingLine = pricingById.get(product.id);
+        return ({
         quantity: 1,
         price_data: {
           currency: STRIPE_CURRENCY,
-          unit_amount: toStripeUnitAmount(product.price),
+          unit_amount: toStripeUnitAmount(pricingLine?.total ?? product.price),
           product_data: {
             name: product.name,
             metadata: {
@@ -3793,7 +3866,7 @@ app.post("/api/payments/stripe/create-checkout-session", async (req, res) => {
             },
           },
         },
-      }));
+      })});
 
     if (lineItems.length === 0) {
       return res.status(400).json({ error: "Cart is empty" });
@@ -3853,9 +3926,10 @@ app.post("/api/payments/stripe/create-payment-intent", async (req, res) => {
       return res.status(400).json({ error: "Cart is empty" });
     }
 
-    const amount = toStripeUnitAmount(
-      items.reduce((sum, entry) => sum + (STORE_RANK_PRODUCTS[entry.id]?.price || 0), 0),
-    );
+    const user = await clerkClient.users.getUser(auth.userId);
+    const ownedRank = applyLinkedOwnedRankFloor(user?.publicMetadata?.rank, true);
+    const pricing = calculateCartPricing(items, ownedRank);
+    const amount = toStripeUnitAmount(pricing.total);
     if (amount <= 0) {
       return res.status(400).json({ error: "Cart total is invalid" });
     }
@@ -3875,6 +3949,7 @@ app.post("/api/payments/stripe/create-payment-intent", async (req, res) => {
       publishableKey: STRIPE_PUBLISHABLE_KEY,
       clientSecret: intent.client_secret || "",
       paymentIntentId: intent.id,
+      pricing,
     });
   } catch (error) {
     console.error("Failed to create Stripe payment intent", error);
@@ -3973,6 +4048,7 @@ app.post("/api/payments/stripe/finalize-intent", async (req, res) => {
     return res.json({
       success: true,
       cart: { items: result.cartItems },
+      pricing: result.pricing,
       purchaseId: result.purchaseId,
       awardedRank: result.awardedRank,
       alreadyProcessed: result.alreadyProcessed,
@@ -4023,6 +4099,7 @@ app.post("/api/payments/stripe/complete", async (req, res) => {
     return res.json({
       success: true,
       cart: { items: result.cartItems },
+      pricing: result.pricing,
       purchaseId: result.purchaseId,
       awardedRank: result.awardedRank,
       alreadyProcessed: result.alreadyProcessed,

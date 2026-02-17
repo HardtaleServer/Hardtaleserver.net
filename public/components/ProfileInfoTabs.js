@@ -8,10 +8,15 @@ function ProfileInfoTabs({
   onTabChange,
   renderBadges,
   renderGroups,
+  renderAchievements,
 }) {
-  const content = activeTab === "groups"
-    ? (typeof renderGroups === "function" ? renderGroups() : null)
-    : (typeof renderBadges === "function" ? renderBadges() : null);
+  let content = typeof renderBadges === "function" ? renderBadges() : null;
+  if (activeTab === "groups") {
+    content = typeof renderGroups === "function" ? renderGroups() : null;
+  }
+  if (activeTab === "achievements") {
+    content = typeof renderAchievements === "function" ? renderAchievements() : null;
+  }
   return html`
     <div className="profile-card-subtabs" role="tablist" aria-label="Profile details">
       <button
@@ -27,6 +32,13 @@ function ProfileInfoTabs({
         onClick=${() => onTabChange && onTabChange("groups")}
       >
         Groups
+      </button>
+      <button
+        type="button"
+        className=${`profile-card-subtab ${activeTab === "achievements" ? "active" : ""}`.trim()}
+        onClick=${() => onTabChange && onTabChange("achievements")}
+      >
+        Achievements
       </button>
     </div>
     ${content}

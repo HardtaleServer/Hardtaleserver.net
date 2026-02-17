@@ -19,6 +19,7 @@ import RankBadge from "./components/RankBadge.js";
 import ProfilePreviewButton from "./components/ProfilePreviewButton.js";
 import ProfileCardLayout from "./components/ProfileCardLayout.js";
 import ProfileAchievementsCard from "./components/ProfileAchievementsCard.js";
+import ProfileAchievementsPanel from "./components/ProfileAchievementsPanel.js";
 import DeferredForumEditor from "./components/DeferredForumEditor.js";
 import ForumRenderedMarkdown from "./components/ForumRenderedMarkdown.js";
 import ProfileInfoTabs from "./components/ProfileInfoTabs.js";
@@ -86,7 +87,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.64";
+const VERSION = "1.3.66";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -177,6 +178,24 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.66",
+    date: "2026-02-17",
+    items: [
+      "Matched mobile drawer selected-page styling to the same active effect used by top navigation.",
+      "Play now remains the active mobile drawer item while the play/help module is open, then returns to the current route when closed.",
+      "Standardized profile-card account action to an `Account Management` pill button and removed legacy Clerk label text.",
+    ],
+  },
+  {
+    version: "1.3.65",
+    date: "2026-02-17",
+    items: [
+      "Added donor upgrade-difference pricing so owned lower donor ranks reduce the checkout cost of higher donor rank upgrades.",
+      "Moved cart and Stripe payment calculations to server-authoritative upgrade pricing (subtotal, upgrade discount, final total).",
+      "Updated Store checkout UI to show clear `Subtotal`, `Upgrade Discount`, and `Total` breakdown.",
+    ],
+  },
   {
     version: "1.3.64",
     date: "2026-02-17",
@@ -3498,16 +3517,16 @@ function CommentThread({
                 />
               </div>
               <div className="profile-card-link-meta">
-                <span className="muted">ClerkUserProfile:</span>
                 <button
                   type="button"
-                  className="copy-action-btn subtle profile-copy-action"
+                  className="copy-action-btn subtle profile-copy-action account-management-pill"
                   onClick=${() => {
+                    setProfileOpen(false);
                     if (openUserProfile) openUserProfile({});
                   }}
-                  title="Open Clerk User Profile"
+                  title="Account Management"
                 >
-                  <span>Open</span>
+                  <span>Account Management</span>
                 </button>
               </div>
               <img
@@ -3712,6 +3731,10 @@ function CommentThread({
                 onTabChange=${setProfileInfoTab}
                 renderGroups=${() => html`${renderProfileGroupsCard(profileUser)}`}
                 renderBadges=${() => html`${renderStaffBadge(profileUser)}${renderOwnedRankBadges(profileUser)}`}
+                renderAchievements=${() =>
+                  html`<${ProfileAchievementsPanel}
+                    achievements=${profileUser?.achievements || []}
+                  />`}
               />
             </div>`
           : html``}
@@ -6215,16 +6238,16 @@ function ForumPage({ isAdmin = false }) {
         />
       </div>
       <div className="profile-card-link-meta">
-        <span className="muted">ClerkUserProfile:</span>
         <button
           type="button"
-          className="copy-action-btn subtle profile-copy-action"
+          className="copy-action-btn subtle profile-copy-action account-management-pill"
           onClick=${() => {
+            setForumProfileOpen(false);
             if (openUserProfile) openUserProfile({});
           }}
-          title="Open Clerk User Profile"
+          title="Account Management"
         >
-          <span>Open</span>
+          <span>Account Management</span>
         </button>
       </div>
       <img
@@ -6384,6 +6407,10 @@ function ForumPage({ isAdmin = false }) {
         onTabChange=${setForumProfileInfoTab}
         renderGroups=${() => html`${renderProfileGroupsCard(forumProfileUser)}`}
         renderBadges=${() => html`${renderStaffBadge(forumProfileUser)}${renderOwnedRankBadges(forumProfileUser)}`}
+        renderAchievements=${() =>
+          html`<${ProfileAchievementsPanel}
+            achievements=${forumProfileUser?.achievements || []}
+          />`}
       />
     </div>`;
   }
@@ -8558,6 +8585,7 @@ function Layout() {
   const [criticalImagesReady, setCriticalImagesReady] = useState(false);
   const [loaderVariant, setLoaderVariant] = useState(LOADER_VARIANTS[0]);
   const [cart, setCart] = useState([]);
+  const [cartPricing, setCartPricing] = useState(null);
   const [cartLoaded, setCartLoaded] = useState(false);
   const [cartStatus, setCartStatus] = useState("");
   const [pendingItem, setPendingItem] = useState(null);
@@ -8921,6 +8949,8 @@ function Layout() {
       setActive("forum");
     } else if (visualPathname === "/support") {
       setActive("support");
+    } else if (visualPathname === "/subscriptions") {
+      setActive("subscriptions");
     } else if (location.pathname === "/link") {
       setActive("link");
     }
@@ -8973,6 +9003,7 @@ function Layout() {
           throw new Error(String(data?.error || "Failed to finalize Stripe checkout."));
         }
         setCart(buildCartFromIds(data?.cart?.items || []));
+        setCartPricing(data?.pricing || null);
         const awardedRank = String(data?.awardedRank || "").trim();
         pushToast({
           id: `stripe-success-${sessionId}`,
@@ -9039,6 +9070,7 @@ function Layout() {
           throw new Error(String(data?.error || "Unable to start secure payment."));
         }
         if (cancelled) return;
+        if (data?.pricing) setCartPricing(data.pricing);
         setStripeClientSecret(String(data?.clientSecret || ""));
         setStripePaymentIntentId(String(data?.paymentIntentId || ""));
       } catch (error) {
@@ -9161,6 +9193,7 @@ function Layout() {
     if (!isAuthLoaded) return;
     if (!isSignedIn || !userId) {
       setCart([]);
+      setCartPricing(null);
       setCartLoaded(false);
       return;
     }
@@ -9171,6 +9204,7 @@ function Layout() {
         if (!response.ok) {
           if (!cancelled) {
             setCart([]);
+            setCartPricing(null);
             setCartLoaded(true);
           }
           return;
@@ -9178,11 +9212,13 @@ function Layout() {
         const data = await response.json();
         if (!cancelled) {
           setCart(buildCartFromIds(data?.items || []));
+          setCartPricing(data?.pricing || null);
           setCartLoaded(true);
         }
       } catch (err) {
         if (!cancelled) {
           setCart([]);
+          setCartPricing(null);
           setCartLoaded(true);
         }
       }
@@ -9217,7 +9253,12 @@ function Layout() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ items: serializeCartItems(cart) }),
-    }).catch(() => {});
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (data?.pricing) setCartPricing(data.pricing);
+      })
+      .catch(() => {});
   }, [cart, isSignedIn, userId, cartLoaded, isLinkedAccount, getToken]);
 
   useEffect(() => {
@@ -9319,7 +9360,29 @@ function Layout() {
 
 
   function total() {
+    if (cartPricing && Number.isFinite(Number(cartPricing.total))) {
+      return Number(cartPricing.total);
+    }
     return cart.reduce((sum, item) => sum + item.price, 0);
+  }
+
+  function subtotal() {
+    if (cartPricing && Number.isFinite(Number(cartPricing.subtotal))) {
+      return Number(cartPricing.subtotal);
+    }
+    return cart.reduce((sum, item) => sum + item.price, 0);
+  }
+
+  function upgradeDiscountTotal() {
+    if (cartPricing && Number.isFinite(Number(cartPricing.discount))) {
+      return Number(cartPricing.discount);
+    }
+    return 0;
+  }
+
+  function getCartLinePricing(itemId) {
+    const lines = Array.isArray(cartPricing?.lines) ? cartPricing.lines : [];
+    return lines.find((line) => String(line?.id || "") === String(itemId || "")) || null;
   }
 
   function openNotifications() {
@@ -9640,6 +9703,7 @@ function Layout() {
           throw new Error(String(finalizeData?.error || "Failed to finalize payment."));
         }
         setCart(buildCartFromIds(finalizeData?.cart?.items || []));
+        setCartPricing(finalizeData?.pricing || null);
         const awardedRank = String(finalizeData?.awardedRank || "").trim();
         setCartStatus(awardedRank ? `Checkout complete. Rank awarded: ${awardedRank}` : "Checkout complete.");
         setTimeout(() => {
@@ -9662,6 +9726,7 @@ function Layout() {
       if (!response.ok) throw new Error("Checkout failed");
       const data = await response.json();
       setCart(buildCartFromIds(data?.cart?.items || []));
+      setCartPricing(data?.pricing || null);
       const awardedRank = String(data?.awardedRank || "").trim();
       setCartStatus(awardedRank ? `Checkout complete. Rank awarded: ${awardedRank}` : "Checkout complete.");
       setTimeout(() => {
@@ -9690,7 +9755,7 @@ function Layout() {
   const stickyTransparentActive =
     desktopStickyVisible && desktopStickyStyle === "transparent" && !isMobile;
   const lockedNavHover = stickyTransparentActive && showNotifications;
-  const navActive = stickyTransparentActive && showConnectHelp ? "play" : active;
+  const navActive = showConnectHelp ? "play" : active;
   const desktopStickyLogoVisible = desktopStickyStyle === "solid";
   const desktopStickyLogoSrc = desktopStickyWide
     ? DESKTOP_LOGO_MAP[desktopStickyLogoStyle] || LOGO_SRC
@@ -10022,6 +10087,7 @@ function Layout() {
             navigate=${navigate}
             closeMenu=${() => setShowMobileNav(false)}
             openPlayHelp=${() => setShowConnectHelp(true)}
+            activeId=${navActive}
           />
           <div className="mobile-drawer-footer">
             <${SignedOut}>
@@ -10169,12 +10235,14 @@ function Layout() {
                   copyValue: notificationProfileUser.hytalePlayerUuid || "",
                 },
                 {
-                  label: "ClerkUserProfile:",
-                  value: "Open",
+                  label: "",
+                  value: "Account Management",
                   onClick: () => {
+                    setNotificationProfileOpen(false);
                     if (openUserProfile) openUserProfile({});
                   },
-                  title: "Open Clerk User Profile",
+                  title: "Account Management",
+                  className: "account-management-pill",
                 },
               ]}
               onMetaRowClick=${copyNotificationProfileMetaValue}
@@ -10212,6 +10280,10 @@ function Layout() {
                   html`${renderProfileGroupsCard(notificationProfileUser)}`}
                 renderBadges=${() =>
                   html`${renderStaffBadge(notificationProfileUser)}${renderOwnedRankBadges(notificationProfileUser)}`}
+                renderAchievements=${() =>
+                  html`<${ProfileAchievementsPanel}
+                    achievements=${notificationProfileUser?.achievements || []}
+                  />`}
               />
             <//>`
           : html``}

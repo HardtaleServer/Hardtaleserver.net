@@ -3809,14 +3809,19 @@ emoji-picker.reaction-picker-panel {
 }
 
 .profile-owned-badge.rank-hero {
-  color: var(--rank-hero);
-  border-color: color-mix(in srgb, var(--rank-hero) 45%, var(--rank-hero-end));
+  color: #5db8ff;
+  border-color: color-mix(in srgb, #5db8ff 52%, var(--stroke));
   background:
     linear-gradient(
       110deg,
-      color-mix(in srgb, var(--rank-hero) 16%, transparent),
-      color-mix(in srgb, var(--rank-hero-end) 18%, transparent)
+      color-mix(in srgb, #5db8ff 18%, transparent),
+      color-mix(in srgb, #2f74ff 20%, transparent)
     );
+}
+
+.profile-owned-badge.rank-hero span:not(.rank-icon),
+.store-owned-badge.rank-hero span:not(.rank-icon) {
+  background-image: linear-gradient(110deg, #5db8ff 0%, #5db8ff 62%, #2f74ff 100%);
 }
 
 .profile-owned-badge.rank-legend {
@@ -3843,16 +3848,38 @@ emoji-picker.reaction-picker-panel {
 
 .profile-owned-badge.rank-registered,
 .profile-owned-badge.rank-linked {
-  color: var(--accent-3);
-  border-color: color-mix(in srgb, var(--accent-3) 44%, var(--stroke));
-  background: color-mix(in srgb, var(--accent-3) 11%, var(--bg-soft));
+  color: #4bcf7a;
+  border-color: color-mix(in srgb, #4bcf7a 48%, var(--stroke));
+  background: color-mix(in srgb, #4bcf7a 12%, var(--bg-soft));
 }
 
 .profile-owned-badge.rank-unregistered,
 .profile-owned-badge.rank-unlinked {
-  color: var(--accent-2);
-  border-color: color-mix(in srgb, var(--accent-2) 46%, var(--stroke));
-  background: color-mix(in srgb, var(--accent-2) 10%, var(--bg-soft));
+  color: #e14f4f;
+  border-color: color-mix(in srgb, #e14f4f 52%, var(--stroke));
+  background: color-mix(in srgb, #e14f4f 14%, var(--bg-soft));
+}
+
+.comment-rank.staff.rank-unregistered span:not(.rank-icon),
+.comment-rank.staff.rank-unlinked span:not(.rank-icon),
+.comment-rank.staff.rank-registered span:not(.rank-icon),
+.comment-rank.staff.rank-linked span:not(.rank-icon) {
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: currentColor;
+}
+
+.comment-rank.staff.rank-unregistered,
+.comment-rank.staff.rank-unlinked {
+  color: #e14f4f;
+  text-shadow: 0 0 8px color-mix(in srgb, #e14f4f 34%, transparent);
+}
+
+.comment-rank.staff.rank-registered,
+.comment-rank.staff.rank-linked {
+  color: #4bcf7a;
+  text-shadow: 0 0 8px color-mix(in srgb, #4bcf7a 34%, transparent);
 }
 
 .profile-owned-badge.staff-owned-badge {
@@ -4013,6 +4040,77 @@ emoji-picker.reaction-picker-panel {
 .profile-achievement-chip.locked .profile-achievement-circle {
   filter: grayscale(1);
   opacity: 0.7;
+}
+
+.profile-achievements-panel {
+  width: 100%;
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  background: var(--bg-soft);
+  padding: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.profile-achievements-panel-subtitle {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.profile-achievements-panel-list {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.profile-achievement-entry {
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--card) 78%, var(--bg-soft));
+  padding: 8px;
+  display: grid;
+  gap: 6px;
+}
+
+.profile-achievement-entry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.profile-achievement-entry-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.profile-achievement-readmore summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.profile-achievement-readmore summary::-webkit-details-marker {
+  display: none;
+}
+
+.profile-achievement-readmore[open] summary {
+  margin-bottom: 6px;
+}
+
+.profile-achievement-readmore p {
+  margin: 0 0 6px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.profile-achievement-readmore p:last-child {
+  margin-bottom: 0;
 }
 
 .profile-card-title-picker {
@@ -4623,13 +4721,13 @@ emoji-picker.reaction-picker-panel {
 }
 
 .store-owned-badge.rank-hero {
-  color: var(--rank-hero);
-  border-color: color-mix(in srgb, var(--rank-hero) 45%, var(--rank-hero-end));
+  color: #5db8ff;
+  border-color: color-mix(in srgb, #5db8ff 52%, var(--stroke));
   background:
     linear-gradient(
       110deg,
-      color-mix(in srgb, var(--rank-hero) 16%, transparent),
-      color-mix(in srgb, var(--rank-hero-end) 18%, transparent)
+      color-mix(in srgb, #5db8ff 18%, transparent),
+      color-mix(in srgb, #2f74ff 20%, transparent)
     );
 }
 
@@ -6109,6 +6207,18 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   background: rgba(255, 255, 255, 0.04);
   border-color: transparent;
   box-shadow: none;
+}
+
+.drawer-link.active,
+.drawer-link.active:hover {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--stroke));
+  background: color-mix(in srgb, var(--bg-soft) 88%, transparent);
+  color: transparent;
+  background-image: linear-gradient(270deg, var(--accent-2), var(--accent));
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
 }
 
 .drawer-link:active {
