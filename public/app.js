@@ -3829,28 +3829,34 @@ function CommentThread({
               ${profileUser.username
                 ? html`<div className="profile-card-username">@${profileUser.username}</div>`
                 : html``}
-              <div
-                className=${`comment-rank ${
-                  profileUser.staff ? `staff ${resolveStaffRoleClass(profileUser)}`.trim() : ""
-                } ${
-                  profileUser.staff && profileUser.showStaffGradient === false ? "staff-static" : ""
-                } profile-card-rank ${
-                  profileUser.showRankEffects === false ? "rank-effects-off" : ""
-                } ${
-                  profileUser.showDonorGradient === false ? "donor-gradient-off" : "donor-gradient-on"
-                } rank-${String(profileUser.rankLabel || "Unregistered")
-                  .trim()
-                  .toLowerCase()
-                  .replace(/[^a-z0-9]+/g, "-")}`.trim()}
-              >
-                ${(() => {
-                  const iconType = getRankIconType(profileUser.rankLabel || "");
-                  return html`
-                    ${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
-                    <span>${getRankDisplayLabel(profileUser.rankLabel)}</span>
-                  `;
-                })()}
-              </div>
+              ${(() => {
+                const normalizedRank = normalizeOwnedRank(profileUser.rankLabel || "Unregistered");
+                const useStaffAsPrimaryBadge = Boolean(profileUser.staff) && (normalizedRank === "Unregistered" || normalizedRank === "Unlinked");
+                const badgeLabel = useStaffAsPrimaryBadge
+                  ? toStaffPillTitle(profileUser.staffRole) || "Staff"
+                  : getRankDisplayLabel(profileUser.rankLabel);
+                const badgeIconType = useStaffAsPrimaryBadge ? "staff" : getRankIconType(profileUser.rankLabel || "");
+                const badgeSlug = useStaffAsPrimaryBadge
+                  ? "staff"
+                  : String(profileUser.rankLabel || "Unregistered")
+                      .trim()
+                      .toLowerCase()
+                      .replace(/[^a-z0-9]+/g, "-");
+                return html`<div
+                  className=${`comment-rank ${
+                    profileUser.staff ? `staff ${resolveStaffRoleClass(profileUser)}`.trim() : ""
+                  } ${
+                    profileUser.staff && profileUser.showStaffGradient === false ? "staff-static" : ""
+                  } profile-card-rank ${
+                    profileUser.showRankEffects === false ? "rank-effects-off" : ""
+                  } ${
+                    profileUser.showDonorGradient === false ? "donor-gradient-off" : "donor-gradient-on"
+                  } rank-${badgeSlug}`.trim()}
+                >
+                  ${badgeIconType ? html`<span className="rank-icon">${renderRankIcon(badgeIconType)}</span>` : html``}
+                  <span>${badgeLabel}</span>
+                </div>`;
+              })()}
               ${profileUser.isOwn
                 ? html`<label className="profile-card-title-picker">
                     <span className="muted">Display title</span>
@@ -6893,23 +6899,29 @@ function ForumPage({ isAdmin = false }) {
       ${forumProfileUser.username
         ? html`<div className="profile-card-username">@${forumProfileUser.username}</div>`
         : html``}
-      <div
-        className=${`comment-rank ${forumProfileUser.staff ? `staff ${resolveStaffRoleClass(forumProfileUser)}`.trim() : ""} profile-card-rank ${
-          forumProfileUser.staff && forumProfileUser.showStaffGradient === false
-            ? "staff-static"
-            : ""
-        } ${
-          forumProfileUser.showRankEffects === false ? "rank-effects-off" : ""
-        } ${
-          forumProfileUser.showDonorGradient === false ? "donor-gradient-off" : "donor-gradient-on"
-        } rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}
-      >
-        ${(() => {
-          const iconType = getRankIconType(forumProfileUser.rankLabel || "");
-          return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
-            <span>${getRankDisplayLabel(forumProfileUser.rankLabel || "Unregistered")}</span>`;
-        })()}
-      </div>
+      ${(() => {
+        const normalizedRank = normalizeOwnedRank(forumProfileUser.rankLabel || "Unregistered");
+        const useStaffAsPrimaryBadge = Boolean(forumProfileUser.staff) && (normalizedRank === "Unregistered" || normalizedRank === "Unlinked");
+        const badgeLabel = useStaffAsPrimaryBadge
+          ? toStaffPillTitle(forumProfileUser.staffRole) || "Staff"
+          : getRankDisplayLabel(forumProfileUser.rankLabel || "Unregistered");
+        const badgeIconType = useStaffAsPrimaryBadge ? "staff" : getRankIconType(forumProfileUser.rankLabel || "");
+        const badgeSlug = useStaffAsPrimaryBadge ? "staff" : rankSlug(forumProfileUser.rankLabel || "Unregistered");
+        return html`<div
+          className=${`comment-rank ${forumProfileUser.staff ? `staff ${resolveStaffRoleClass(forumProfileUser)}`.trim() : ""} profile-card-rank ${
+            forumProfileUser.staff && forumProfileUser.showStaffGradient === false
+              ? "staff-static"
+              : ""
+          } ${
+            forumProfileUser.showRankEffects === false ? "rank-effects-off" : ""
+          } ${
+            forumProfileUser.showDonorGradient === false ? "donor-gradient-off" : "donor-gradient-on"
+          } rank-${badgeSlug}`.trim()}
+        >
+          ${badgeIconType ? html`<span className="rank-icon">${renderRankIcon(badgeIconType)}</span>` : html``}
+          <span>${badgeLabel}</span>
+        </div>`;
+      })()}
       ${forumProfileUser.isOwn
         ? html`<label className="profile-card-title-picker">
             <span className="muted">Display title</span>
@@ -8336,6 +8348,8 @@ function renderRankIcon(type) {
       return html`<img className="rank-icon-image" src=${LINKED_STATUS_ICON_SVG} alt="" aria-hidden="true" />`;
     case "unlinked":
       return html`<img className="rank-icon-image" src=${UNLINKED_STATUS_ICON_SVG} alt="" aria-hidden="true" />`;
+    case "staff":
+      return html`<img className="rank-icon-image" src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" />`;
     default:
       return html``;
   }
@@ -8424,7 +8438,7 @@ function renderOwnedRankBadges(entry) {
     showAllOwnedRankBadges: entry?.showAllOwnedRankBadges !== false,
     selectedOwnedBadge: entry?.selectedOwnedBadge || "",
   });
-  const linkedResolved = Boolean(entry.linkedAccount || isStaffUser);
+  const linkedResolved = Boolean(entry.linkedAccount);
   const linkedBadgeLabel = linkedResolved ? "Linked" : "Unlinked";
   const showStaffBadgeChip = isStaffUser && entry.showStaffBadge !== false;
   const showStaffBadgeIcon = entry.showStaffBadgeIcon !== false;
