@@ -341,7 +341,8 @@ body[data-theme="dark"] {
 .desktop-sticky.transparent .auth-buttons .settings-button,
 .desktop-sticky.transparent .auth-buttons .button,
 .desktop-sticky.transparent .auth-buttons .notif,
-.desktop-sticky.transparent .auth-buttons .cart-button {
+.desktop-sticky.transparent .auth-buttons .cart-button,
+.desktop-sticky.transparent .auth-buttons .user-button-trigger {
   opacity: 1;
   position: relative;
   z-index: 2;
@@ -352,23 +353,24 @@ body[data-theme="dark"] {
   opacity: 1;
 }
 
-.desktop-sticky.transparent .cl-userButtonAvatarImage {
-  position: relative;
-  z-index: 2;
-}
-
 .desktop-sticky.transparent .nav-link:hover,
 .desktop-sticky.transparent .nav-link:focus,
 .desktop-sticky.transparent .auth-buttons .settings-button:hover,
 .desktop-sticky.transparent .auth-buttons .button:hover,
 .desktop-sticky.transparent .auth-buttons .notif:hover,
-.desktop-sticky.transparent .auth-buttons .cart-button:hover {
+.desktop-sticky.transparent .auth-buttons .cart-button:hover,
+.desktop-sticky.transparent .auth-buttons .user-button-trigger:hover {
   opacity: 1;
 }
 
 .desktop-sticky.transparent .nav-link.active {
-  background: var(--bg-soft);
-  border: 1px solid var(--stroke);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--stroke));
+  color: transparent;
+  background-image: linear-gradient(270deg, var(--accent-2), var(--accent));
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
   opacity: 1;
 }
 
@@ -644,6 +646,48 @@ body[data-theme="dark"] {
 
 .settings-button.spin .settings-icon-mask {
   animation: cogSpin 0.4s ease;
+}
+
+.user-button {
+  display: inline-flex;
+  align-items: center;
+}
+
+.user-button-trigger {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--stroke);
+  background: var(--bg-soft);
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.user-button-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid var(--stroke);
+}
+
+@media (min-width: 861px) {
+  .user-button-trigger:hover,
+  .user-button-trigger:focus-visible {
+    transform: translateY(-2px);
+    border-color: transparent;
+    background: linear-gradient(140deg, var(--accent-2), var(--accent));
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+  }
+
+  .user-button-trigger:hover .user-button-avatar,
+  .user-button-trigger:focus-visible .user-button-avatar {
+    border-color: rgba(255, 255, 255, 0.14);
+  }
 }
 .cart-button {
   position: relative;

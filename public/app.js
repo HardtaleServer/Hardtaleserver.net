@@ -9447,6 +9447,9 @@ function Layout() {
         openNotifications=${openNotifications}
         cartCount=${cartCount}
         openCart=${openCart}
+        profileName=${displayName}
+        profileAvatar=${user?.imageUrl || "/assets/HardTale_H_GreyScale.png"}
+        openProfilePanel=${openDrawerSelfProfileCard}
       />
     `;
   }

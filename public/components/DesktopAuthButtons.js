@@ -45,6 +45,9 @@ export default function DesktopAuthButtons({
   openNotifications,
   cartCount,
   openCart,
+  profileName,
+  profileAvatar,
+  openProfilePanel,
 }) {
   return html`
     <div className="auth-buttons">
@@ -93,7 +96,14 @@ export default function DesktopAuthButtons({
           <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
           ${cartCount > 0 ? html`<${CartButton} onClick=${openCart} count=${cartCount} />` : html``}
           <span className="user-button">
-            <${UserButton} />
+            <button
+              className="user-button-trigger"
+              type="button"
+              title="Open profile card"
+              onClick=${openProfilePanel}
+            >
+              <img className="user-button-avatar" src=${profileAvatar} alt=${profileName} />
+            </button>
           </span>
         <//>
       <//>
