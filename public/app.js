@@ -8875,7 +8875,10 @@ function LinkPage({ onClose = null }) {
   const { openSignIn } = useClerk();
   const LINK_BAD_QUERY_TELEMETRY_UNTIL_MS = Date.parse("2026-02-24T23:59:59Z");
   const LINK_CODE_LENGTH = 8;
-  const LINK_CODE_REGEX = new RegExp(`^[A-Z0-9]{${LINK_CODE_LENGTH}}$`);
+  const LINK_CODE_REGEX = useMemo(
+    () => new RegExp(`^[A-Z0-9]{${LINK_CODE_LENGTH}}$`),
+    [LINK_CODE_LENGTH],
+  );
   const EMPTY_CODE_ARRAY = useMemo(
     () => Array.from({ length: LINK_CODE_LENGTH }, () => ""),
     [LINK_CODE_LENGTH],
