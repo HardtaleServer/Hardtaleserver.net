@@ -1,0 +1,42 @@
+﻿Donator Rank Identity (Balanced Redesign)
+
+Design split
+- Identity text (names/message readability): solid rank start colors.
+- Flair elements (rank tags/prefix chips): gradient from start -> end.
+
+Final color pairs
+Hero
+- Start: #2CCF9E
+- End:   #D95B54
+
+Legend
+- Start: #FF9A3D
+- End:   #8F79C9
+
+Mythic
+- Start: #FF621D
+- End:   #66B6C9
+
+Suggested in-game rank tags (gradient flair)
+<gradient:#2CCF9E:#D95B54>[HERO]</gradient>
+<gradient:#FF9A3D:#8F79C9>[LEGEND]</gradient>
+<gradient:#FF621D:#66B6C9>[MYTHIC]</gradient>
+
+Suggested in-game chat format (best balance)
+- Keep prefix gradient.
+- Keep player/message text stable, singular rank color for readability.
+
+Hero chat:
+<gradient:#2CCF9E:#D95B54>[HERO]</gradient> <#2CCF9E>{player}</#2CCF9E><gray>: <white>{message}</white>
+
+Legend chat:
+<gradient:#FF9A3D:#8F79C9>[LEGEND]</gradient> <#FF9A3D>{player}</#FF9A3D><gray>: <white>{message}</white>
+
+Mythic chat:
+<gradient:#FF621D:#66B6C9>[MYTHIC]</gradient> <#FF621D>{player}</#FF621D><gray>: <white>{message}</white>
+
+What changed on website
+- Donor name text now uses solid start colors (strong identity, easier reading).
+- Gradient animation remains on rank labels/chips/titles for flair.
+- Gradient blend weights now bias toward start color (about 65% start, 35% end feel).
+- Animation remains toned (slower + softer).

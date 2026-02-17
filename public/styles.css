@@ -14,6 +14,20 @@
   --rank-hero: #2ccf9e;
   --rank-legend: #ff9a3d;
   --rank-mythic: #ff621d;
+  --rank-hero-end: #d95b54;
+  --rank-legend-end: #8f79c9;
+  --rank-mythic-end: #66b6c9;
+  --staff-dev-start: #4fd4ff;
+  --staff-dev-end: #c66bff;
+  --staff-admin-start: #ff6a5b;
+  --staff-admin-end: #ffb057;
+  --staff-mod-start: #63afff;
+  --staff-mod-end: #7a87ff;
+  --staff-helper-start: #57d493;
+  --staff-helper-end: #79c9b2;
+  --font-rank-hero: "Exo 2", "Trebuchet MS", "Segoe UI", sans-serif;
+  --font-rank-legend: "Cinzel", "Palatino Linotype", "Book Antiqua", serif;
+  --font-rank-mythic: "Orbitron", "Trebuchet MS", "Segoe UI", sans-serif;
   --rank-registered-glow: rgba(71, 146, 132, 0.72);
   --rank-hero-glow: rgba(44, 207, 158, 0.82);
   --rank-legend-glow: rgba(255, 154, 61, 0.86);
@@ -2284,8 +2298,8 @@ emoji-picker.reaction-picker-panel {
 .comment-author.rank-hero,
 .comment-rank.rank-hero,
 .profile-card-name.rank-hero {
-  color: var(--rank-hero);
-  text-shadow: none;
+  color: color-mix(in srgb, var(--rank-hero) 82%, #fff 18%);
+  text-shadow: 0 0 9px color-mix(in srgb, var(--rank-hero) 34%, transparent);
 }
 
 .comment-author.rank-hero::after,
@@ -2298,8 +2312,8 @@ emoji-picker.reaction-picker-panel {
 .comment-author.rank-legend,
 .comment-rank.rank-legend,
 .profile-card-name.rank-legend {
-  color: var(--rank-legend);
-  text-shadow: none;
+  color: color-mix(in srgb, var(--rank-legend) 80%, #fff 20%);
+  text-shadow: 0 0 9px color-mix(in srgb, var(--rank-legend) 36%, transparent);
 }
 
 .comment-author.rank-legend::after,
@@ -2312,8 +2326,8 @@ emoji-picker.reaction-picker-panel {
 .comment-author.rank-mythic,
 .comment-rank.rank-mythic,
 .profile-card-name.rank-mythic {
-  color: var(--rank-mythic);
-  text-shadow: none;
+  color: color-mix(in srgb, var(--rank-mythic) 80%, #fff 20%);
+  text-shadow: 0 0 9px color-mix(in srgb, var(--rank-mythic) 36%, transparent);
 }
 
 .comment-author.rank-mythic::after,
@@ -2352,6 +2366,139 @@ emoji-picker.reaction-picker-panel {
 .profile-card-rank.rank-effects-off.rank-mythic::after {
   content: none;
   animation: none;
+}
+
+@keyframes donorRankFlow {
+  0% {
+    background-position: 0% 50%;
+    filter: saturate(1);
+  }
+  50% {
+    background-position: 100% 50%;
+    filter: saturate(1.05);
+  }
+  100% {
+    background-position: 0% 50%;
+    filter: saturate(1);
+  }
+}
+
+.comment-author.rank-hero,
+.profile-card-name.rank-hero,
+.store-name.rank-hero {
+  color: var(--rank-hero);
+  text-shadow: 0 0 7px color-mix(in srgb, var(--rank-hero) 24%, transparent);
+  background-image: none;
+  -webkit-text-fill-color: initial;
+  animation: none;
+}
+
+.comment-author.rank-legend,
+.profile-card-name.rank-legend,
+.store-name.rank-legend {
+  color: var(--rank-legend);
+  text-shadow: 0 0 7px color-mix(in srgb, var(--rank-legend) 24%, transparent);
+  background-image: none;
+  -webkit-text-fill-color: initial;
+  animation: none;
+}
+
+.comment-author.rank-mythic,
+.profile-card-name.rank-mythic,
+.store-name.rank-mythic {
+  color: var(--rank-mythic);
+  text-shadow: 0 0 7px color-mix(in srgb, var(--rank-mythic) 24%, transparent);
+  background-image: none;
+  -webkit-text-fill-color: initial;
+  animation: none;
+}
+
+.comment-rank.rank-hero span:not(.rank-icon),
+.profile-card-rank.rank-hero span:not(.rank-icon),
+.store-rank-title.rank-hero span:not(.rank-icon),
+.store-profile-rank.rank-hero span:not(.rank-icon),
+.profile-owned-badge.rank-hero span:not(.rank-icon),
+.store-owned-badge.rank-hero span:not(.rank-icon) {
+  background-image: linear-gradient(110deg, var(--rank-hero) 0%, var(--rank-hero) 65%, var(--rank-hero-end) 100%);
+  background-size: 190% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: donorRankFlow 4s ease-in-out infinite;
+}
+
+.comment-rank.rank-legend span:not(.rank-icon),
+.profile-card-rank.rank-legend span:not(.rank-icon),
+.store-rank-title.rank-legend span:not(.rank-icon),
+.store-profile-rank.rank-legend span:not(.rank-icon),
+.profile-owned-badge.rank-legend span:not(.rank-icon),
+.store-owned-badge.rank-legend span:not(.rank-icon) {
+  background-image: linear-gradient(110deg, var(--rank-legend) 0%, var(--rank-legend) 65%, var(--rank-legend-end) 100%);
+  background-size: 190% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: donorRankFlow 4s ease-in-out infinite;
+}
+
+.comment-rank.rank-mythic span:not(.rank-icon),
+.profile-card-rank.rank-mythic span:not(.rank-icon),
+.store-rank-title.rank-mythic span:not(.rank-icon),
+.store-profile-rank.rank-mythic span:not(.rank-icon),
+.profile-owned-badge.rank-mythic span:not(.rank-icon),
+.store-owned-badge.rank-mythic span:not(.rank-icon) {
+  background-image: linear-gradient(110deg, var(--rank-mythic) 0%, var(--rank-mythic) 65%, var(--rank-mythic-end) 100%);
+  background-size: 190% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: donorRankFlow 4s ease-in-out infinite;
+}
+
+.profile-owned-badge.rank-hero,
+.store-owned-badge.rank-hero {
+  border-color: color-mix(in srgb, var(--rank-hero) 45%, var(--rank-hero-end));
+  background:
+    linear-gradient(110deg, color-mix(in srgb, var(--rank-hero) 16%, transparent), color-mix(in srgb, var(--rank-hero-end) 18%, transparent));
+}
+
+.profile-owned-badge.rank-legend,
+.store-owned-badge.rank-legend {
+  border-color: color-mix(in srgb, var(--rank-legend) 45%, var(--rank-legend-end));
+  background:
+    linear-gradient(110deg, color-mix(in srgb, var(--rank-legend) 16%, transparent), color-mix(in srgb, var(--rank-legend-end) 18%, transparent));
+}
+
+.profile-owned-badge.rank-mythic,
+.store-owned-badge.rank-mythic {
+  border-color: color-mix(in srgb, var(--rank-mythic) 45%, var(--rank-mythic-end));
+  background:
+    linear-gradient(110deg, color-mix(in srgb, var(--rank-mythic) 16%, transparent), color-mix(in srgb, var(--rank-mythic-end) 18%, transparent));
+}
+
+.comment-author.rank-effects-off.rank-hero,
+.comment-author.rank-effects-off.rank-legend,
+.comment-author.rank-effects-off.rank-mythic,
+.profile-card-name.rank-effects-off.rank-hero,
+.profile-card-name.rank-effects-off.rank-legend,
+.profile-card-name.rank-effects-off.rank-mythic,
+.store-name.rank-effects-off.rank-hero,
+.store-name.rank-effects-off.rank-legend,
+.store-name.rank-effects-off.rank-mythic,
+.comment-rank.rank-effects-off.rank-hero span:not(.rank-icon),
+.comment-rank.rank-effects-off.rank-legend span:not(.rank-icon),
+.comment-rank.rank-effects-off.rank-mythic span:not(.rank-icon),
+.profile-card-rank.rank-effects-off.rank-hero span:not(.rank-icon),
+.profile-card-rank.rank-effects-off.rank-legend span:not(.rank-icon),
+.profile-card-rank.rank-effects-off.rank-mythic span:not(.rank-icon),
+.profile-owned-badge.rank-effects-off.rank-hero span:not(.rank-icon),
+.profile-owned-badge.rank-effects-off.rank-legend span:not(.rank-icon),
+.profile-owned-badge.rank-effects-off.rank-mythic span:not(.rank-icon) {
+  animation: none;
+  background-position: 50% 0;
 }
 
 @keyframes avatarHeroGlow {
@@ -2448,6 +2595,141 @@ emoji-picker.reaction-picker-panel {
 }
 
 .comment-rank.staff.staff-static {
+  animation: none;
+  background-position: 50% 0;
+}
+
+.rank-font-on.comment-author.rank-hero,
+.rank-font-on.profile-card-name.rank-hero,
+.author-name.rank-font-on.rank-hero {
+  font-family: var(--font-rank-hero);
+  letter-spacing: 0.01em;
+}
+
+.rank-font-on.comment-author.rank-legend,
+.rank-font-on.profile-card-name.rank-legend,
+.author-name.rank-font-on.rank-legend {
+  font-family: var(--font-rank-legend);
+  letter-spacing: 0.015em;
+}
+
+.rank-font-on.comment-author.rank-mythic,
+.rank-font-on.profile-card-name.rank-mythic,
+.author-name.rank-font-on.rank-mythic {
+  font-family: var(--font-rank-mythic);
+  letter-spacing: 0.02em;
+}
+
+.rank-font-off.comment-author,
+.rank-font-off.profile-card-name,
+.author-name.rank-font-off {
+  font-family: "Space Grotesk", sans-serif;
+  letter-spacing: normal;
+}
+
+.comment-staff-pill.staff-role-dev,
+.forum-staff-pill.staff-role-dev,
+.profile-card-badge.staff-badge.staff-role-dev,
+.profile-owned-badge.staff-owned-badge.staff-role-dev {
+  border-color: color-mix(in srgb, var(--staff-dev-start) 50%, var(--stroke));
+  background: color-mix(in srgb, var(--staff-dev-start) 12%, var(--bg-soft));
+}
+
+.comment-staff-pill.staff-role-admin,
+.forum-staff-pill.staff-role-admin,
+.profile-card-badge.staff-badge.staff-role-admin,
+.profile-owned-badge.staff-owned-badge.staff-role-admin {
+  border-color: color-mix(in srgb, var(--staff-admin-start) 50%, var(--stroke));
+  background: color-mix(in srgb, var(--staff-admin-start) 12%, var(--bg-soft));
+}
+
+.comment-staff-pill.staff-role-mod,
+.forum-staff-pill.staff-role-mod,
+.profile-card-badge.staff-badge.staff-role-mod,
+.profile-owned-badge.staff-owned-badge.staff-role-mod {
+  border-color: color-mix(in srgb, var(--staff-mod-start) 50%, var(--stroke));
+  background: color-mix(in srgb, var(--staff-mod-start) 12%, var(--bg-soft));
+}
+
+.comment-staff-pill.staff-role-helper,
+.forum-staff-pill.staff-role-helper,
+.profile-card-badge.staff-badge.staff-role-helper,
+.profile-owned-badge.staff-owned-badge.staff-role-helper {
+  border-color: color-mix(in srgb, var(--staff-helper-start) 50%, var(--stroke));
+  background: color-mix(in srgb, var(--staff-helper-start) 12%, var(--bg-soft));
+}
+
+.comment-staff-pill.staff-role-dev .staff-pill-label,
+.forum-staff-pill.staff-role-dev .staff-pill-label,
+.comment-author.staff.staff-role-dev,
+.comment-text.staff.staff-role-dev,
+.comment-rank.staff.staff-role-dev,
+.profile-card-badge.staff-badge.staff-role-dev span,
+.profile-owned-badge.staff-owned-badge.staff-role-dev span {
+  background-image: linear-gradient(110deg, var(--staff-dev-start), var(--staff-dev-end));
+  background-size: 220% 100%;
+  animation: staffReflect 2.4s ease-in-out infinite reverse;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.comment-staff-pill.staff-role-admin .staff-pill-label,
+.forum-staff-pill.staff-role-admin .staff-pill-label,
+.comment-author.staff.staff-role-admin,
+.comment-text.staff.staff-role-admin,
+.comment-rank.staff.staff-role-admin,
+.profile-card-badge.staff-badge.staff-role-admin span,
+.profile-owned-badge.staff-owned-badge.staff-role-admin span {
+  background-image: linear-gradient(110deg, var(--staff-admin-start), var(--staff-admin-end));
+  background-size: 220% 100%;
+  animation: staffReflect 2.2s ease-in-out infinite reverse;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.comment-staff-pill.staff-role-mod .staff-pill-label,
+.forum-staff-pill.staff-role-mod .staff-pill-label,
+.comment-author.staff.staff-role-mod,
+.comment-text.staff.staff-role-mod,
+.comment-rank.staff.staff-role-mod,
+.profile-card-badge.staff-badge.staff-role-mod span,
+.profile-owned-badge.staff-owned-badge.staff-role-mod span {
+  background-image: linear-gradient(110deg, var(--staff-mod-start), var(--staff-mod-end));
+  background-size: 220% 100%;
+  animation: staffReflect 2.6s ease-in-out infinite reverse;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.comment-staff-pill.staff-role-helper .staff-pill-label,
+.forum-staff-pill.staff-role-helper .staff-pill-label,
+.comment-author.staff.staff-role-helper,
+.comment-text.staff.staff-role-helper,
+.comment-rank.staff.staff-role-helper,
+.profile-card-badge.staff-badge.staff-role-helper span,
+.profile-owned-badge.staff-owned-badge.staff-role-helper span {
+  background-image: linear-gradient(110deg, var(--staff-helper-start), var(--staff-helper-end));
+  background-size: 220% 100%;
+  animation: staffReflect 2.8s ease-in-out infinite reverse;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+.comment-staff-pill.staff-static .staff-pill-label,
+.forum-staff-pill.staff-static .staff-pill-label,
+.comment-author.staff.staff-static,
+.comment-text.staff.staff-static,
+.comment-rank.staff.staff-static,
+.profile-card-badge.staff-badge.staff-static span,
+.profile-owned-badge.staff-owned-badge.staff-static span {
   animation: none;
   background-position: 50% 0;
 }

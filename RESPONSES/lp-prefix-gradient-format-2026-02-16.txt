@@ -1,0 +1,35 @@
+﻿LuckPerms Prefix Gradient Format (with trailing space after rank)
+
+Developer
+prefix.7.<gradient:#4FD4FF:#C66BFF>[DEV] </gradient>
+
+Admin
+prefix.6.<gradient:#FF6A5B:#FFB057>[ADMIN] </gradient>
+
+Moderator
+prefix.5.<gradient:#63AFFF:#7A87FF>[MOD] </gradient>
+
+Helper
+prefix.4.<gradient:#57D493:#79C9B2>[HELPER] </gradient>
+
+Mythic
+prefix.3.<gradient:#FF621D:#66B6C9>[MYTHIC] </gradient>
+
+Legend
+prefix.2.<gradient:#FF9A3D:#8F79C9>[LEGEND] </gradient>
+
+Hero
+prefix.1.<gradient:#2CCF9E:#D95B54>[HERO] </gradient>
+
+Linked
+prefix.0.<#479284>🔗 [LINKED] </#479284>
+
+Unlinked
+prefix.-1.<#A9B3C7>🔓 [UNLINKED] </#A9B3C7>
+
+Optional message gradient examples (if you want chat body gradient too)
+- Keep one space after rank in prefix above, then message gradient separately.
+
+msg.legend.<gradient:#FF9A3D:#8F79C9>{message}</gradient>
+msg.hero.<gradient:#2CCF9E:#D95B54>{message}</gradient>
+msg.mythic.<gradient:#FF621D:#66B6C9>{message}</gradient>

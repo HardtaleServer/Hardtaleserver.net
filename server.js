@@ -97,6 +97,18 @@ const ACHIEVEMENT_DEFS = [
     icon: "W",
   },
   {
+    key: "unlinked_state",
+    title: "Unlinked",
+    description: "Account is currently unlinked",
+    icon: "🔓",
+  },
+  {
+    key: "linked_state",
+    title: "Linked",
+    description: "Account is currently linked",
+    icon: "🔗",
+  },
+  {
     key: "linking_up",
     title: "Linking up",
     description: "Use /link successfully",
@@ -311,6 +323,7 @@ function normalizeComment(doc) {
     authorShowStaffGradient: rest.authorShowStaffGradient !== false,
     authorShowRankEffects: rest.authorShowRankEffects !== false,
     authorShowAvatarVfx: rest.authorShowAvatarVfx !== false,
+    authorUseRankFont: rest.authorUseRankFont !== false,
   };
   if (
     normalized.authorName &&
@@ -334,6 +347,7 @@ function normalizeComment(doc) {
         authorShowStaffGradient: reply.authorShowStaffGradient !== false,
         authorShowRankEffects: reply.authorShowRankEffects !== false,
         authorShowAvatarVfx: reply.authorShowAvatarVfx !== false,
+        authorUseRankFont: reply.authorUseRankFont !== false,
       };
       if (
         nextReply.authorName &&
@@ -798,6 +812,10 @@ function resolveAvatarVfxVisible(metadata = {}) {
   return metadata?.showAvatarVfx !== false;
 }
 
+function resolveRankFontVisible(metadata = {}) {
+  return metadata?.useRankFont !== false;
+}
+
 async function getFreshAuthorSnapshot(userId, cache = new Map()) {
   const key = normalizeText(userId, 128);
   if (!key) return null;
@@ -826,6 +844,7 @@ async function getFreshAuthorSnapshot(userId, cache = new Map()) {
       authorShowStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
       authorShowRankEffects: resolveRankEffectsVisible(user?.publicMetadata || {}),
       authorShowAvatarVfx: resolveAvatarVfxVisible(user?.publicMetadata || {}),
+      authorUseRankFont: resolveRankFontVisible(user?.publicMetadata || {}),
     };
     cache.set(key, snapshot);
     return snapshot;
@@ -926,7 +945,8 @@ function hasAuthorSnapshotChanged(entry, snapshot) {
     Boolean(entry.authorShowStaffBadgeIcon) !== Boolean(snapshot.authorShowStaffBadgeIcon) ||
     Boolean(entry.authorShowStaffGradient) !== Boolean(snapshot.authorShowStaffGradient) ||
     Boolean(entry.authorShowRankEffects) !== Boolean(snapshot.authorShowRankEffects) ||
-    Boolean(entry.authorShowAvatarVfx) !== Boolean(snapshot.authorShowAvatarVfx)
+    Boolean(entry.authorShowAvatarVfx) !== Boolean(snapshot.authorShowAvatarVfx) ||
+    Boolean(entry.authorUseRankFont) !== Boolean(snapshot.authorUseRankFont)
   );
 }
 
@@ -984,6 +1004,7 @@ async function refreshCommentAuthorFields(comments = []) {
         setPayload.authorShowStaffGradient = nextComment.authorShowStaffGradient;
         setPayload.authorShowRankEffects = nextComment.authorShowRankEffects;
         setPayload.authorShowAvatarVfx = nextComment.authorShowAvatarVfx;
+        setPayload.authorUseRankFont = nextComment.authorUseRankFont;
       }
       if (repliesChanged) {
         setPayload.replies = nextComment.replies;
@@ -1190,15 +1211,21 @@ async function isLinkedUserId(userId) {
   return Boolean(doc);
 }
 
-function buildAchievementCatalogWithState(unlockedRows = []) {
+function buildAchievementCatalogWithState(unlockedRows = [], options = {}) {
   const unlockedMap = new Map();
   for (const row of unlockedRows) {
     const key = normalizeText(row?.key, 80);
     if (!key) continue;
     unlockedMap.set(key, String(row?.unlockedAt || ""));
   }
+  const linkedState = options?.linked === true ? "linked" : options?.linked === false ? "unlinked" : "";
   return ACHIEVEMENT_DEFS.map((item) => {
-    const unlockedAt = unlockedMap.get(item.key) || "";
+    let unlockedAt = unlockedMap.get(item.key) || "";
+    if (item.key === "linked_state") {
+      unlockedAt = linkedState === "linked" ? "state-active" : "";
+    } else if (item.key === "unlinked_state") {
+      unlockedAt = linkedState === "unlinked" ? "state-active" : "";
+    }
     return {
       key: item.key,
       title: item.title,
@@ -1217,11 +1244,12 @@ async function getUserAchievements(userId) {
   if (!safeUserId || !userAchievementsCollection) {
     return buildAchievementCatalogWithState([]);
   }
+  const linked = await isLinkedUserId(safeUserId);
   const rows = await userAchievementsCollection
     .find({ userId: safeUserId })
     .project({ key: 1, unlockedAt: 1 })
     .toArray();
-  return buildAchievementCatalogWithState(rows);
+  return buildAchievementCatalogWithState(rows, { linked });
 }
 
 async function notifyAchievementUnlocked(userId, achievement) {
@@ -1530,6 +1558,7 @@ function normalizeForumPost(doc) {
     authorShowStaffBadge: stripped.authorShowStaffBadge !== false,
     authorShowStaffBadgeIcon: stripped.authorShowStaffBadgeIcon !== false,
     authorShowStaffGradient: stripped.authorShowStaffGradient !== false,
+    authorUseRankFont: stripped.authorUseRankFont !== false,
     editCount: Number.isFinite(Number(stripped.editCount)) ? Number(stripped.editCount) : 0,
     editedAt: stripped.editedAt || "",
     editedByUserId: normalizeText(stripped.editedByUserId, 128),
@@ -1566,7 +1595,8 @@ async function refreshForumPostAuthorFields(posts = []) {
           normalizeStaffRole(item.authorStaffRole) !== normalizeStaffRole(snapshot.authorStaffRole) ||
           Boolean(item.authorShowStaffBadge) !== Boolean(snapshot.authorShowStaffBadge) ||
           Boolean(item.authorShowStaffBadgeIcon) !== Boolean(snapshot.authorShowStaffBadgeIcon) ||
-          Boolean(item.authorShowStaffGradient) !== Boolean(snapshot.authorShowStaffGradient);
+          Boolean(item.authorShowStaffGradient) !== Boolean(snapshot.authorShowStaffGradient) ||
+          Boolean(item.authorUseRankFont) !== Boolean(snapshot.authorUseRankFont);
         if (authorChanged) {
           nextItem = {
             ...nextItem,
@@ -1580,6 +1610,7 @@ async function refreshForumPostAuthorFields(posts = []) {
             authorShowStaffBadge: snapshot.authorShowStaffBadge,
             authorShowStaffBadgeIcon: snapshot.authorShowStaffBadgeIcon,
             authorShowStaffGradient: snapshot.authorShowStaffGradient,
+            authorUseRankFont: snapshot.authorUseRankFont,
           };
           if (item._id) {
             ops.push({
@@ -1597,6 +1628,7 @@ async function refreshForumPostAuthorFields(posts = []) {
                     authorShowStaffBadge: nextItem.authorShowStaffBadge,
                     authorShowStaffBadgeIcon: nextItem.authorShowStaffBadgeIcon,
                     authorShowStaffGradient: nextItem.authorShowStaffGradient,
+                    authorUseRankFont: nextItem.authorUseRankFont,
                     updatedAt: new Date().toISOString(),
                   },
                 },
@@ -1751,6 +1783,7 @@ app.post("/api/admin/users/:userId/role", async (req, res) => {
     const showStaffGradient = resolveStaffGradientVisible(refreshedUser?.publicMetadata || {});
     const showRankEffects = resolveRankEffectsVisible(refreshedUser?.publicMetadata || {});
     const showAvatarVfx = resolveAvatarVfxVisible(refreshedUser?.publicMetadata || {});
+    const useRankFont = resolveRankFontVisible(refreshedUser?.publicMetadata || {});
 
     await commentsCollection.updateMany(
       { userId: targetUserId, isDeleted: false },
@@ -1765,6 +1798,7 @@ app.post("/api/admin/users/:userId/role", async (req, res) => {
           authorShowStaffGradient: showStaffGradient,
           authorShowRankEffects: showRankEffects,
           authorShowAvatarVfx: showAvatarVfx,
+          authorUseRankFont: useRankFont,
           updatedAt: new Date(),
         },
       },
@@ -1780,6 +1814,7 @@ app.post("/api/admin/users/:userId/role", async (req, res) => {
           authorShowStaffBadge: showStaffBadge,
           authorShowStaffBadgeIcon: showStaffBadgeIcon,
           authorShowStaffGradient: showStaffGradient,
+          authorUseRankFont: useRankFont,
           updatedAt: new Date().toISOString(),
         },
       },
@@ -1851,6 +1886,8 @@ app.get("/api/profile/title", async (req, res) => {
       showStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
       canToggleRankEffects: isStaff || ownedRank !== "Unregistered",
       showRankEffects: resolveRankEffectsVisible(user?.publicMetadata || {}),
+      canToggleRankFont: isStaff || ownedRank !== "Unregistered",
+      useRankFont: resolveRankFontVisible(user?.publicMetadata || {}),
       canToggleAvatarVfx: isStaff || ownedRank !== "Unregistered",
       showAvatarVfx: resolveAvatarVfxVisible(user?.publicMetadata || {}),
     });
@@ -2000,6 +2037,40 @@ app.post("/api/profile/rank-effects", async (req, res) => {
   } catch (error) {
     console.error("Failed to update rank effects settings", error);
     return res.status(500).json({ error: "Failed to update rank effects settings" });
+  }
+});
+
+app.post("/api/profile/rank-font", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const user = await clerkClient.users.getUser(auth.userId);
+    const isStaff = isStaffUser(user);
+    const linked = await isLinkedUserId(auth.userId);
+    const rankInfo = resolveDisplayRankFromMetadata(user?.publicMetadata || {}, isStaff, linked);
+    if (!isStaff && rankInfo.ownedRank === "Unregistered") {
+      return res.status(400).json({ error: "Rank font unavailable for Unregistered" });
+    }
+    const useRankFont = req.body?.useRankFont !== false;
+    await clerkClient.users.updateUserMetadata(auth.userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        useRankFont,
+      },
+    });
+    await commentsCollection.updateMany(
+      { userId: auth.userId, isDeleted: false },
+      { $set: { authorUseRankFont: useRankFont, updatedAt: new Date() } },
+    );
+    await forumPostsCollection.updateMany(
+      { authorUserId: auth.userId, isDeleted: false },
+      { $set: { authorUseRankFont: useRankFont, updatedAt: new Date().toISOString() } },
+    );
+    return res.json({ useRankFont });
+  } catch (error) {
+    console.error("Failed to update rank font settings", error);
+    return res.status(500).json({ error: "Failed to update rank font settings" });
   }
 });
 
@@ -2446,6 +2517,7 @@ app.post("/api/comments", async (req, res) => {
     const showStaffBadge = resolveStaffBadgeVisible(user?.publicMetadata || {});
     const showStaffBadgeIcon = resolveStaffBadgeIconVisible(user?.publicMetadata || {});
     const showStaffGradient = resolveStaffGradientVisible(user?.publicMetadata || {});
+    const useRankFont = resolveRankFontVisible(user?.publicMetadata || {});
     const authorIsStaff = Boolean(staffRole);
     const showRankEffects = resolveRankEffectsVisible(user?.publicMetadata || {});
     const showAvatarVfx = resolveAvatarVfxVisible(user?.publicMetadata || {});
@@ -2474,6 +2546,7 @@ app.post("/api/comments", async (req, res) => {
       authorStaffRole: staffRole,
       authorShowRankEffects: showRankEffects,
       authorShowAvatarVfx: showAvatarVfx,
+      authorUseRankFont: useRankFont,
       replies: [],
       isDeleted: false,
       createdAt: new Date(),
@@ -2597,6 +2670,7 @@ app.post("/api/comments/:id/replies", async (req, res) => {
     const showStaffGradient = resolveStaffGradientVisible(user?.publicMetadata || {});
     const showRankEffects = resolveRankEffectsVisible(user?.publicMetadata || {});
     const showAvatarVfx = resolveAvatarVfxVisible(user?.publicMetadata || {});
+    const useRankFont = resolveRankFontVisible(user?.publicMetadata || {});
     const linked = await isLinkedUserId(auth.userId);
     const rankInfo = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
@@ -2625,6 +2699,7 @@ app.post("/api/comments/:id/replies", async (req, res) => {
       authorShowStaffGradient: showStaffGradient,
       authorShowRankEffects: showRankEffects,
       authorShowAvatarVfx: showAvatarVfx,
+      authorUseRankFont: useRankFont,
       repliedToReplyId: effectiveRepliedToReplyId,
       repliedToCommentId: effectiveRepliedToCommentId,
       repliedToName: repliedToAuthorName,
@@ -3652,6 +3727,7 @@ app.post("/api/forum/posts", async (req, res) => {
       authorShowStaffBadge: showStaffBadge,
       authorShowStaffBadgeIcon: showStaffBadgeIcon,
       authorShowStaffGradient: showStaffGradient,
+      authorUseRankFont: useRankFont,
       isDeleted: false,
       createdAt: now,
       updatedAt: now,
@@ -3756,6 +3832,7 @@ app.patch("/api/forum/posts/:id", async (req, res) => {
         authorShowStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
         authorShowStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
         authorShowStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
+        authorUseRankFont: resolveRankFontVisible(user?.publicMetadata || {}),
         featured: false,
         type: "forum_post_staff_edit",
         targetUserId: doc.createdBy,
@@ -3838,6 +3915,7 @@ app.delete("/api/forum/posts/:id", async (req, res) => {
         authorShowStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
         authorShowStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
         authorShowStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
+        authorUseRankFont: resolveRankFontVisible(user?.publicMetadata || {}),
         featured: false,
         type: "forum_post_staff_delete",
         targetUserId: doc.createdBy,

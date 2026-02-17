@@ -1,0 +1,29 @@
+﻿Yes. It told me to harden our web/backend error handling to match your plugin’s newer outcomes, and I’ve done that.
+
+Changed:
+1. server.js:614
+Normalized plugin error codes to canonical app codes:
+- invalid_code -> INVALID_CODE
+- code_expired -> EXPIRED_CODE
+- code_used -> ALREADY_USED
+- code_locked -> RATE_LIMITED
+- code_rejected -> INVALID_CODE
+- status fallbacks for 429/5xx etc.
+
+2. server.js:662
+/api/link/redeem now uses that mapping when upstream redeem fails.
+
+3. public/app.js:6835
+UI now also recognizes plugin-style codes directly (CODE_EXPIRED, CODE_USED, CODE_LOCKED, CODE_REJECTED) so users get the right message.
+
+I also rechecked your five points:
+- Code is string end-to-end in Node.
+- Payload is exactly { code, webUserId }.
+- URL/query wrappers are stripped on frontend before submit.
+- TTL/single-use/lock are plugin concerns, now surfaced better in UI.
+- Syntax checks passed for both server.js and public/app.js.
+
+Next step:
+1. Restart Node backend so this mapping is active.
+2. Use a fresh in-game /link code and redeem within 300s.
+3. If it still fails, share one real plugin requestId outcome line; with this patch, your UI should now reflect the exact failure class.

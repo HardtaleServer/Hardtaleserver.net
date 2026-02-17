@@ -1,0 +1,28 @@
+﻿Implemented: System/Admin/Hardtale notification profile-card aliasing to Smurfis.
+
+What I changed
+- Server now aliases notification authors named System/Admin/Hardtale (when authorUserId is empty) to a live Clerk snapshot of the source user.
+- Default source username is smurfis.
+
+Code changes
+- server.js:71
+  - Added NOTIFICATION_PROFILE_ALIAS_SOURCE_USERNAME (defaults to "smurfis", env-overridable)
+- server.js:76
+  - Added NOTIFICATION_PROFILE_ALIAS_TARGETS = { system, admin, hardtale }
+- server.js:838
+  - Added resolveNotificationAliasSourceUserId()
+- server.js:869
+  - Added shouldApplyNotificationAlias()
+- server.js:879
+  - Added applyNotificationAuthorAliases()
+- server.js:1382
+  - Updated withNotificationReadState() to apply alias hydration before returning notifications
+
+Behavior
+- Notifications authored as System/Admin/Hardtale now show Smurfis profile-card data (name/image/rank/staff flags), as long as the source Clerk user resolves.
+- Existing normal user-authored notifications are unchanged.
+- System/admin role logic itself was not removed.
+
+Optional env override
+- NOTIFICATION_PROFILE_ALIAS_SOURCE_USERNAME=smurfis
+  (defaults to smurfis already, so no env change required unless you want a different source account)

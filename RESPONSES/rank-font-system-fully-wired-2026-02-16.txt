@@ -1,0 +1,70 @@
+﻿Implemented: Rank Font System (Fully Wired)
+
+What is now fully wired
+1) Backend profile setting + API
+- Added new metadata-backed setting: useRankFont
+- New endpoint:
+  POST /api/profile/rank-font
+  body: { "useRankFont": true|false }
+- Access logic mirrors rank effects/avatar rules:
+  - Staff OR owned rank != Unregistered can toggle
+
+2) Profile settings payload
+- GET /api/profile/title now returns:
+  - canToggleRankFont
+  - useRankFont
+
+3) Persistence across content
+- Comments + replies now store and refresh:
+  - authorUseRankFont
+- Forum posts now store and refresh:
+  - authorUseRankFont
+- Snapshot refresh propagation includes authorUseRankFont for consistency over time
+
+4) Frontend toggles (both profile cards)
+- Added "Enable rank font styling" toggle in:
+  - Comment profile card (own profile)
+  - Forum profile card (own profile)
+- Toggle writes to /api/profile/rank-font and live-updates local state/content
+
+5) Forum + profile rendering
+- Rank-font on/off classes applied in:
+  - Comment identity author/rank rows
+  - Forum author names (selected post + post list)
+  - Profile card names (comment, forum, notification popups)
+
+6) Rank-specific fonts (theme-consistent)
+- Hero: --font-rank-hero
+- Legend: --font-rank-legend
+- Mythic: --font-rank-mythic
+- Applied only when rank-font-on is present
+- rank-font-off returns to Space Grotesk baseline
+
+7) Staff hierarchy visuals (already requested)
+- Dev/Admin/Mod/Helper role-specific gradient styling is applied across:
+  - staff pills
+  - staff text/rank labels
+  - staff badge chips
+
+8) Linked/Unlinked progression behavior
+- Profile badges now always show one state badge:
+  - 🔓 Unlinked
+  - 🔗 Linked
+- Dynamic achievements added:
+  - unlinked_state
+  - linked_state
+- linking_up remains
+
+Files updated
+- server.js
+- public/app.js
+- public/styles.css
+- public/components/CommentIdentity.js
+- public/components/ProfileAchievementsCard.js
+
+Validation
+- Syntax checks passed:
+  - node --check server.js
+  - node --check public/app.js
+  - node --check public/components/CommentIdentity.js
+  - node --check public/components/ProfileAchievementsCard.js

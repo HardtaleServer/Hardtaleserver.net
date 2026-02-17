@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-16 (v1.3.35)
+- Added role-tier staff visual hierarchy with distinct Dev/Admin/Mod/Helper gradient identities across staff pills, rank text, and staff badge chips.
+- Added dynamic profile link-state badges (`🔓 Unlinked` / `🔗 Linked`) in profile card badge rows for clearer account-link visibility.
+- Added linked-state and unlinked-state achievement badges and updated profile achievement cards to render live achievement title/icon values.
+- Added fully wired rank-font system with persisted profile toggle (`/api/profile/rank-font`) and rendering support across comments, forum, and profile cards.
+- Retuned donor rank identity visuals with balanced gradients and refined animation intensity, while preserving readability-first name text styling.
+- Updated Store donor bonus copy to include gradient chat prefix and colored chat message perks.
+- Added LP-ready donor/staff gradient response packs in the `RESPONSES/` folder.
+
 ## 2026-02-16 (v1.3.34)
 - Fixed unlinked-user cart autosave noise by skipping `/api/cart` POST sync unless the account is linked.
 - Reworked Store rank cards so rank title/icon sits above the profile preview card and removed duplicate rank text inside the preview row.

@@ -15,7 +15,7 @@ const FALLBACK_ACHIEVEMENTS = [
 export default function ProfileAchievementsCard({ achievements = [] }) {
   const source = Array.isArray(achievements) && achievements.length > 0 ? achievements : FALLBACK_ACHIEVEMENTS;
   const items = source.slice(0, 8).map((entry, index) => {
-    const label = String(entry?.label || entry?.name || `Achievement ${index + 1}`).trim();
+    const label = String(entry?.title || entry?.label || entry?.name || `Achievement ${index + 1}`).trim();
     const icon = String(entry?.icon || entry?.short || label.charAt(0) || "A")
       .trim()
       .slice(0, 3);
@@ -25,7 +25,7 @@ export default function ProfileAchievementsCard({ achievements = [] }) {
       .trim()
       .toUpperCase();
     return {
-      id: String(entry?.id || `${label}-${index}`),
+      id: String(entry?.id || entry?.key || `${label}-${index}`),
       label: label || `Achievement ${index + 1}`,
       icon: icon || "A",
       iconUrl,

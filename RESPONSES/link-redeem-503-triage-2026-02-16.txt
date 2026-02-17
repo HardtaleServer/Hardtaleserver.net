@@ -1,0 +1,29 @@
+﻿503 at POST /api/link/redeem means the web backend is up, but one dependency is unavailable.
+
+In your code there are two main 503 sources for this route:
+
+1. Mongo not ready
+- Response body: "Database not connected"
+- Comes from requireMongoReady(...) in server.js.
+
+2. Link service unavailable/misconfigured
+- Response body/code usually: SERVER_UNAVAILABLE
+- Causes:
+  - LINK_SERVICE_BASE_URL missing/wrong on Render
+  - LINK_SERVICE_AUTH_TOKEN missing/wrong on Render
+  - Render cannot reach your game-server plugin URL
+
+Most likely in production: LINK_SERVICE_BASE_URL is pointing to localhost/private host.
+If it is 127.0.0.1 or localhost, Render cannot reach your game server.
+
+Check now:
+1. In browser Network tab, open /api/link/redeem response JSON (error + code).
+2. In Render env vars, verify:
+- LINKING_ENABLED=true
+- LINK_SERVICE_BASE_URL=https://<public-game-api-host>
+- LINK_SERVICE_AUTH_TOKEN=<exact plugin token>
+3. In Render logs, look for:
+- "Database not connected" (Mongo issue), or
+- "Failed to redeem link code" / upstream status.
+
+If you paste the exact /api/link/redeem response JSON body, I’ll tell you the exact one-line fix.

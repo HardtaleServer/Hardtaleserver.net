@@ -20,6 +20,20 @@ function toStaffPillTitle(value) {
   return "";
 }
 
+function normalizeStaffRoleKey(value = "") {
+  const key = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+  if (!key) return "";
+  if (key === "developer" || key === "dev") return "dev";
+  if (key === "admin" || key === "administrator") return "admin";
+  if (key === "moderator" || key === "mod") return "mod";
+  if (key === "helper") return "helper";
+  if (key === "staff") return "staff";
+  return "";
+}
+
 function renderRankIcon(type) {
   switch (type) {
     case "crown":
@@ -56,8 +70,10 @@ export default function CommentIdentity({
   const name = String(entry?.authorName || "User");
   const sizeClass = authorSizeClass ? authorSizeClass(name) : "";
   const staffClass = rank?.staff ? "staff" : "";
+  const roleClass = rank?.staff ? `staff-role-${normalizeStaffRoleKey(entry?.authorStaffRole || entry?.authorRank || "staff")}` : "";
   const staffStaticClass = rank?.staff && rank?.animateStaffGradient === false ? "staff-static" : "";
   const rankEffectsClass = entry?.authorShowRankEffects === false ? "rank-effects-off" : "";
+  const rankFontClass = entry?.authorUseRankFont === false ? "rank-font-off" : "rank-font-on";
   const rankLabel = rank?.label || "Unregistered";
   const rankIconType = getRankIconType(rankLabel);
   const useGradientPillText = entry?.authorShowStaffBadgeIcon !== false;
@@ -71,12 +87,12 @@ export default function CommentIdentity({
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")}`;
-  const staffPillClass = `comment-staff-pill ${useGradientPillText ? "gradient-text" : "text-only"} ${
+  const staffPillClass = `comment-staff-pill ${roleClass} ${useGradientPillText ? "gradient-text" : "text-only"} ${
     rank?.animateStaffGradient === false ? "staff-static" : ""
   }`.trim();
   return html`
     <div className="comment-identity">
-      <div className=${`comment-author ${sizeClass} ${staffClass} ${staffStaticClass} ${rankEffectsClass} ${rankClass}`.trim()}>
+      <div className=${`comment-author ${sizeClass} ${staffClass} ${roleClass} ${staffStaticClass} ${rankEffectsClass} ${rankFontClass} ${rankClass}`.trim()}>
         <span>${name}</span>
         ${showStaffPill
           ? html`<span className=${staffPillClass}>
@@ -86,7 +102,7 @@ export default function CommentIdentity({
             </span>`
           : html``}
       </div>
-      <div className=${`comment-rank ${staffClass} ${staffStaticClass} ${rankEffectsClass} ${rankClass}`.trim()}>
+      <div className=${`comment-rank ${staffClass} ${roleClass} ${staffStaticClass} ${rankEffectsClass} ${rankFontClass} ${rankClass}`.trim()}>
         ${rankIconType ? html`<span className="rank-icon">${renderRankIcon(rankIconType)}</span>` : html``}
         <span>${getRankDisplayLabel(rankLabel)}</span>
       </div>

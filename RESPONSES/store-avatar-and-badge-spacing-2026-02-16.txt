@@ -1,0 +1,37 @@
+﻿Implemented both requested store updates.
+
+What changed
+1) Signed-out store cards no longer use a System-like identity
+- Added signed-out fallback avatar + identity specifically for Store preview cards.
+- Signed-out users now show:
+  - Name: Guest
+  - Username: hidden
+  - Avatar: neutral silhouette SVG (new asset)
+- Signed-in users still use their Clerk profile image/name/username.
+
+Files:
+- public/app.js
+  - Added: DEFAULT_PROFILE_AVATAR_SVG constant
+  - Updated StorePage preview identity logic:
+    - storePreviewName
+    - storePreviewImage
+    - storePreviewUsername
+- Images/SVGs/DEFAULT_PROFILE_AVATAR.svg (new)
+
+2) Store badge spacing/alignment adjustment
+- Added top spacing so rank badges are not cramped against username and stay visually consistent across Hero/Legend/Mythic.
+- Spacing set to 5px as requested.
+
+Files:
+- public/styles.css
+  - .store-badge-preview-row { margin-top: 5px; }
+  - .store-profile-preview-card .profile-card-badges-row { margin-top: 5px; }
+
+What I did not change
+- System/system account behavior for admin notifications/achievements was not modified.
+
+Verification
+- Syntax check passed:
+  - node --check public/app.js
+- New avatar asset exists:
+  - Images/SVGs/DEFAULT_PROFILE_AVATAR.svg

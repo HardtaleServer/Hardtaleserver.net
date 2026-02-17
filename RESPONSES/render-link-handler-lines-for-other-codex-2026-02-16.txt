@@ -1,0 +1,33 @@
+﻿Here’s exactly what the other Codex needs:
+
+- Render route:
+POST https://hardtaleserver-net.onrender.com/api/link/redeem
+
+- Route handler in code:
+server.js:3341
+app.post("/api/link/redeem", async (req, res) => { ... })
+
+- First guard inside handler (Mongo readiness):
+server.js:3343
+if (!(await requireMongoReady(res))) return;
+
+- Live redeem branch trigger:
+server.js:3353
+if (LINKING_ENABLED) { ... }
+
+- Upstream redeem call from handler:
+server.js:3355
+redeemResult = await redeemLinkCodeWithGameServer({...})
+
+- Upstream request implementation:
+server.js:634
+async function redeemLinkCodeWithGameServer(...)
+
+- Exact plugin endpoint it calls:
+server.js:644
+${LINK_SERVICE_BASE_URL}/api/v1/link/redeem
+
+- Possible direct 503-return lines:
+server.js:635 (LINK_SERVICE_BASE_URL missing)
+server.js:638 (LINK_SERVICE_AUTH_TOKEN missing)
+server.js:374 in requireMongoReady (Database not connected)

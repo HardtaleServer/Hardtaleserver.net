@@ -61,7 +61,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.34";
+const VERSION = "1.3.35";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
 const LINKED_STATUS_ICON_SVG = "/Images/SVGs/LINKED.svg";
@@ -145,6 +145,18 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.35",
+    date: "2026-02-16",
+    items: [
+      "Added role-tier staff visual hierarchy with distinct Dev/Admin/Mod/Helper gradient identities across staff pills, rank text, and staff badges.",
+      "Added dynamic profile link-state badge chips (`🔓 Unlinked` / `🔗 Linked`) in profile card badges and aligned linked/unlinked display flow.",
+      "Added linked-state and unlinked-state achievement badges and updated profile achievement cards to render live server title/icon data.",
+      "Added fully wired rank-font system with profile toggle (`Enable rank font styling`), backend persistence, and forum/comment/profile rendering support.",
+      "Retuned donor rank visual identity using balanced gradient styles and updated store rank bonuses to include gradient prefix and colored chat message perks.",
+      "Added LP-ready prefix gradient response packs under `RESPONSES/` for donor and staff role formatting.",
+    ],
+  },
   {
     version: "1.3.34",
     date: "2026-02-16",
@@ -473,7 +485,7 @@ const SAMPLE_STORE = [
     name: "Hero Rank",
     price: 6.99,
     blurb:
-      "10% passive XP boost, daily 15-min XP boost, weekly kit (small XP potion + minor utility potions), 1 extra /home, cosmetic chat prefix, slight auction/listing boost, no raw damage bonuses, bold badge",
+      "10% passive XP boost, daily 15-min XP boost, weekly kit (small XP potion + minor utility potions), 1 extra /home, gradient chat prefix + colored chat messages, slight auction/listing boost, no raw damage bonuses, bold badge",
     icon: "star",
   },
   {
@@ -481,7 +493,7 @@ const SAMPLE_STORE = [
     name: "Legend Rank",
     price: 14.0,
     blurb:
-      "20% passive XP boost, daily 30-min XP boost, weekly kit (medium XP potions + resource bundle), 2 extra /home, 1 monthly global boost (30 min), reduced teleport cooldown, priority queue, bold badge",
+      "20% passive XP boost, daily 30-min XP boost, weekly kit (medium XP potions + resource bundle), 2 extra /home, 1 monthly global boost (30 min), gradient chat prefix + colored chat messages, reduced teleport cooldown, priority queue, bold badge",
     icon: "crown",
   },
   {
@@ -489,7 +501,7 @@ const SAMPLE_STORE = [
     name: "Mythic Rank",
     price: 24.0,
     blurb:
-      "30% passive XP boost, daily 1hr XP boost, weekly kit (large XP potions + rare crafting materials), 3 extra /home, 2 monthly global boosts, special cosmetic title glow, particle aura cosmetic, guild banner cosmetic, bold badge",
+      "30% passive XP boost, daily 1hr XP boost, weekly kit (large XP potions + rare crafting materials), 3 extra /home, 2 monthly global boosts, premium gradient chat prefix + colored chat messages, special cosmetic title glow, particle aura cosmetic, guild banner cosmetic, bold badge",
     icon: "shield",
   },
 ];
@@ -891,8 +903,53 @@ function toStaffPillTitle(value = "") {
   return "";
 }
 
+function normalizeStaffRoleKey(value = "") {
+  const key = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_-]+/g, "");
+  if (!key) return "";
+  if (key === "developer" || key === "dev") return "dev";
+  if (key === "admin" || key === "administrator") return "admin";
+  if (key === "moderator" || key === "mod") return "mod";
+  if (key === "helper") return "helper";
+  if (key === "staff") return "staff";
+  return "";
+}
+
+function resolveStaffRoleKey(entry) {
+  if (!entry) return "";
+  const candidates = [
+    entry?.authorStaffRole,
+    entry?.staffRole,
+    entry?.authorRole,
+    entry?.authorStaffTitle,
+    entry?.role,
+    entry?.staffTitle,
+    entry?.authorRank,
+    entry?.rankLabel,
+  ];
+  for (const candidate of candidates) {
+    const role = normalizeStaffRoleKey(candidate);
+    if (role) return role;
+  }
+  return "";
+}
+
+function resolveStaffRoleClass(entry) {
+  const role = resolveStaffRoleKey(entry);
+  if (!role) return "";
+  return `staff-role-${role}`;
+}
+
 function resolveStaffPillTitle(entry) {
   if (!entry) return "";
+  const explicitRole = resolveStaffRoleKey(entry);
+  if (explicitRole === "dev") return "Developer [Dev]";
+  if (explicitRole === "admin") return "Admin [Admin]";
+  if (explicitRole === "mod") return "Moderator [Mod]";
+  if (explicitRole === "helper") return "Helper [Helper]";
+  if (explicitRole === "staff") return "Staff";
   const candidates = [
     entry?.authorRole,
     entry?.authorStaffTitle,
@@ -1332,6 +1389,7 @@ function CommentThread({
   const [profileStaffBadgeIconSaving, setProfileStaffBadgeIconSaving] = useState(false);
   const [profileStaffGradientSaving, setProfileStaffGradientSaving] = useState(false);
   const [profileRankEffectsSaving, setProfileRankEffectsSaving] = useState(false);
+  const [profileRankFontSaving, setProfileRankFontSaving] = useState(false);
   const [profileAvatarVfxSaving, setProfileAvatarVfxSaving] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState([]);
@@ -1440,7 +1498,8 @@ function CommentThread({
   function staffTextClass(entry) {
     const rank = resolveRank(entry);
     if (!rank.staff) return "";
-    return rank.animateStaffGradient === false ? "staff staff-static" : "staff";
+    const roleClass = resolveStaffRoleClass(entry);
+    return rank.animateStaffGradient === false ? `staff ${roleClass} staff-static`.trim() : `staff ${roleClass}`.trim();
   }
 
   function isOriginalPoster(entry) {
@@ -1705,6 +1764,8 @@ function CommentThread({
         showStaffGradient: data?.showStaffGradient !== false,
         canToggleRankEffects: Boolean(data?.canToggleRankEffects),
         showRankEffects: data?.showRankEffects !== false,
+        canToggleRankFont: Boolean(data?.canToggleRankFont),
+        useRankFont: data?.useRankFont !== false,
         canToggleAvatarVfx: Boolean(data?.canToggleAvatarVfx),
         showAvatarVfx: data?.showAvatarVfx !== false,
       };
@@ -2041,6 +2102,49 @@ function CommentThread({
     }
   }
 
+  async function updateOwnRankFontVisibility(nextVisible) {
+    if (!profileUser?.isOwn || !profileUser?.canToggleRankFont || profileRankFontSaving) return;
+    setProfileRankFontSaving(true);
+    setProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/rank-font", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ useRankFont: Boolean(nextVisible) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save rank font setting.");
+      }
+      const data = await response.json();
+      const useRankFont = data?.useRankFont !== false;
+      setProfileUser((prev) => (prev ? { ...prev, useRankFont } : prev));
+      setComments((prev) =>
+        prev.map((comment) => {
+          if (!comment) return comment;
+          const nextComment =
+            comment.userId === userId ? { ...comment, authorUseRankFont: useRankFont } : comment;
+          const replies = Array.isArray(nextComment.replies) ? nextComment.replies : [];
+          if (replies.length === 0) return nextComment;
+          return {
+            ...nextComment,
+            replies: replies.map((reply) =>
+              reply?.userId === userId
+                ? { ...reply, authorUseRankFont: useRankFont }
+                : reply,
+            ),
+          };
+        }),
+      );
+      setProfileTitleStatus("Saved.");
+      setTimeout(() => setProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setProfileTitleStatus(error?.message || "Failed to save rank font setting.");
+    } finally {
+      setProfileRankFontSaving(false);
+    }
+  }
+
   async function updateOwnAvatarVfxVisibility(nextVisible) {
     if (!profileUser?.isOwn || !profileUser?.canToggleAvatarVfx || profileAvatarVfxSaving) return;
     setProfileAvatarVfxSaving(true);
@@ -2093,6 +2197,8 @@ function CommentThread({
     const username = String(entry.authorUsername || "").toLowerCase();
     const authorName = String(entry.authorName || "").toLowerCase();
     let isStaffUser =
+      Boolean(entry?.authorIsStaff) ||
+      isStaffLabel(entry?.authorStaffRole || "") ||
       STAFF_EMAILS.has(email) ||
       isStaffLabel(username) ||
       isStaffLabel(authorName) ||
@@ -2107,6 +2213,8 @@ function CommentThread({
     let showStaffGradient = entry?.authorShowStaffGradient !== false;
     let canToggleRankEffects = false;
     let showRankEffects = entry?.authorShowRankEffects !== false;
+    let canToggleRankFont = false;
+    let useRankFont = entry?.authorUseRankFont !== false;
     let canToggleAvatarVfx = false;
     let showAvatarVfx = entry?.authorShowAvatarVfx !== false;
     if (isOwn && isSignedIn) {
@@ -2122,6 +2230,8 @@ function CommentThread({
         showStaffGradient = settings.showStaffGradient !== false;
         canToggleRankEffects = Boolean(settings.canToggleRankEffects);
         showRankEffects = settings.showRankEffects !== false;
+        canToggleRankFont = Boolean(settings.canToggleRankFont);
+        useRankFont = settings.useRankFont !== false;
         canToggleAvatarVfx = Boolean(settings.canToggleAvatarVfx);
         showAvatarVfx = settings.showAvatarVfx !== false;
       }
@@ -2144,6 +2254,7 @@ function CommentThread({
       rankLabel: selectedTitle,
       ownedRank,
       staff: isStaffUser && showStaffBadge && isStaffLabel(selectedTitle),
+      staffRole: String(entry?.authorStaffRole || ""),
       username: formatUsernameForDisplay(entry.authorUsername),
       isOwn,
       isStaffUser,
@@ -2155,6 +2266,8 @@ function CommentThread({
       showStaffGradient,
       canToggleRankEffects,
       showRankEffects,
+      canToggleRankFont,
+      useRankFont,
       canToggleAvatarVfx,
       showAvatarVfx,
       hytalePlayerName: linkStatus.playerName,
@@ -2562,6 +2675,8 @@ function CommentThread({
               <div
                 className=${`profile-card-name ${
                   profileUser.showRankEffects === false ? "rank-effects-off" : ""
+                } ${
+                  profileUser.useRankFont === false ? "rank-font-off" : "rank-font-on"
                 } rank-${String(profileUser.rankLabel || "Unregistered")
                   .trim()
                   .toLowerCase()
@@ -2582,7 +2697,7 @@ function CommentThread({
               </div>
               <div
                 className=${`comment-rank ${
-                  profileUser.staff ? "staff" : ""
+                  profileUser.staff ? `staff ${resolveStaffRoleClass(profileUser)}`.trim() : ""
                 } ${
                   profileUser.staff && profileUser.showStaffGradient === false ? "staff-static" : ""
                 } profile-card-rank ${
@@ -2624,6 +2739,17 @@ function CommentThread({
                       onChange=${(event) => updateOwnRankEffectsVisibility(event.target.checked)}
                     />
                     <span>Enable rank effects</span>
+                  </label>`
+                : html``}
+              ${profileUser.isOwn && profileUser.canToggleRankFont
+                ? html`<label className="profile-card-toggle">
+                    <input
+                      type="checkbox"
+                      checked=${profileUser.useRankFont !== false}
+                      disabled=${profileRankFontSaving}
+                      onChange=${(event) => updateOwnRankFontVisibility(event.target.checked)}
+                    />
+                    <span>Enable rank font styling</span>
                   </label>`
                 : html``}
               ${profileUser.isOwn && profileUser.canToggleAvatarVfx
@@ -4286,6 +4412,7 @@ function ForumPage({ isAdmin = false }) {
   const [forumProfileStaffBadgeIconSaving, setForumProfileStaffBadgeIconSaving] = useState(false);
   const [forumProfileStaffGradientSaving, setForumProfileStaffGradientSaving] = useState(false);
   const [forumProfileRankEffectsSaving, setForumProfileRankEffectsSaving] = useState(false);
+  const [forumProfileRankFontSaving, setForumProfileRankFontSaving] = useState(false);
   const [forumProfileAvatarVfxSaving, setForumProfileAvatarVfxSaving] = useState(false);
   const [editingPostId, setEditingPostId] = useState("");
   const [editingPostTitle, setEditingPostTitle] = useState("");
@@ -4322,10 +4449,11 @@ function ForumPage({ isAdmin = false }) {
       isStaffLabel(entry?.authorRank || "");
     const selectedIsStaff = isStaffLabel(entry?.authorRank || "");
     const isStaffRank = showStaffBadge && staffIdentity && selectedIsStaff;
+    const roleClass = resolveStaffRoleClass(entry);
     const staffClass = isStaffRank
       ? entry?.authorShowStaffGradient === false
-        ? "staff staff-static"
-        : "staff"
+        ? `staff staff-static ${roleClass}`.trim()
+        : `staff ${roleClass}`.trim()
       : "";
     return `comment-rank forum-author-rank ${staffClass} rank-${slug}`.trim();
   }
@@ -4338,7 +4466,8 @@ function ForumPage({ isAdmin = false }) {
   function renderForumStaffPill(entry) {
     if (!forumShowStaffPill(entry)) return html``;
     const useGradientPillText = entry?.authorShowStaffBadgeIcon !== false;
-    const staffPillClass = `forum-staff-pill ${useGradientPillText ? "gradient-text" : "text-only"} ${
+    const roleClass = resolveStaffRoleClass(entry);
+    const staffPillClass = `forum-staff-pill ${roleClass} ${useGradientPillText ? "gradient-text" : "text-only"} ${
       entry?.authorShowStaffGradient === false ? "staff-static" : ""
     }`.trim();
     const staffPillText = resolveStaffPillTitle(entry) || "Staff";
@@ -4411,6 +4540,8 @@ function ForumPage({ isAdmin = false }) {
         showStaffGradient: data?.showStaffGradient !== false,
         canToggleRankEffects: Boolean(data?.canToggleRankEffects),
         showRankEffects: data?.showRankEffects !== false,
+        canToggleRankFont: Boolean(data?.canToggleRankFont),
+        useRankFont: data?.useRankFont !== false,
         canToggleAvatarVfx: Boolean(data?.canToggleAvatarVfx),
         showAvatarVfx: data?.showAvatarVfx !== false,
       };
@@ -4460,6 +4591,7 @@ function ForumPage({ isAdmin = false }) {
     const isOwn = Boolean(userId && authorUserId && String(userId) === authorUserId);
     let isStaffUser =
       Boolean(entry?.authorIsStaff) ||
+      isStaffLabel(entry?.authorStaffRole || "") ||
       isStaffLabel(authorName) ||
       isStaffLabel(authorUsername) ||
       isStaffLabel(rankLabel);
@@ -4473,6 +4605,8 @@ function ForumPage({ isAdmin = false }) {
     let showStaffGradient = entry?.authorShowStaffGradient !== false;
     let canToggleRankEffects = false;
     let showRankEffects = true;
+    let canToggleRankFont = false;
+    let useRankFont = entry?.authorUseRankFont !== false;
     let canToggleAvatarVfx = false;
     let showAvatarVfx = true;
     if (isOwn && isSignedIn) {
@@ -4488,6 +4622,8 @@ function ForumPage({ isAdmin = false }) {
         showStaffGradient = settings.showStaffGradient !== false;
         canToggleRankEffects = Boolean(settings.canToggleRankEffects);
         showRankEffects = settings.showRankEffects !== false;
+        canToggleRankFont = Boolean(settings.canToggleRankFont);
+        useRankFont = settings.useRankFont !== false;
         canToggleAvatarVfx = Boolean(settings.canToggleAvatarVfx);
         showAvatarVfx = settings.showAvatarVfx !== false;
       }
@@ -4511,6 +4647,7 @@ function ForumPage({ isAdmin = false }) {
       rankLabel: selectedTitle,
       ownedRank,
       staff: isStaffUser && showStaffBadge && isStaffLabel(selectedTitle),
+      staffRole: String(entry?.authorStaffRole || ""),
       isStaffUser,
       isOwn,
       availableTitles,
@@ -4521,6 +4658,8 @@ function ForumPage({ isAdmin = false }) {
       showStaffGradient,
       canToggleRankEffects,
       showRankEffects,
+      canToggleRankFont,
+      useRankFont,
       canToggleAvatarVfx,
       showAvatarVfx,
       authorUserId,
@@ -4774,6 +4913,46 @@ function ForumPage({ isAdmin = false }) {
     }
   }
 
+  async function updateOwnForumRankFontVisibility(nextVisible) {
+    if (!forumProfileUser?.isOwn || !forumProfileUser?.canToggleRankFont || forumProfileRankFontSaving) return;
+    setForumProfileRankFontSaving(true);
+    setForumProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/rank-font", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ useRankFont: Boolean(nextVisible) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save rank font setting.");
+      }
+      const data = await response.json();
+      const useRankFont = data?.useRankFont !== false;
+      setForumProfileUser((prev) => (prev ? { ...prev, useRankFont } : prev));
+      setPosts((prev) =>
+        prev.map((post) => {
+          const postAuthorUserId = String(post?.authorUserId || post?.createdBy || "");
+          return userId && postAuthorUserId && String(userId) === postAuthorUserId
+            ? { ...post, authorUseRankFont: useRankFont }
+            : post;
+        }),
+      );
+      setSelectedPost((prev) => {
+        const postAuthorUserId = String(prev?.authorUserId || prev?.createdBy || "");
+        return userId && prev && postAuthorUserId && String(userId) === postAuthorUserId
+          ? { ...prev, authorUseRankFont: useRankFont }
+          : prev;
+      });
+      setForumProfileTitleStatus("Saved.");
+      setTimeout(() => setForumProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setForumProfileTitleStatus(error?.message || "Failed to save rank font setting.");
+    } finally {
+      setForumProfileRankFontSaving(false);
+    }
+  }
+
   async function updateOwnForumAvatarVfxVisibility(nextVisible) {
     if (!forumProfileUser?.isOwn || !forumProfileUser?.canToggleAvatarVfx || forumProfileAvatarVfxSaving) return;
     setForumProfileAvatarVfxSaving(true);
@@ -4813,6 +4992,8 @@ function ForumPage({ isAdmin = false }) {
       <div
         className=${`profile-card-name ${
           forumProfileUser.showRankEffects === false ? "rank-effects-off" : ""
+        } ${
+          forumProfileUser.useRankFont === false ? "rank-font-off" : "rank-font-on"
         } rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}
       >
         ${forumProfileUser.name}
@@ -4829,7 +5010,7 @@ function ForumPage({ isAdmin = false }) {
         <span>${forumProfileUser.hytalePlayerUuid || "N/A"}</span>
       </div>
       <div
-        className=${`comment-rank ${forumProfileUser.staff ? "staff" : ""} profile-card-rank ${
+        className=${`comment-rank ${forumProfileUser.staff ? `staff ${resolveStaffRoleClass(forumProfileUser)}`.trim() : ""} profile-card-rank ${
           forumProfileUser.staff && forumProfileUser.showStaffGradient === false
             ? "staff-static"
             : ""
@@ -4867,6 +5048,17 @@ function ForumPage({ isAdmin = false }) {
               onChange=${(event) => updateOwnForumRankEffectsVisibility(event.target.checked)}
             />
             <span>Enable rank effects</span>
+          </label>`
+        : html``}
+      ${forumProfileUser.isOwn && forumProfileUser.canToggleRankFont
+        ? html`<label className="profile-card-toggle">
+            <input
+              type="checkbox"
+              checked=${forumProfileUser.useRankFont !== false}
+              disabled=${forumProfileRankFontSaving}
+              onChange=${(event) => updateOwnForumRankFontVisibility(event.target.checked)}
+            />
+            <span>Enable rank font styling</span>
           </label>`
         : html``}
       ${forumProfileUser.isOwn && forumProfileUser.canToggleAvatarVfx
@@ -5151,7 +5343,11 @@ function ForumPage({ isAdmin = false }) {
                       type="button"
                       onClick=${() => openForumProfileEntry(selectedPost)}
                     >
-                      <${AuthorName} value=${selectedPost.authorName || "User"} isStaffLabel=${isStaffLabel} />
+                      <${AuthorName}
+                        value=${selectedPost.authorName || "User"}
+                        isStaffLabel=${isStaffLabel}
+                        className=${`author-name ${selectedPost?.authorUseRankFont === false ? "rank-font-off" : "rank-font-on"} rank-${rankSlug(selectedPost?.authorRank || "Unregistered")}`.trim()}
+                      />
                     </button>
                     ${forumShowStaffPill(selectedPost)
                       ? renderForumStaffPill(selectedPost)
@@ -5402,7 +5598,11 @@ function ForumPage({ isAdmin = false }) {
                         type="button"
                         onClick=${() => openForumProfileEntry(post)}
                       >
-                        <${AuthorName} value=${post.authorName || "User"} isStaffLabel=${isStaffLabel} />
+                        <${AuthorName}
+                          value=${post.authorName || "User"}
+                          isStaffLabel=${isStaffLabel}
+                          className=${`author-name ${post?.authorUseRankFont === false ? "rank-font-off" : "rank-font-on"} rank-${rankSlug(post?.authorRank || "Unregistered")}`.trim()}
+                        />
                       </button>
                       ${forumShowStaffPill(post)
                         ? renderForumStaffPill(post)
@@ -6192,7 +6392,8 @@ function renderRankIcon(type) {
 
 function renderStaffBadge(entry) {
   if (!entry || !entry.staff || entry.showStaffBadge === false) return html``;
-  const badgeClass = `profile-card-badge staff-badge ${
+  const roleClass = resolveStaffRoleClass(entry);
+  const badgeClass = `profile-card-badge staff-badge ${roleClass} ${
     entry.showStaffGradient === false ? "staff-static" : ""
   }`.trim();
   return html`<div className=${badgeClass}>
@@ -6205,9 +6406,12 @@ function renderOwnedRankBadges(entry) {
   if (!entry) return html``;
   const isStaffUser = Boolean(entry.isStaffUser || entry.staff);
   const badges = buildOwnedRankBadges(entry.ownedRank, isStaffUser);
+  const linkedBadgeLabel = entry.linkedAccount ? "Linked" : "Unlinked";
+  const linkedBadgeIcon = entry.linkedAccount ? "🔗" : "🔓";
   const showStaffBadgeChip = isStaffUser && entry.showStaffBadge !== false;
   const showStaffBadgeIcon = entry.showStaffBadgeIcon !== false;
-  const staffBadgeChipClass = `profile-owned-badge staff-owned-badge ${
+  const roleClass = resolveStaffRoleClass(entry);
+  const staffBadgeChipClass = `profile-owned-badge staff-owned-badge ${roleClass} ${
     entry.showStaffGradient === false ? "staff-static" : ""
   }`.trim();
   return html`<div className="profile-card-badges-stack">
@@ -6221,6 +6425,10 @@ function renderOwnedRankBadges(entry) {
                   <span>STAFF</span>
                 </span>`
               : html``}
+            <span className=${`profile-owned-badge rank-${linkedBadgeLabel.toLowerCase()}`.trim()}>
+              <span aria-hidden="true">${linkedBadgeIcon}</span>
+              <span>${linkedBadgeLabel}</span>
+            </span>
             ${badges.map((label) => {
               const iconType = getRankIconType(label);
               const slug = String(label).trim().toLowerCase();
@@ -7450,7 +7658,12 @@ function Layout() {
     const name = String(item.authorName || item.author || "User");
     const username = formatUsernameForDisplay(item.authorUsername);
     const rankLabel = String(item.authorRank || "Unregistered");
-    const staff = isStaffLabel(name) || isStaffLabel(username) || isStaffLabel(rankLabel);
+    const staff =
+      Boolean(item?.authorIsStaff) ||
+      isStaffLabel(item?.authorStaffRole || "") ||
+      isStaffLabel(name) ||
+      isStaffLabel(username) ||
+      isStaffLabel(rankLabel);
     const authorUserId = String(item.authorUserId || "").trim();
     const [linkStatus, achievements] = await Promise.all([
       loadLayoutProfileLinkStatus(authorUserId),
@@ -7463,10 +7676,12 @@ function Layout() {
       rankLabel,
       ownedRank: normalizeOwnedRankLabel(item.authorOwnedRank || rankLabel),
       staff,
+      staffRole: String(item?.authorStaffRole || ""),
       isStaffUser: staff,
       showStaffBadge: item?.authorShowStaffBadge !== false,
       showStaffBadgeIcon: item?.authorShowStaffBadgeIcon !== false,
       showStaffGradient: item?.authorShowStaffGradient !== false,
+      useRankFont: item?.authorUseRankFont !== false,
       hytalePlayerName: linkStatus.playerName,
       hytalePlayerUuid: linkStatus.playerUuid,
       linkedAccount: linkStatus.linked,
@@ -7955,7 +8170,9 @@ function Layout() {
                 alt=${notificationProfileUser.name}
               />
               <div
-                className=${`profile-card-name rank-${String(
+                className=${`profile-card-name ${
+                  notificationProfileUser.useRankFont === false ? "rank-font-off" : "rank-font-on"
+                } rank-${String(
                   notificationProfileUser.rankLabel || "Unregistered",
                 )
                   .trim()
@@ -7976,7 +8193,15 @@ function Layout() {
                 <span>${notificationProfileUser.hytalePlayerUuid || "N/A"}</span>
               </div>
               <div
-                className=${`comment-rank profile-card-rank rank-${String(
+                className=${`comment-rank ${
+                  notificationProfileUser.staff
+                    ? `staff ${resolveStaffRoleClass(notificationProfileUser)}`.trim()
+                    : ""
+                } ${
+                  notificationProfileUser.staff && notificationProfileUser.showStaffGradient === false
+                    ? "staff-static"
+                    : ""
+                } profile-card-rank rank-${String(
                   notificationProfileUser.rankLabel || "Unregistered",
                 )
                   .trim()
