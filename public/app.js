@@ -17,6 +17,7 @@ import SupportTicketForm from "./components/SupportTicketForm.js";
 import SupportTicketThread from "./components/SupportTicketThread.js";
 import AppRoutes from "./components/AppRoutes.js";
 import RankBadge from "./components/RankBadge.js";
+import ProfilePreviewButton from "./components/ProfilePreviewButton.js";
 import ProfileAchievementsCard from "./components/ProfileAchievementsCard.js";
 import ForumRichEditor, { ForumRenderedMarkdown } from "./components/ForumRichEditor.js";
 import ToastSystem, { APP_TOAST_EVENT, createToastPayload, emitAppToast } from "./components/ToastSystem.js";
@@ -4475,25 +4476,17 @@ function StorePage({ onAdd, isLinkedAccount = false, cart = [] }) {
                   <span>${item.name}</span>`;
               })()}
             </div>
-            <button
-              type="button"
-              className="store-profile-preview"
+            <${ProfilePreviewButton}
               onClick=${() => setPreviewItemId(item.id)}
               title="Open profile preview"
+              avatar=${storePreviewImage}
+              name=${storePreviewName}
+              username=${storePreviewUsername}
             >
-              <img className="store-profile-avatar" src=${storePreviewImage} alt=${storePreviewName} />
-              <div className="store-profile-meta">
-                <div className="store-profile-name">${storePreviewName}</div>
-                ${storePreviewUsername
-                  ? html`<div className="store-profile-username">@${storePreviewUsername}</div>`
-                  : html``}
-                <div className="store-badge-preview-row">
-                  ${getStoreCardBadges(item).map(
-                    (label) => html`<${RankBadge} label=${label} className="store-owned-badge" />`,
-                  )}
-                </div>
-              </div>
-            </button>
+              ${getStoreCardBadges(item).map(
+                (label) => html`<${RankBadge} label=${label} className="store-owned-badge" />`,
+              )}
+            <//>
             <div className="store-preview-note muted">
               Titles unlocked: ${(STORE_PREVIEW_TITLES_BY_ID[item.id] || []).join(", ")}
             </div>
@@ -9775,30 +9768,19 @@ function Layout() {
             <//>
             <${SignedIn}>
               <div className="drawer-user">
-                <button
-                  type="button"
-                  className="store-profile-preview drawer-profile-preview"
+                <${ProfilePreviewButton}
+                  className="drawer-profile-preview"
                   onClick=${openDrawerSelfProfileCard}
                   title="Open profile card"
+                  avatar=${user?.imageUrl || "/assets/HardTale_H_GreyScale.png"}
+                  name=${displayName}
+                  username=${formatUsernameForDisplay(user?.username)}
                 >
-                  <img
-                    className="store-profile-avatar"
-                    src=${user?.imageUrl || "/assets/HardTale_H_GreyScale.png"}
-                    alt=${displayName}
+                  <${RankBadge}
+                    label=${drawerProfileSummary.rankLabel || "Unregistered"}
+                    className="store-owned-badge"
                   />
-                  <div className="store-profile-meta">
-                    <div className="store-profile-name">${displayName}</div>
-                    ${user?.username
-                      ? html`<div className="store-profile-username">@${formatUsernameForDisplay(user?.username)}</div>`
-                      : html``}
-                    <div className="store-badge-preview-row">
-                      <${RankBadge}
-                        label=${drawerProfileSummary.rankLabel || "Unregistered"}
-                        className="store-owned-badge"
-                      />
-                    </div>
-                  </div>
-                </button>
+                <//>
               </div>
             <//>
           </div>
