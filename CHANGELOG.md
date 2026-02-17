@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.84)
+- Added `/link` deep-link auto-submit so valid URL codes (for example `/link?12345678`) redeem automatically once per code view.
+- Added `/link` cooldown lock UI for rate-limited attempts with timer countdown and disabled non-interactive submit button state.
+- Added red inline lock reason widget above the submit button while cooldown is active.
+
 ## 2026-02-17 (v1.3.83)
 - Hardened frontend API auth helper by adding Clerk token fallback (`getToken()` when template token is unavailable) and default `credentials: include`.
 - Added explicit `/link` 401 handling with a clear session-expired message and sign-in prompt trigger.

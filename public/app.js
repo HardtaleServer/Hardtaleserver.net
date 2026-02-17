@@ -88,7 +88,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.83";
+const VERSION = "1.3.84";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -189,6 +189,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.84",
+    date: "2026-02-17",
+    items: [
+      "Added `/link` URL auto-submit flow: valid deep-link codes now auto-fire once when present in route/query.",
+      "Added `/link` redeem cooldown lock UI for rate-limited attempts with countdown timer and disabled non-interactive submit button.",
+      "Added red inline cooldown info widget that explains lock reason while timer is active.",
+    ],
+  },
   {
     version: "1.3.83",
     date: "2026-02-17",
@@ -8749,6 +8758,7 @@ function LinkPage({ onClose = null }) {
     [LINK_CODE_LENGTH],
   );
   const inputRefs = useRef([]);
+  const autoSubmittedCodeRef = useRef("");
 
   function normalizeCode(value) {
     return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -8820,6 +8830,8 @@ function LinkPage({ onClose = null }) {
   const [statusType, setStatusType] = useState("");
   const [linkingEnabled, setLinkingEnabled] = useState(true);
   const [linkMode, setLinkMode] = useState("live");
+  const [cooldownUntil, setCooldownUntil] = useState(0);
+  const [cooldownLeft, setCooldownLeft] = useState(0);
   const [linkedInfo, setLinkedInfo] = useState({
     linked: false,
     maskedPlayerUuid: "",
@@ -8827,12 +8839,44 @@ function LinkPage({ onClose = null }) {
   });
   const fullCode = digits.join("");
   const isComplete = fullCode.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(fullCode);
+  const urlCode = extractCodeFromLocation(location.pathname, location.search);
+  const isCooldownActive = cooldownLeft > 0;
 
   useEffect(() => {
     const parsedCode = extractCodeFromLocation(location.pathname, location.search);
     if (!parsedCode) return;
     setDigits(parsedCode.split(""));
   }, [location.pathname, location.search, LINK_CODE_LENGTH]);
+
+  useEffect(() => {
+    if (!cooldownUntil) {
+      setCooldownLeft(0);
+      return;
+    }
+    function tick() {
+      const remaining = Math.max(0, cooldownUntil - Date.now());
+      setCooldownLeft(remaining);
+    }
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [cooldownUntil]);
+
+  useEffect(() => {
+    if (!isAuthLoaded) return;
+    if (!urlCode || !LINK_CODE_REGEX.test(urlCode)) return;
+    if (autoSubmittedCodeRef.current === urlCode) return;
+    if (isSubmitting || isCooldownActive) return;
+    autoSubmittedCodeRef.current = urlCode;
+    onVerifyClick();
+  }, [urlCode, isAuthLoaded, isSubmitting, isCooldownActive]);
+
+  function formatCooldown(ms) {
+    const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -8924,7 +8968,7 @@ function LinkPage({ onClose = null }) {
       if (openSignIn) openSignIn({});
       return;
     }
-    if (!isComplete || isSubmitting) return;
+    if (!isComplete || isSubmitting || isCooldownActive) return;
     setIsSubmitting(true);
     setStatusType("");
     setStatusMessage("");
@@ -8965,6 +9009,11 @@ function LinkPage({ onClose = null }) {
           return;
         }
         if (errorCode === "RATE_LIMITED" || errorCode === "CODE_LOCKED" || response.status === 429) {
+          const retryAfterHeader = Number(response.headers?.get?.("retry-after") || 0);
+          const retryAfterMs = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
+            ? retryAfterHeader * 1000
+            : 60_000;
+          setCooldownUntil(Date.now() + retryAfterMs);
           const message = "Too many attempts. Please wait and try again.";
           setStatusType("error");
           setStatusMessage(message);
@@ -9043,13 +9092,27 @@ function LinkPage({ onClose = null }) {
           )}
         </div>
         <div className="link-actions">
+          ${isCooldownActive
+            ? html`<div className="link-status link-status-error">
+                Link is temporarily locked due to rate limit. Retry in ${formatCooldown(cooldownLeft)}.
+              </div>`
+            : html``}
           <button
             className="button primary"
             type="button"
-            disabled=${!isComplete || isSubmitting}
+            disabled=${!isComplete || isSubmitting || isCooldownActive}
             onClick=${onVerifyClick}
+            title=${isCooldownActive ? "Link currently on cooldown" : "Verify link code"}
           >
-            ${isSubmitting ? (linkMode === "mock" ? "Simulating..." : "Linking...") : linkMode === "mock" ? "Simulate Link Code" : "Verify Link Code"}
+            ${isSubmitting
+              ? linkMode === "mock"
+                ? "Simulating..."
+                : "Linking..."
+              : isCooldownActive
+              ? "On cooldown"
+              : linkMode === "mock"
+              ? "Simulate Link Code"
+              : "Verify Link Code"}
           </button>
           ${!linkingEnabled
             ? html`<div className="link-status link-status-info">
