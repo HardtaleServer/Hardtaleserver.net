@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.81)
+- Added clickable rank artwork on `/store/ranks` cards and comparison-header rank cells that opens a dedicated rank detail modal.
+- Added a themed Store rank detail popup with placeholder artwork, condensed perk highlights, and direct add-to-cart action.
+- Refined rank artwork placement/sizing so the placeholder rank image sits above rank labels consistently.
+
 ## 2026-02-17 (v1.3.37)
 - Added changelog item visibility controls with stable item keys and admin-only filtering for sensitive/internal update notes.
 - Restricted internal changelog notes to admin view while keeping player-facing patch history visible to all users.

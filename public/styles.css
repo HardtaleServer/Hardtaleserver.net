@@ -4770,7 +4770,7 @@ emoji-picker.reaction-picker-panel {
   padding: 16px;
   position: relative;
   display: grid;
-  grid-template-rows: 32px 34px 94px 26px minmax(160px, auto) auto auto;
+  grid-template-rows: 88px 32px 34px 94px 26px minmax(160px, auto) auto auto;
   align-items: start;
   gap: 10px;
   background: var(--bg-soft);
@@ -4811,6 +4811,38 @@ emoji-picker.reaction-picker-panel {
 .store-card-remove:hover {
   border-color: color-mix(in srgb, var(--accent-2) 60%, var(--stroke));
   background: color-mix(in srgb, var(--accent-2) 16%, var(--bg));
+}
+
+.store-rank-card-art-wrap {
+  display: grid;
+  place-items: center;
+}
+
+.store-rank-card-art-btn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.store-rank-card-art-btn:hover .store-rank-card-art {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--accent-2));
+  box-shadow:
+    0 12px 26px color-mix(in srgb, var(--accent) 20%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent-2) 26%, transparent);
+  transform: translateY(-1px);
+}
+
+.store-rank-card-art {
+  width: 100%;
+  max-width: 168px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+  background: color-mix(in srgb, var(--bg-soft) 92%, transparent);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .rank-philosophy {
@@ -5138,6 +5170,94 @@ body[data-theme="dark"] .store-cta {
   min-width: 120px;
 }
 
+.store-rank-head-cell {
+  vertical-align: top;
+}
+
+.store-rank-head {
+  display: grid;
+  gap: 8px;
+  align-items: start;
+}
+
+.store-rank-head-art-btn {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0 auto;
+  cursor: pointer;
+}
+
+.store-rank-head-art {
+  width: 100%;
+  max-width: 128px;
+  height: 66px;
+  border-radius: 12px;
+  object-fit: cover;
+  border: 1px solid var(--stroke);
+  background: color-mix(in srgb, var(--bg-soft) 90%, transparent);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.store-rank-head-art-btn:hover .store-rank-head-art {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--accent-2));
+  box-shadow:
+    0 10px 24px color-mix(in srgb, var(--accent) 18%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--accent-2) 24%, transparent);
+}
+
+.store-sticky-rank-name {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.store-rank-head-profile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+}
+
+.store-rank-head-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid var(--stroke);
+}
+
+.store-rank-head-meta {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+  text-align: left;
+}
+
+.store-rank-head-name {
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.store-rank-head-username {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.store-rank-head-badges {
+  display: flex;
+  justify-content: center;
+}
+
+.store-rank-head-info {
+  display: grid;
+  gap: 2px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--muted);
+  text-align: left;
+}
+
 .store-comparison-price {
   margin-top: 4px;
   font-size: 12px;
@@ -5190,6 +5310,82 @@ body[data-theme="dark"] .store-cta {
 
 .store-comparison-buy-btn {
   width: 100%;
+}
+
+.store-rank-detail-overlay .popup {
+  width: min(560px, 94vw);
+}
+
+.store-rank-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.store-rank-detail-art {
+  width: 100%;
+  height: clamp(150px, 32vw, 210px);
+  object-fit: cover;
+  border-radius: 14px;
+  border: 1px solid var(--stroke);
+  background: color-mix(in srgb, var(--bg-soft) 90%, transparent);
+}
+
+.store-rank-detail-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.store-rank-detail-price {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.store-rank-detail-perks {
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--bg-soft) 88%, transparent);
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+@media (min-width: 861px) {
+  .store-comparison-table {
+    border-collapse: separate;
+    border-spacing: 8px 0;
+  }
+
+  .store-comparison-table thead th {
+    position: sticky;
+    top: 64px;
+    z-index: 5;
+    border-bottom: 2px solid var(--stroke);
+    background: color-mix(in srgb, var(--bg-soft) 92%, var(--bg) 8%);
+  }
+
+  .store-comparison-table tr > th:first-child,
+  .store-comparison-table tr > td:first-child {
+    position: sticky;
+    left: 0;
+    z-index: 4;
+    background: color-mix(in srgb, var(--bg-soft) 96%, var(--bg) 4%);
+    text-align: left;
+  }
+
+  .store-comparison-table thead tr > th:first-child {
+    z-index: 6;
+    border-color: transparent !important;
+    background: transparent !important;
+  }
+
+  .store-comparison-table tbody tr:nth-child(odd) td {
+    background: color-mix(in srgb, var(--bg-soft) 88%, var(--bg) 12%);
+  }
 }
 
 .store-section-placeholder {

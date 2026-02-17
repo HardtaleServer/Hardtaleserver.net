@@ -88,7 +88,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.78";
+const VERSION = "1.3.81";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -188,6 +188,31 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.81",
+    date: "2026-02-17",
+    items: [
+      "Added clickable rank artwork on `/store/ranks` cards and comparison header cells that opens a themed rank detail modal.",
+      "Added a new Store rank detail popup with badge artwork, quick perk summary, and direct add-to-cart action.",
+      "Refined rank-card artwork placement and sizing so placeholder rank images sit cleanly above rank labels.",
+    ],
+  },
+  {
+    version: "1.3.80",
+    date: "2026-02-17",
+    items: [
+      "Added placeholder rank badge artwork blocks to `/store/ranks` cards above rank title/profile areas for future per-rank image assets.",
+      "Wired card artwork sources per rank id while using `Store_Ranks.png` as the temporary placeholder image.",
+    ],
+  },
+  {
+    version: "1.3.79",
+    date: "2026-02-17",
+    items: [
+      "Implemented desktop sticky rank header cells on `/store/ranks` with rank name, preview info, badges, pricing, and buy actions anchored above feature rows.",
+      "Kept mobile table behavior unchanged while enhancing desktop-only comparison readability and purchase access during scroll.",
+    ],
+  },
   {
     version: "1.3.78",
     date: "2026-02-17",
@@ -940,6 +965,11 @@ const STORE_PREVIEW_TITLES_BY_ID = {
   "rank-hero": ["Hero"],
   "rank-legend": ["Hero", "Legend"],
   "rank-mythic": ["Hero", "Legend", "Mythic"],
+};
+const STORE_CARD_ART_BY_ID = {
+  "rank-hero": "/Images/store/Store_Ranks.png",
+  "rank-legend": "/Images/store/Store_Ranks.png",
+  "rank-mythic": "/Images/store/Store_Ranks.png",
 };
 const HOME_FORUM_PREVIEW_SECTIONS = [
   "updates",
@@ -4901,6 +4931,7 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
   const [showTicket, setShowTicket] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
   const [previewItemId, setPreviewItemId] = useState("");
+  const [rankDetailItemId, setRankDetailItemId] = useState("");
   const [message, setMessage] = useState("");
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [cooldownLeft, setCooldownLeft] = useState(0);
@@ -4915,6 +4946,7 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
   );
   const storePreviewUsername = isSignedIn ? formatUsernameForDisplay(user?.username) : "";
   const previewItem = SAMPLE_STORE.find((item) => item.id === previewItemId) || null;
+  const rankDetailItem = SAMPLE_STORE.find((item) => item.id === rankDetailItemId) || null;
   const canPurchase = Boolean(isSignedIn && isLinkedAccount);
   const normalizedSection = String(section || "ranks").trim().toLowerCase();
   const isRanksSection = normalizedSection === "ranks";
@@ -5072,6 +5104,61 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
     return html`<span className="store-comparison-value-text">${String(value || "-")}</span>`;
   }
 
+  function renderComparisonHeaderCell(item, keyPrefix = "comparison", includeBuy = true) {
+    const rankLabel = getStoreRankLabel(item);
+    const rankSlug = getStoreRankSlug(item);
+    const addMeta = getStoreAddMeta(item);
+    const previewTitles = STORE_PREVIEW_TITLES_BY_ID[item.id] || [];
+    const perks = perkBullets(item.blurb).slice(0, 2).map((entry) => capitalizePerk(entry));
+    return html`<th key=${`${keyPrefix}-head-${item.id}`} scope="col" className="store-rank-col store-rank-head-cell">
+      <div className="store-rank-head">
+        <button
+          type="button"
+          className="store-rank-head-art-btn"
+          title=${`Open ${rankLabel} rank details`}
+          onClick=${() => setRankDetailItemId(item.id)}
+        >
+          <img
+            className="store-rank-head-art"
+            src=${STORE_CARD_ART_BY_ID[item.id] || "/Images/store/Store_Ranks.png"}
+            alt=""
+            aria-hidden="true"
+            loading="lazy"
+          />
+        </button>
+        <div className=${`store-sticky-rank-name rank-${rankSlug}`.trim()}>${rankLabel}</div>
+        <div className="store-rank-head-profile">
+          <img className="store-rank-head-avatar" src=${storePreviewImage} alt=${storePreviewName} loading="lazy" />
+          <div className="store-rank-head-meta">
+            <div className="store-rank-head-name">${storePreviewName}</div>
+            ${storePreviewUsername ? html`<div className="store-rank-head-username">@${storePreviewUsername}</div>` : html``}
+          </div>
+        </div>
+        <div className="store-rank-head-badges">
+          <${RankBadge} label=${rankLabel} className="store-owned-badge store-comparison-badge" />
+        </div>
+        <div className="store-rank-head-info">
+          ${previewTitles.length > 0
+            ? html`<div>Titles: ${previewTitles.join(", ")}</div>`
+            : html``}
+          ${perks.map((perk, index) => html`<div key=${`${item.id}-perk-${index}`}>${perk}</div>`)}
+        </div>
+        <div className="store-comparison-price">$${item.price.toFixed(2)}</div>
+        ${includeBuy
+          ? html`<button
+              type="button"
+              className="button store-cta store-comparison-buy-btn"
+              onClick=${() => onAdd(item)}
+              disabled=${addMeta.addDisabled}
+              title=${addMeta.addTitle}
+            >
+              ${addMeta.addLabel}
+            </button>`
+          : html``}
+      </div>
+    </th>`;
+  }
+
   return html`
     <section className="card fade-in">
       <div className="section-title">Hardtale Store</div>
@@ -5097,6 +5184,22 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
                       <img src=${DELETE_ICON_SVG} alt="" aria-hidden="true" />
                     </button>`
                   : html``}
+                <div className="store-rank-card-art-wrap">
+                  <button
+                    type="button"
+                    className="store-rank-card-art-btn"
+                    title=${`Open ${getStoreRankLabel(item)} rank details`}
+                    onClick=${() => setRankDetailItemId(item.id)}
+                  >
+                    <img
+                      className="store-rank-card-art"
+                      src=${STORE_CARD_ART_BY_ID[item.id] || "/Images/store/Store_Ranks.png"}
+                      alt=""
+                      aria-hidden="true"
+                      loading="lazy"
+                    />
+                  </button>
+                </div>
                 <div className=${`comment-rank store-profile-rank rank-${getStoreRankSlug(item)}`.trim()}>
                   ${(() => {
                     const iconType = getRankIconType(getStoreRankLabel(item));
@@ -5152,16 +5255,7 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
                 <thead>
                   <tr>
                     <th scope="col" className="store-feature-col">Feature</th>
-                    ${SAMPLE_STORE.map((item) => {
-                      const rankLabel = getStoreRankLabel(item);
-                      const rankSlug = getStoreRankSlug(item);
-                      return html`<th key=${`comparison-head-${item.id}`} scope="col" className="store-rank-col">
-                        <span className=${`store-comparison-rank rank-${rankSlug}`.trim()}>
-                          <${RankBadge} label=${rankLabel} className="store-owned-badge store-comparison-badge" />
-                        </span>
-                        <div className="store-comparison-price">$${item.price.toFixed(2)}</div>
-                      </th>`;
-                    })}
+                    ${SAMPLE_STORE.map((item) => renderComparisonHeaderCell(item, "comparison", true))}
                   </tr>
                 </thead>
                 <tbody>
@@ -5174,23 +5268,6 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
                 </tbody>
               </table>
             </div>
-            ${!showComparison
-              ? html`<div className="store-comparison-buy-row">
-                  ${SAMPLE_STORE.map((item) => {
-                    const addMeta = getStoreAddMeta(item);
-                    return html`<button
-                      key=${`core-buy-${item.id}`}
-                      type="button"
-                      className="button store-cta store-comparison-buy-btn"
-                      onClick=${() => onAdd(item)}
-                      disabled=${addMeta.addDisabled}
-                      title=${addMeta.addTitle}
-                    >
-                      ${addMeta.addLabel}
-                    </button>`;
-                  })}
-                </div>`
-              : html``}
             <div className="store-comparison-toggle-row">
               <button
                 type="button"
@@ -5206,11 +5283,7 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
                     <thead>
                       <tr>
                         <th scope="col" className="store-feature-col">Feature</th>
-                        ${SAMPLE_STORE.map((item) => html`<th key=${`more-head-${item.id}`} scope="col" className="store-rank-col">
-                          <span className=${`store-comparison-rank rank-${getStoreRankSlug(item)}`.trim()}>
-                            <${RankBadge} label=${getStoreRankLabel(item)} className="store-owned-badge store-comparison-badge" />
-                          </span>
-                        </th>`)}
+                        ${SAMPLE_STORE.map((item) => renderComparisonHeaderCell(item, "extended", true))}
                       </tr>
                     </thead>
                     <tbody>
@@ -5223,21 +5296,7 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
                     </tbody>
                   </table>
                 </div>
-                <div className="store-comparison-buy-row">
-                  ${SAMPLE_STORE.map((item) => {
-                    const addMeta = getStoreAddMeta(item);
-                    return html`<button
-                      key=${`extended-buy-${item.id}`}
-                      type="button"
-                      className="button store-cta store-comparison-buy-btn"
-                      onClick=${() => onAdd(item)}
-                      disabled=${addMeta.addDisabled}
-                      title=${addMeta.addTitle}
-                    >
-                      ${addMeta.addLabel}
-                    </button>`;
-                  })}
-                </div>`
+                `
               : html``}
           </div>`
         : html`<div className="store-section-placeholder">
@@ -5353,6 +5412,55 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
               </div>
             </div>
           <//>`
+        : html``}
+    <//>
+    <${PopUp}
+      show=${Boolean(rankDetailItem)}
+      onClose=${() => setRankDetailItemId("")}
+      title=${rankDetailItem ? `${rankDetailItem.name} Details` : "Rank Details"}
+      className="store-rank-detail-overlay"
+    >
+      ${rankDetailItem
+        ? html`<div className="store-rank-detail">
+            <div className=${`comment-rank store-rank-title rank-${getStoreRankSlug(rankDetailItem)}`.trim()}>
+              ${(() => {
+                const iconType = getRankIconType(getStoreRankLabel(rankDetailItem));
+                return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                  <span>${rankDetailItem.name}</span>`;
+              })()}
+            </div>
+            <img
+              className="store-rank-detail-art"
+              src=${STORE_CARD_ART_BY_ID[rankDetailItem.id] || "/Images/store/Store_Ranks.png"}
+              alt=""
+              aria-hidden="true"
+              loading="lazy"
+            />
+            <div className="store-rank-detail-meta">
+              <div className="store-rank-detail-price">$${rankDetailItem.price.toFixed(2)}</div>
+              <${RankBadge} label=${getStoreRankLabel(rankDetailItem)} className="store-owned-badge" />
+            </div>
+            <div className="store-rank-detail-perks">
+              ${perkBullets(rankDetailItem.blurb).slice(0, 5).map(
+                (perk) => html`<div>${capitalizePerk(perk)}</div>`,
+              )}
+            </div>
+            ${(() => {
+              const addMeta = getStoreAddMeta(rankDetailItem);
+              return html`<button
+                type="button"
+                className="button store-cta"
+                onClick=${() => {
+                  onAdd(rankDetailItem);
+                  if (!addMeta.addDisabled) setRankDetailItemId("");
+                }}
+                disabled=${addMeta.addDisabled}
+                title=${addMeta.addTitle}
+              >
+                ${addMeta.addLabel}
+              </button>`;
+            })()}
+          </div>`
         : html``}
     <//>
     <${PopUp} show=${showTicket} onClose=${() => setShowTicket(false)} title="Send a Ticket">
