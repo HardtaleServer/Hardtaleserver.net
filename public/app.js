@@ -81,7 +81,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.50";
+const VERSION = "1.3.52";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -169,6 +169,25 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.52",
+    date: "2026-02-17",
+    items: [
+      "Updated desktop news-comment left rail to show the active account badge stack under avatar (rank badge + staff pill when applicable).",
+      "Moved comment Reply action into the responses block so Reply now appears directly above Responses.",
+      "Adjusted desktop footer layout so Version and site links sit on the same row; Version now uses muted text styling by default.",
+    ],
+  },
+  {
+    version: "1.3.51",
+    date: "2026-02-17",
+    items: [
+      "Adjusted mobile right-side drawer alignment for header controls and profile preview card placement.",
+      "Raised mobile drawer profile preview position and enabled drawer panel scrolling to prevent bottom clipping on shorter screens.",
+      "Updated mobile drawer nav label from `News & Updates` to `News`, and tightened drawer link spacing for cleaner vertical rhythm.",
+      "Fine-tuned mobile profile-card overlay positioning to remove minor horizontal offset.",
+    ],
+  },
   {
     version: "1.3.50",
     date: "2026-02-17",
@@ -1872,6 +1891,28 @@ function CommentThread({
     </span>`;
   }
 
+  function renderCommentLeftMainBadges(entry) {
+    if (!entry || isForumThread) return html``;
+    const rank = resolveRank(entry);
+    const rankLabel = String(rank?.label || "Unregistered");
+    const roleClass = rank?.staff ? resolveStaffRoleClass(entry) : "";
+    const rankStaticClass = rank?.staff && rank?.animateStaffGradient === false ? "staff-static" : "";
+    const rankEffectsClass = entry?.authorShowRankEffects === false ? "rank-effects-off" : "";
+    const rankFontClass = entry?.authorUseRankFont === false ? "rank-font-off" : "rank-font-on";
+    const rankClass = `rank-${rankClassSlug(rankLabel)}`;
+    const rankIconType = getRankIconType(rankLabel);
+    const rankBadgeClass = `comment-rank forum-author-rank ${rank?.staff ? "staff" : ""} ${roleClass} ${rankStaticClass} ${rankEffectsClass} ${rankFontClass} ${rankClass}`.trim();
+    return html`<span className="comment-left-main-badge">
+      <span className="comment-left-main-badges">
+        <span className=${rankBadgeClass}>
+          ${rankIconType ? html`<span className="rank-icon">${renderRankIcon(rankIconType)}</span>` : html``}
+          <span>${getRankDisplayLabel(rankLabel)}</span>
+        </span>
+        ${showStaffNameBadge(entry) ? renderReplyStaffBadge(entry) : html``}
+      </span>
+    </span>`;
+  }
+
   function rankClassSlug(value) {
     return String(value || "Unregistered")
       .trim()
@@ -2882,6 +2923,7 @@ function CommentThread({
                           alt=${comment.authorName}
                         />
                       </button>
+                      ${renderCommentLeftMainBadges(comment)}
                       <${CommentIdentity}
                         entry=${comment}
                         rank=${resolveRank(comment)}
@@ -2904,7 +2946,7 @@ function CommentThread({
                             entry=${comment}
                             rank=${resolveRank(comment)}
                             authorSizeClass=${authorSizeClass}
-                            showStaffPill=${showStaffNameBadge(comment)}
+                            showStaffPill=${isForumThread ? showStaffNameBadge(comment) : false}
                             staffPillText=${resolveStaffPillTitle(comment)}
                             showOpBadge=${isOriginalPoster(comment)}
                           />
@@ -2975,8 +3017,17 @@ function CommentThread({
                                   ${renderDeleteLabel("Delete")}
                                 </button>`
                               : html``}
-                            ${isSignedIn && !commentsLocked
-                              ? html`<button
+                          </div>`
+                        : html``}
+                    </div>
+                    <div className="comment-responses-section">
+                      ${(() => {
+                        const replies = Array.isArray(comment.replies) ? comment.replies : [];
+                        const responsesOpen = Boolean(openResponses[comment.id]);
+                        return html`
+                          ${isSignedIn && !commentsLocked
+                            ? html`<div className="comment-reply-above-responses">
+                                <button
                                   className="ghost-btn"
                                   type="button"
                                   onClick=${() =>
@@ -2988,16 +3039,9 @@ function CommentThread({
                                     })}
                                 >
                                   Reply
-                                </button>`
-                              : html``}
-                          </div>`
-                        : html``}
-                    </div>
-                    <div className="comment-responses-section">
-                      ${(() => {
-                        const replies = Array.isArray(comment.replies) ? comment.replies : [];
-                        const responsesOpen = Boolean(openResponses[comment.id]);
-                        return html`
+                                </button>
+                              </div>`
+                            : html``}
                           <button
                             className="comment-responses-toggle"
                             type="button"
@@ -9652,22 +9696,24 @@ function Layout() {
 
         <footer ref=${footerRef} className=${`footer ${footerInView ? "fx-active" : "fx-paused"}`.trim()}>
           <div className="footer-top">
-            <button className="footer-link footer-emphasis" type="button" onClick=${() => setShowChangelog(true)}>
-              Version ${VERSION}
-            </button>
+            <div className="footer-top-left">
+              <button className="footer-link footer-version-trigger" type="button" onClick=${() => setShowChangelog(true)}>
+                Version ${VERSION}
+              </button>
+              <div className="footer-links">
+                <${Link} className="footer-link" to="/">Home</${Link}>
+                <${Link} className="footer-link" to="/about-us">About Us</${Link}>
+                <${Link} className="footer-link" to="/news">News</${Link}>
+                <${Link} className="footer-link" to="/store">Store</${Link}>
+                <${Link} className="footer-link" to="/vote">Vote</${Link}>
+                <${Link} className="footer-link" to="/support">Support</${Link}>
+                <${Link} className="footer-link" to="/subscriptions">Subscriptions</${Link}>
+              </div>
+            </div>
             <span className="footer-copyright footer-emphasis">
               <img src=${COPYRIGHT_ICON_SVG} alt="" aria-hidden="true" />
               <span>${`${year} Hardtale.net`}</span>
             </span>
-          </div>
-          <div className="footer-links">
-            <${Link} className="footer-link" to="/">Home</${Link}>
-            <${Link} className="footer-link" to="/about-us">About Us</${Link}>
-            <${Link} className="footer-link" to="/news">News</${Link}>
-            <${Link} className="footer-link" to="/store">Store</${Link}>
-            <${Link} className="footer-link" to="/vote">Vote</${Link}>
-            <${Link} className="footer-link" to="/support">Support</${Link}>
-            <${Link} className="footer-link" to="/subscriptions">Subscriptions</${Link}>
           </div>
         </footer>
       </div>

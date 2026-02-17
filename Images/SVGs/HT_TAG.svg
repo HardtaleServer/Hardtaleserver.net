@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 24" role="img" aria-labelledby="title desc">
+  <title id="title">Hardtale HT Tag</title>
+  <desc id="desc">Gradient HT monogram used for staff badge tag.</desc>
+  <defs>
+    <linearGradient id="htTagGradient" x1="0%" y1="50%" x2="100%" y2="50%">
+      <stop offset="0%" stop-color="#ff3b3b" />
+      <stop offset="100%" stop-color="#2aa3ff" />
+    </linearGradient>
+  </defs>
+  <rect x="1" y="1" width="46" height="22" rx="11" fill="none" stroke="url(#htTagGradient)" stroke-width="2" />
+  <path d="M12 7h3v4h6V7h3v10h-3v-4h-6v4h-3z" fill="url(#htTagGradient)" />
+  <path d="M28 7h10v3h-3.5v7h-3V10H28z" fill="url(#htTagGradient)" />
+</svg>

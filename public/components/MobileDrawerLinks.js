@@ -13,7 +13,7 @@ export default function MobileDrawerLinks({ navigate, closeMenu, openPlayHelp })
   return html`
     <div className="mobile-drawer-links">
       <button className="drawer-link" onClick=${() => go("/")}>Home</button>
-      <button className="drawer-link" onClick=${() => go("/news")}>News & Updates</button>
+      <button className="drawer-link" onClick=${() => go("/news")}>News</button>
       <button className="drawer-link" onClick=${() => go("/store")}>Store</button>
       <button className="drawer-link" onClick=${() => go("/vote")}>Vote</button>
       <button className="drawer-link" onClick=${() => go("/forum")}>Forum</button>
