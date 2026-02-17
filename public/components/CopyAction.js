@@ -31,8 +31,11 @@ export default function CopyAction({
     onClick=${handleCopy}
     title=${title || `Copy ${label}`}
   >
-    <img className="copy-action-icon" src=${iconSrc} alt="" aria-hidden="true" />
+    <span
+      className="copy-action-icon"
+      style=${{ "--copy-icon": `url(${iconSrc})` }}
+      aria-hidden="true"
+    ></span>
     <span>${label}</span>
   </button>`;
 }
-

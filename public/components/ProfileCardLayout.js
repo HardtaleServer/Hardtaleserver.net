@@ -36,6 +36,15 @@ function ProfileCardLayout({
                   }
                 }}
               />`
+            : typeof row?.onClick === "function"
+            ? html`<button
+                type="button"
+                className="copy-action-btn subtle profile-copy-action"
+                onClick=${row.onClick}
+                title=${row?.title || row?.value || "Open"}
+              >
+                <span>${row?.value || "Open"}</span>
+              </button>`
             : html`<span>${row?.value || "N/A"}</span>`}
         </div>`,
       )}

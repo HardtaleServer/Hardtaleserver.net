@@ -86,7 +86,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.58";
+const VERSION = "1.3.59";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -177,6 +177,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.59",
+    date: "2026-02-17",
+    items: [
+      "Added `ClerkUserProfile:` meta row to profile cards near Hytale Username/UUID for quick access to Clerk profile controls.",
+      "Removed forum `Profile Options` chooser popup and now always opens Profile Card directly.",
+      "Updated profile-card copy icon hover to use staff gradient treatment.",
+    ],
+  },
   {
     version: "1.3.58",
     date: "2026-02-17",
@@ -3345,6 +3354,19 @@ function CommentThread({
                   onCopied=${() => copyProfileMetaValue("UUID", profileUser.hytalePlayerUuid || "")}
                 />
               </div>
+              <div className="profile-card-link-meta">
+                <span className="muted">ClerkUserProfile:</span>
+                <button
+                  type="button"
+                  className="copy-action-btn subtle profile-copy-action"
+                  onClick=${() => {
+                    if (openUserProfile) openUserProfile({});
+                  }}
+                  title="Open Clerk User Profile"
+                >
+                  <span>Open</span>
+                </button>
+              </div>
               <img
                 className=${`profile-card-avatar avatar-rank-${rankClassSlug(
                   profileUser.rankLabel || "Unregistered",
@@ -5261,8 +5283,6 @@ function ForumPage({ isAdmin = false }) {
   const [forumHistoryOpen, setForumHistoryOpen] = useState(false);
   const [forumHistoryItems, setForumHistoryItems] = useState([]);
   const [forumHistoryTitle, setForumHistoryTitle] = useState("Post Edit History");
-  const [forumSelfChooserOpen, setForumSelfChooserOpen] = useState(false);
-  const [forumSelfChooserEntry, setForumSelfChooserEntry] = useState(null);
   const FORUM_BODY_MIN_LENGTH = 30;
   const createTemplateOptions = useMemo(
     () => getForumTemplateOptions(selectedSectionId),
@@ -5329,13 +5349,6 @@ function ForumPage({ isAdmin = false }) {
 
   function openForumProfileEntry(entry) {
     if (!entry) return;
-    const authorUserId = getForumPostAuthorUserId(entry);
-    const isOwnEntry = Boolean(isSignedIn && userId && authorUserId && String(userId) === authorUserId);
-    if (isOwnEntry) {
-      setForumSelfChooserEntry(entry);
-      setForumSelfChooserOpen(true);
-      return;
-    }
     openForumProfileCard(entry);
   }
 
@@ -6001,6 +6014,19 @@ function ForumPage({ isAdmin = false }) {
           onCopied=${() => copyForumProfileMetaValue("UUID", forumProfileUser.hytalePlayerUuid || "")}
         />
       </div>
+      <div className="profile-card-link-meta">
+        <span className="muted">ClerkUserProfile:</span>
+        <button
+          type="button"
+          className="copy-action-btn subtle profile-copy-action"
+          onClick=${() => {
+            if (openUserProfile) openUserProfile({});
+          }}
+          title="Open Clerk User Profile"
+        >
+          <span>Open</span>
+        </button>
+      </div>
       <img
         className=${`profile-card-avatar avatar-rank-${rankSlug(
           forumProfileUser.rankLabel || "Unregistered",
@@ -6535,28 +6561,6 @@ function ForumPage({ isAdmin = false }) {
             ${renderForumProfileCard()}
           <//>
           <${PopUp}
-            show=${forumSelfChooserOpen}
-            onClose=${() => {
-              setForumSelfChooserOpen(false);
-              setForumSelfChooserEntry(null);
-            }}
-            title="Profile Options"
-          >
-            <${ProfileOptionsActions}
-              onViewProfile=${() => {
-                const target = forumSelfChooserEntry;
-                setForumSelfChooserOpen(false);
-                setForumSelfChooserEntry(null);
-                if (target) openForumProfileCard(target);
-              }}
-              onViewClerk=${() => {
-                setForumSelfChooserOpen(false);
-                setForumSelfChooserEntry(null);
-                if (openUserProfile) openUserProfile({});
-              }}
-            />
-          <//>
-          <${PopUp}
             show=${forumHistoryOpen}
             onClose=${() => setForumHistoryOpen(false)}
             title=${forumHistoryTitle}
@@ -6774,28 +6778,6 @@ function ForumPage({ isAdmin = false }) {
           title="Profile Card"
         >
           ${renderForumProfileCard()}
-        <//>
-        <${PopUp}
-          show=${forumSelfChooserOpen}
-          onClose=${() => {
-            setForumSelfChooserOpen(false);
-            setForumSelfChooserEntry(null);
-          }}
-          title="Profile Options"
-        >
-          <${ProfileOptionsActions}
-            onViewProfile=${() => {
-              const target = forumSelfChooserEntry;
-              setForumSelfChooserOpen(false);
-              setForumSelfChooserEntry(null);
-              if (target) openForumProfileCard(target);
-            }}
-            onViewClerk=${() => {
-              setForumSelfChooserOpen(false);
-              setForumSelfChooserEntry(null);
-              if (openUserProfile) openUserProfile({});
-            }}
-          />
         <//>
         <${PopUp}
           show=${forumHistoryOpen}
@@ -9932,6 +9914,14 @@ function Layout() {
                   label: "UUID:",
                   value: notificationProfileUser.hytalePlayerUuid || "N/A",
                   copyValue: notificationProfileUser.hytalePlayerUuid || "",
+                },
+                {
+                  label: "ClerkUserProfile:",
+                  value: "Open",
+                  onClick: () => {
+                    if (openUserProfile) openUserProfile({});
+                  },
+                  title: "Open Clerk User Profile",
                 },
               ]}
               onMetaRowClick=${copyNotificationProfileMetaValue}

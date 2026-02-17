@@ -3640,7 +3640,16 @@ emoji-picker.reaction-picker-panel {
 .copy-action-icon {
   width: 12px;
   height: 12px;
-  object-fit: contain;
+  display: inline-block;
+  background: currentColor;
+  -webkit-mask-image: var(--copy-icon);
+  mask-image: var(--copy-icon);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
 }
 
 .copy-action-btn.subtle {
@@ -3664,12 +3673,18 @@ emoji-picker.reaction-picker-panel {
 .copy-action-btn.subtle:hover .copy-action-icon,
 .copy-action-btn.subtle:focus-visible .copy-action-icon {
   opacity: 0.95;
-  filter: grayscale(0.2) brightness(1.1);
 }
 
 .button .copy-action-icon,
 .hero-action-btn .copy-action-icon {
-  filter: brightness(0) invert(1);
+  background: #fff;
+}
+
+.profile-card .copy-action-btn.subtle:hover .copy-action-icon,
+.profile-card .copy-action-btn.subtle:focus-visible .copy-action-icon {
+  background-image: linear-gradient(270deg, var(--accent-2), var(--accent));
+  background-size: 220% 100%;
+  animation: staffReflect 2.4s ease-in-out infinite reverse;
 }
 
 .profile-card-badge {
