@@ -4574,6 +4574,8 @@ emoji-picker.reaction-picker-panel {
   border-radius: 16px;
   padding: 16px;
   display: grid;
+  grid-template-rows: 32px 34px 94px 26px minmax(160px, auto) auto auto;
+  align-items: start;
   gap: 10px;
   background: var(--bg-soft);
   text-align: center;
@@ -4649,6 +4651,7 @@ emoji-picker.reaction-picker-panel {
   padding: 10px;
   color: inherit;
   cursor: pointer;
+  min-height: 88px;
 }
 
 .store-profile-preview:hover {
@@ -4683,12 +4686,14 @@ emoji-picker.reaction-picker-panel {
 .store-profile-rank {
   justify-content: flex-start;
   font-size: 12px;
+  min-height: 32px;
 }
 
 .store-rank-title {
   justify-content: center;
   font-size: 13px;
   font-weight: 700;
+  min-height: 34px;
 }
 
 .store-name {
@@ -4771,6 +4776,7 @@ emoji-picker.reaction-picker-panel {
 
 .store-preview-note {
   font-size: 12px;
+  min-height: 20px;
 }
 
 .store-profile-preview-card {
@@ -4784,6 +4790,7 @@ emoji-picker.reaction-picker-panel {
 .store-desc {
   color: var(--muted);
   font-size: 14px;
+  min-height: 160px;
 }
 
 .store-perks {
