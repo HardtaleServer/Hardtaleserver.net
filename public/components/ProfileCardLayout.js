@@ -1,5 +1,6 @@
 import React from "react";
 import htm from "htm";
+import CopyAction from "./CopyAction.js";
 
 const html = htm.bind(React.createElement);
 
@@ -22,15 +23,20 @@ function ProfileCardLayout({
       ${safeRows.map(
         (row, index) => html`<div key=${`profile-row-${index}`} className="profile-card-link-meta">
           <span className="muted">${row?.label || ""}</span>
-          <span
-            title=${row?.copyValue ? `Click to copy ${row?.label || "value"}` : ""}
-            onClick=${() => {
-              if (!row?.copyValue || typeof onMetaRowClick !== "function") return;
-              onMetaRowClick(row.label || "Value", row.copyValue);
-            }}
-          >
-            ${row?.value || "N/A"}
-          </span>
+          ${row?.copyValue
+            ? html`<${CopyAction}
+                label=${row?.value || "N/A"}
+                valueToCopy=${row?.copyValue || ""}
+                subtle=${true}
+                className="profile-copy-action"
+                title=${`Copy ${row?.label || "value"}`}
+                onCopied=${() => {
+                  if (typeof onMetaRowClick === "function") {
+                    onMetaRowClick(row.label || "Value", row.copyValue);
+                  }
+                }}
+              />`
+            : html`<span>${row?.value || "N/A"}</span>`}
         </div>`,
       )}
       <img className=${avatarClassName} src=${avatarSrc} alt=${avatarAlt || name || "User"} />

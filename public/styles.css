@@ -3631,6 +3631,47 @@ emoji-picker.reaction-picker-panel {
   color: var(--text);
 }
 
+.copy-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.copy-action-icon {
+  width: 12px;
+  height: 12px;
+  object-fit: contain;
+}
+
+.copy-action-btn.subtle {
+  border: none;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  color: var(--muted);
+}
+
+.copy-action-btn.subtle .copy-action-icon {
+  opacity: 0.72;
+  filter: grayscale(1) brightness(1.08);
+}
+
+.copy-action-btn.subtle:hover,
+.copy-action-btn.subtle:focus-visible {
+  color: var(--text);
+}
+
+.copy-action-btn.subtle:hover .copy-action-icon,
+.copy-action-btn.subtle:focus-visible .copy-action-icon {
+  opacity: 0.95;
+  filter: grayscale(0.2) brightness(1.1);
+}
+
+.button .copy-action-icon,
+.hero-action-btn .copy-action-icon {
+  filter: brightness(0) invert(1);
+}
+
 .profile-card-badge {
   margin-top: 2px;
   border-radius: 999px;

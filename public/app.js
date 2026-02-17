@@ -30,6 +30,7 @@ import SkillLeaderboardCard from "./components/SkillLeaderboardCard.js";
 import NotificationsPanel from "./components/NotificationsPanel.js";
 import SiteFooter from "./components/SiteFooter.js";
 import SubscriptionsPage from "./components/SubscriptionsPage.js";
+import CopyAction from "./components/CopyAction.js";
 import { markdownExcerpt } from "./components/forumMarkdown.js";
 import { getRankDisplayLabel, getRankIconType } from "./components/rankConfig.js";
 import {
@@ -85,7 +86,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.57";
+const VERSION = "1.3.58";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -176,6 +177,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.58",
+    date: "2026-02-17",
+    items: [
+      "Added reusable `CopyAction` component using `Copy.svg` for consistent copy UX across the site.",
+      "Updated Home/Connect `Copy IP` buttons to use the shared copy component with icon-left label layout.",
+      "Updated profile metadata copy UI to show a subtle grey copy icon before Hytale Username/UUID values (mobile-friendly) while keeping existing toast copy feedback.",
+    ],
+  },
   {
     version: "1.3.57",
     date: "2026-02-17",
@@ -3315,21 +3325,25 @@ function CommentThread({
           ? html`<div className="profile-card">
               <div className="profile-card-link-meta">
                 <span className="muted">Hytale Username:</span>
-                <span
-                  title="Click to copy Hytale Username"
-                  onClick=${() => copyProfileMetaValue("Hytale Username", profileUser.hytalePlayerName || "")}
-                >
-                  ${profileUser.hytalePlayerName || "N/A"}
-                </span>
+                <${CopyAction}
+                  label=${profileUser.hytalePlayerName || "N/A"}
+                  valueToCopy=${profileUser.hytalePlayerName || ""}
+                  subtle=${true}
+                  className="profile-copy-action"
+                  title="Copy Hytale Username"
+                  onCopied=${() => copyProfileMetaValue("Hytale Username", profileUser.hytalePlayerName || "")}
+                />
               </div>
               <div className="profile-card-link-meta">
                 <span className="muted">UUID:</span>
-                <span
-                  title="Click to copy UUID"
-                  onClick=${() => copyProfileMetaValue("UUID", profileUser.hytalePlayerUuid || "")}
-                >
-                  ${profileUser.hytalePlayerUuid || "N/A"}
-                </span>
+                <${CopyAction}
+                  label=${profileUser.hytalePlayerUuid || "N/A"}
+                  valueToCopy=${profileUser.hytalePlayerUuid || ""}
+                  subtle=${true}
+                  className="profile-copy-action"
+                  title="Copy UUID"
+                  onCopied=${() => copyProfileMetaValue("UUID", profileUser.hytalePlayerUuid || "")}
+                />
               </div>
               <img
                 className=${`profile-card-avatar avatar-rank-${rankClassSlug(
@@ -5967,21 +5981,25 @@ function ForumPage({ isAdmin = false }) {
     return html`<div className="profile-card">
       <div className="profile-card-link-meta">
         <span className="muted">Hytale Username:</span>
-        <span
-          title="Click to copy Hytale Username"
-          onClick=${() => copyForumProfileMetaValue("Hytale Username", forumProfileUser.hytalePlayerName || "")}
-        >
-          ${forumProfileUser.hytalePlayerName || "N/A"}
-        </span>
+        <${CopyAction}
+          label=${forumProfileUser.hytalePlayerName || "N/A"}
+          valueToCopy=${forumProfileUser.hytalePlayerName || ""}
+          subtle=${true}
+          className="profile-copy-action"
+          title="Copy Hytale Username"
+          onCopied=${() => copyForumProfileMetaValue("Hytale Username", forumProfileUser.hytalePlayerName || "")}
+        />
       </div>
       <div className="profile-card-link-meta">
         <span className="muted">UUID:</span>
-        <span
-          title="Click to copy UUID"
-          onClick=${() => copyForumProfileMetaValue("UUID", forumProfileUser.hytalePlayerUuid || "")}
-        >
-          ${forumProfileUser.hytalePlayerUuid || "N/A"}
-        </span>
+        <${CopyAction}
+          label=${forumProfileUser.hytalePlayerUuid || "N/A"}
+          valueToCopy=${forumProfileUser.hytalePlayerUuid || ""}
+          subtle=${true}
+          className="profile-copy-action"
+          title="Copy UUID"
+          onCopied=${() => copyForumProfileMetaValue("UUID", forumProfileUser.hytalePlayerUuid || "")}
+        />
       </div>
       <img
         className=${`profile-card-avatar avatar-rank-${rankSlug(
@@ -7618,12 +7636,11 @@ function HomePage({
           </div>
           <div className="ip-row">
             <div className="ip">${SERVER_IP}</div>
-            <button
+            <${CopyAction}
               className="button primary copy-ip-btn hero-action-btn"
-              onClick=${() => navigator.clipboard.writeText(SERVER_IP)}
-            >
-              Copy IP
-            </button>
+              label="Copy IP"
+              valueToCopy=${SERVER_IP}
+            />
           </div>
           <div className="server-pill">
             <span className="server-status"><span className="dot"></span> Server online</span>
@@ -9979,12 +9996,11 @@ function Layout() {
           </div>
           <div className="connect-ip">
             <span>${SERVER_IP}</span>
-            <button
+            <${CopyAction}
               className="button primary"
-              onClick=${() => navigator.clipboard.writeText(SERVER_IP)}
-            >
-              Copy IP
-            </button>
+              label="Copy IP"
+              valueToCopy=${SERVER_IP}
+            />
           </div>
         </div>
       <//>
