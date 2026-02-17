@@ -4111,6 +4111,11 @@ emoji-picker.reaction-picker-panel {
     radial-gradient(circle at top right, rgba(255, 59, 59, 0.08), transparent 45%);
 }
 
+.profile-card-overlay .popup {
+  width: min(860px, 94vw);
+  max-height: 86vh;
+}
+
 .popup-overlay.connect-overlay {
   position: fixed;
   inset: -800px;
@@ -4183,6 +4188,16 @@ emoji-picker.reaction-picker-panel {
   .image-preview-overlay .popup {
     width: 92vw;
     max-height: 82vh;
+  }
+
+  .profile-card-overlay .popup {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
   }
 
   .image-preview-modal {

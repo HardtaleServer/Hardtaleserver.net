@@ -9826,6 +9826,7 @@ function Layout() {
         show=${notificationProfileOpen}
         onClose=${() => setNotificationProfileOpen(false)}
         title="Profile Card"
+        className="profile-card-overlay"
       >
         ${notificationProfileUser
           ? html`<div className="profile-card">
@@ -9911,17 +9912,6 @@ function Layout() {
               ${notificationProfileInfoTab === "groups"
                 ? html`${renderProfileGroupsCard(notificationProfileUser)}`
                 : html`${renderStaffBadge(notificationProfileUser)}${renderOwnedRankBadges(notificationProfileUser)}`}
-              ${notificationProfileUser.isOwn && openUserProfile
-                ? html`<div className="profile-card-actions">
-                    <button
-                      className="button ghost-btn profile-card-clerk-btn"
-                      type="button"
-                      onClick=${() => openUserProfile({})}
-                    >
-                      Clerk
-                    </button>
-                  </div>`
-                : html``}
             </div>`
           : html``}
       <//>
