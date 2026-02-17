@@ -4789,6 +4789,32 @@ app.get("/env.js", (req, res) => {
   );
 });
 
+app.get("/health", (req, res) => {
+  const mongoReady = Boolean(
+    mongoClient &&
+    commentsCollection &&
+    commentRevisionsCollection &&
+    reactionsCollection &&
+    newsCollection &&
+    notificationsCollection &&
+    notificationReadsCollection &&
+    cartsCollection &&
+    purchasesCollection &&
+    supportTicketsCollection &&
+    forumPostsCollection &&
+    forumPostRevisionsCollection &&
+    linkedAccountsCollection &&
+    userAchievementsCollection,
+  );
+  res.status(200).json({
+    status: "ok",
+    service: "hardtale-server-app",
+    uptimeSec: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString(),
+    mongodb: mongoReady ? "connected" : "reconnecting",
+  });
+});
+
 app.use("/Images", express.static(imagesDir));
 app.use(express.static(publicDir));
 
