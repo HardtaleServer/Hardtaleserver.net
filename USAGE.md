@@ -9,6 +9,15 @@
 3. `npm start`
 4. Open `http://localhost:3000`
 
+## Local linking mode (recommended for laptop testing)
+1. Start local dev mode: `npm run dev` (or `npm run start:dev`)
+2. Keep backend on `http://127.0.0.1:3000`
+3. Keep plugin redeem API on `http://127.0.0.1:8080`
+4. Open `http://127.0.0.1:3000` in browser
+
+In dev mode, the backend forces:
+- `LINK_SERVICE_BASE_URL=http://127.0.0.1:8080`
+
 ## Admin login
 Admin access is granted to the Clerk account with email:
 - `chashsmurfis@gmail.com`

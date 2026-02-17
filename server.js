@@ -10,8 +10,22 @@ import { MongoClient, ServerApiVersion, ObjectId } from "mongodb";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const STARTUP_FLAGS = new Set(
+  process.argv
+    .slice(2)
+    .map((arg) => String(arg || "").trim().toLowerCase())
+    .filter(Boolean),
+);
+const LOCAL_DEV_MODE =
+  STARTUP_FLAGS.has("dev") ||
+  STARTUP_FLAGS.has("--dev") ||
+  STARTUP_FLAGS.has("--local") ||
+  String(process.env.LOCAL_DEV_MODE || "false").toLowerCase() === "true";
+const LOCAL_DEV_LINK_SERVICE_BASE_URL = "http://127.0.0.1:8080";
+
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HOST = String(process.env.HOST || "0.0.0.0").trim() || "0.0.0.0";
 const DEFAULT_ADMIN_EMAILS = [
   "chashsmurfis@gmail.com",
   "hardtaleserver@gmail.com",
@@ -119,15 +133,25 @@ const ACHIEVEMENT_DEFS = [
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI || "";
 const MONGO_DB_NAME = process.env.MONGO_DB || process.env.MONGODB_DB || "hardtaledb";
 const FULFILLMENT_API_TOKEN = String(process.env.FULFILLMENT_API_TOKEN || "").trim();
-const LINK_SERVICE_BASE_URL = String(process.env.LINK_SERVICE_BASE_URL || "").trim();
+const LINK_SERVICE_BASE_URL = LOCAL_DEV_MODE
+  ? LOCAL_DEV_LINK_SERVICE_BASE_URL
+  : String(process.env.LINK_SERVICE_BASE_URL || "").trim();
 const LINK_SERVICE_AUTH_TOKEN = String(process.env.LINK_SERVICE_AUTH_TOKEN || "").trim();
 const LINKING_ENABLED = String(
   process.env.LINKING_ENABLED || process.env.LINK_REDEEM_ENABLED || "false",
 ).toLowerCase() === "true";
+const LINK_SERVICE_LOCALHOST_PATTERN = /^https?:\/\/(localhost|127(?:\.\d{1,3}){3})(:\d+)?(?:\/|$)/i;
 const LINK_SERVICE_TIMEOUT_MS = Math.max(
   2000,
   Math.min(Number(process.env.LINK_SERVICE_TIMEOUT_MS || 8000), 20000),
 );
+const SMURFIS_TEST_LINK_UUID = "826ac345-e6fe-4ec7-a5fd-0b170b9d6439";
+const SMURFIS_TEST_LINK_USERNAMES = new Set(["smurfis"]);
+const SMURFIS_TEST_LINK_EMAILS = new Set([
+  "chashsmurfis@gmail.com",
+  "hardtaleserver@gmail.com",
+  "hytaleserver@gmail.com",
+]);
 
 app.use(express.json({ limit: "100kb" }));
 app.use("/api", clerkMiddleware());
@@ -701,7 +725,12 @@ async function redeemLinkCodeWithGameServer({ code, webUserId, idempotencyKey })
     if (error?.name === "AbortError") {
       return { ok: false, status: 504, code: "SERVER_UNAVAILABLE", error: "Redeem request timed out" };
     }
-    return { ok: false, status: 502, code: "SERVER_UNAVAILABLE", error: "Failed to reach link service" };
+    return {
+      ok: false,
+      status: 502,
+      code: "SERVER_UNAVAILABLE",
+      error: `Failed to reach link service at ${LINK_SERVICE_BASE_URL}`,
+    };
   } finally {
     clearTimeout(timeout);
   }
@@ -731,6 +760,26 @@ function buildMockRedeemResult({ code }) {
       playerUuid,
       playerName: `Mock-${normalizedCode.slice(-4)}`,
     },
+  };
+}
+
+function resolveTestLinkOverrideForUser(user) {
+  const username = String(user?.username || "")
+    .trim()
+    .toLowerCase();
+  const email = String(getUserEmail(user) || "")
+    .trim()
+    .toLowerCase();
+  if (!SMURFIS_TEST_LINK_USERNAMES.has(username) && !SMURFIS_TEST_LINK_EMAILS.has(email)) {
+    return null;
+  }
+  return {
+    linked: true,
+    playerUuid: SMURFIS_TEST_LINK_UUID,
+    maskedPlayerUuid: maskPlayerUuid(SMURFIS_TEST_LINK_UUID),
+    playerName: "Smurfis",
+    linkedAt: "2026-02-17T00:00:00.000Z",
+    linkedSource: "testOverride",
   };
 }
 
@@ -3526,6 +3575,19 @@ app.get("/api/link/status", async (req, res) => {
     if (!auth) return;
     const doc = await linkedAccountsCollection.findOne({ webUserId: auth.userId });
     if (!doc) {
+      const authUser = await clerkClient.users.getUser(auth.userId).catch(() => null);
+      const override = resolveTestLinkOverrideForUser(authUser);
+      if (override) {
+        return res.json({
+          linked: true,
+          linkingEnabled: LINKING_ENABLED,
+          linkMode: LINKING_ENABLED ? "live" : "mock",
+          playerUuid: override.playerUuid,
+          maskedPlayerUuid: override.maskedPlayerUuid,
+          playerName: override.playerName,
+          linkedAt: override.linkedAt,
+        });
+      }
       return res.json({ linked: false, linkingEnabled: LINKING_ENABLED, linkMode: LINKING_ENABLED ? "live" : "mock" });
     }
     return res.json({
@@ -3552,6 +3614,16 @@ app.get("/api/profile/link-status/:userId", async (req, res) => {
     }
     const doc = await linkedAccountsCollection.findOne({ webUserId: userId });
     if (!doc) {
+      const targetUser = await clerkClient.users.getUser(userId).catch(() => null);
+      const override = resolveTestLinkOverrideForUser(targetUser);
+      if (override) {
+        return res.json({
+          linked: true,
+          playerUuid: override.playerUuid,
+          playerName: override.playerName,
+          linkedAt: override.linkedAt,
+        });
+      }
       return res.json({ linked: false, playerUuid: "", playerName: "" });
     }
     return res.json({
@@ -4223,7 +4295,7 @@ app.get("/logo.png", (req, res) => {
 app.get("/env.js", (req, res) => {
   res.type("application/javascript");
   res.send(
-    `window.__CLERK_PUBLISHABLE_KEY__ = ${JSON.stringify(CLERK_PUBLISHABLE_KEY)};`,
+    `window.__CLERK_PUBLISHABLE_KEY__ = ${JSON.stringify(CLERK_PUBLISHABLE_KEY)};\nwindow.__LOCAL_DEV_MODE__ = ${JSON.stringify(LOCAL_DEV_MODE)};`,
   );
 });
 
@@ -4234,6 +4306,19 @@ app.get("*", (req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+app.listen(PORT, HOST, () => {
+  console.log(`Server running on http://${HOST}:${PORT}`);
+  if (LOCAL_DEV_MODE) {
+    console.log(
+      `Local dev mode active: LINK_SERVICE_BASE_URL forced to ${LOCAL_DEV_LINK_SERVICE_BASE_URL}`,
+    );
+    console.log(
+      `Open the site at http://127.0.0.1:${PORT} to ensure frontend API calls stay local.`,
+    );
+  }
+  if (LINKING_ENABLED && LINK_SERVICE_LOCALHOST_PATTERN.test(LINK_SERVICE_BASE_URL)) {
+    console.warn(
+      "LINKING_ENABLED is true but LINK_SERVICE_BASE_URL points to localhost/127.x.x.x. In Render this is usually unreachable for external game/plugin services.",
+    );
+  }
 });

@@ -32,7 +32,7 @@ Required for linking feature:
 
 Current local defaults in `.env`:
 - `LINKING_ENABLED=false`
-- `LINK_SERVICE_BASE_URL=http://localhost:8080`
+- `LINK_SERVICE_BASE_URL=http://127.0.0.1:8080`
 - `LINK_SERVICE_AUTH_TOKEN=replace-with-strong-shared-secret`
 - `LINK_SERVICE_TIMEOUT_MS=8000`
 

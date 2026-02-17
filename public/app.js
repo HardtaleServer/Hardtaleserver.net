@@ -46,11 +46,16 @@ const html = htm.bind(React.createElement);
 const SERVER_IP = "play.hardtale.net";
 const PLAYER_COUNT = "60+";
 const PUBLISHABLE_KEY = window.__CLERK_PUBLISHABLE_KEY__;
+const LOCAL_DEV_MODE = window.__LOCAL_DEV_MODE__ === true;
 const LOGO_SRC = "/Images/IslandLogo/Hero_Island_Logo.png";
 const THEME_KEY = "hardtale-theme";
 const NAV_KEY = "hardtale-nav";
 const MENU_SIDE_KEY = "hardtale-menu-side";
 const MOBILE_NAV_STYLE_KEY = "hardtale-mobile-nav-style";
+const LAST_NON_LINK_ROUTE_KEY = "hardtale-last-non-link-route";
+const LINK_REMINDER_LAST_SHOWN_PREFIX = "hardtale-link-reminder-last-shown";
+const LINK_REMINDER_READ_PREFIX = "hardtale-link-reminder-read";
+const LINK_REMINDER_LOCAL_ID_PREFIX = "local-link-reminder";
 const TICKET_COOLDOWN_KEY = "hardtale-ticket-cooldown";
 const TICKET_COOLDOWN_MS = 60 * 60 * 1000;
 const LOGO_SIDE_KEY = "hardtale-logo-side";
@@ -61,7 +66,7 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
-const VERSION = "1.3.35";
+const VERSION = "1.3.36";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
 const LINKED_STATUS_ICON_SVG = "/Images/SVGs/LINKED.svg";
@@ -145,6 +150,20 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.36",
+    date: "2026-02-17",
+    items: [
+      "Switched /link to a route-triggered modal overlay while keeping /link and /link? deep-link parsing/verification behavior intact.",
+      "Added dismissible /link modal close (X) with background page restore so users return to prior route (or Home fallback).",
+      "Added daily system-style link reminder notifications for unlinked users in the bell feed until account linking is completed.",
+      "Added local reminder read-state handling so local daily reminders do not interfere with server notification unread/read sync.",
+      "Added local dev startup mode (npm run dev / npm run start:dev) that forces LINK_SERVICE_BASE_URL=http://127.0.0.1:8080.",
+      "Added frontend local-dev environment signal and red DEV MODE pill that renders only in local dev mode.",
+      "Added temporary Smurfis verified-link test override for UI validation using UUID 826ac345-e6fe-4ec7-a5fd-0b170b9d6439.",
+      "Updated donor rank text/glow tokens: Legend -> #9e7411 and Mythic -> #e100ff.",
+    ],
+  },
   {
     version: "1.3.35",
     date: "2026-02-16",
@@ -548,6 +567,106 @@ function buildCartFromIds(entries = []) {
       return { ...base };
     })
     .filter(Boolean);
+}
+
+function normalizeInternalRoute(value, fallback = "/") {
+  const raw = String(value || "").trim();
+  if (!raw.startsWith("/")) return fallback;
+  return raw;
+}
+
+function readLastNonLinkRoute() {
+  try {
+    return normalizeInternalRoute(localStorage.getItem(LAST_NON_LINK_ROUTE_KEY), "/");
+  } catch {
+    return "/";
+  }
+}
+
+function writeLastNonLinkRoute(value) {
+  const normalized = normalizeInternalRoute(value, "/");
+  try {
+    localStorage.setItem(LAST_NON_LINK_ROUTE_KEY, normalized);
+  } catch {
+    // noop
+  }
+}
+
+function getLocalDateStamp() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function linkReminderStorageKey(userId) {
+  return `${LINK_REMINDER_LAST_SHOWN_PREFIX}:${String(userId || "").trim()}`;
+}
+
+function readLinkReminderStamp(userId) {
+  const key = linkReminderStorageKey(userId);
+  if (!key.endsWith(":")) {
+    try {
+      return String(localStorage.getItem(key) || "").trim();
+    } catch {
+      return "";
+    }
+  }
+  return "";
+}
+
+function writeLinkReminderStamp(userId, stamp) {
+  const key = linkReminderStorageKey(userId);
+  if (key.endsWith(":")) return;
+  try {
+    localStorage.setItem(key, String(stamp || "").trim());
+  } catch {
+    // noop
+  }
+}
+
+function readLinkReminderReadStamp(userId) {
+  const key = `${LINK_REMINDER_READ_PREFIX}:${String(userId || "").trim()}`;
+  if (key.endsWith(":")) return "";
+  try {
+    return String(localStorage.getItem(key) || "").trim();
+  } catch {
+    return "";
+  }
+}
+
+function writeLinkReminderReadStamp(userId, stamp) {
+  const key = `${LINK_REMINDER_READ_PREFIX}:${String(userId || "").trim()}`;
+  if (key.endsWith(":")) return;
+  try {
+    localStorage.setItem(key, String(stamp || "").trim());
+  } catch {
+    // noop
+  }
+}
+
+function buildDailyLinkReminderId(userId, stamp = getLocalDateStamp()) {
+  return `${LINK_REMINDER_LOCAL_ID_PREFIX}:${String(userId || "").trim()}:${String(stamp || "").trim()}`;
+}
+
+function isLocalLinkReminderId(value) {
+  return String(value || "").startsWith(`${LINK_REMINDER_LOCAL_ID_PREFIX}:`);
+}
+
+function buildDailyLinkReminderNotification(userId) {
+  const today = getLocalDateStamp();
+  const reminderRead = readLinkReminderReadStamp(userId) === today;
+  return {
+    id: buildDailyLinkReminderId(userId, today),
+    title: "Link Your UUID",
+    message: "Use /link in-game, then verify on web to unlock linked account perks and store access.",
+    author: "System",
+    featured: false,
+    readMoreUrl: "/link",
+    createdAt: new Date().toISOString(),
+    readByMe: reminderRead,
+  };
 }
 
 function serializeCartItems(cart = []) {
@@ -7022,7 +7141,7 @@ function VotePage() {
   `;
 }
 
-function LinkPage() {
+function LinkPage({ onClose = null }) {
   const location = useLocation();
   const { getToken, isSignedIn, isLoaded: isAuthLoaded } = useAuth();
   const { openSignIn } = useClerk();
@@ -7235,8 +7354,13 @@ function LinkPage() {
   }
 
   return html`
-    <section className="link-page fade-in">
+    <section className=${`link-page fade-in ${onClose ? "link-page-modal" : ""}`.trim()}>
       <div className="card link-card">
+        ${onClose
+          ? html`<button className="link-modal-close" type="button" aria-label="Close link modal" onClick=${onClose}>
+              X
+            </button>`
+          : html``}
         <div className="link-eyebrow">Account Linking</div>
         <h1 className="link-title">Link Hardtale UUID to Clerk</h1>
         <p className="link-copy">
@@ -7370,6 +7494,19 @@ function Layout() {
     });
     return copy;
   }, [notifications]);
+  const stateBackgroundHref = normalizeInternalRoute(location?.state?.backgroundHref || "", "");
+  const storedBackgroundHref = readLastNonLinkRoute();
+  const linkBackgroundHref = stateBackgroundHref || storedBackgroundHref || "/";
+  const [linkBackgroundPathname, linkBackgroundSearch] = linkBackgroundHref.split("?");
+  const routesLocation =
+    location.pathname === "/link"
+      ? {
+          ...location,
+          pathname: normalizeInternalRoute(linkBackgroundPathname || "/", "/"),
+          search: linkBackgroundSearch ? `?${linkBackgroundSearch}` : "",
+        }
+      : location;
+  const visualPathname = routesLocation.pathname;
 
   useEffect(() => {
     let alive = true;
@@ -7560,30 +7697,63 @@ function Layout() {
   }, [isAuthLoaded, isSignedIn, userId, location.pathname, getToken]);
 
   useEffect(() => {
+    if (!isAuthLoaded || !isSignedIn || !userId || notificationsLoading) return;
+    if (isLinkedAccount) {
+      setNotifications((prev) => prev.filter((item) => !isLocalLinkReminderId(item?.id)));
+      return;
+    }
+    const today = getLocalDateStamp();
+    const lastShown = readLinkReminderStamp(userId);
+    if (lastShown !== today) {
+      writeLinkReminderStamp(userId, today);
+    }
+    const reminder = buildDailyLinkReminderNotification(userId);
+    setNotifications((prev) => {
+      const hasTodayReminder = prev.some((item) => String(item?.id || "") === reminder.id);
+      if (hasTodayReminder) return prev;
+      return [reminder, ...prev];
+    });
+  }, [
+    isAuthLoaded,
+    isSignedIn,
+    userId,
+    isLinkedAccount,
+    notificationsLoading,
+    setNotifications,
+  ]);
+
+  useEffect(() => {
+    if (location.pathname === "/link") return;
     window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   }, [location.pathname]);
 
   useEffect(() => {
-    if (location.pathname === "/" || location.pathname === "/home") {
+    if (visualPathname === "/" || visualPathname === "/home") {
       setActive("home");
-    } else if (location.pathname === "/store") {
+    } else if (visualPathname === "/store") {
       setActive("store");
-    } else if (location.pathname === "/news") {
+    } else if (visualPathname === "/news") {
       setActive("news");
-    } else if (location.pathname === "/vote") {
+    } else if (visualPathname === "/vote") {
       setActive("vote");
-    } else if (location.pathname === "/forum") {
+    } else if (visualPathname === "/forum") {
       setActive("forum");
-    } else if (location.pathname === "/support") {
+    } else if (visualPathname === "/support") {
       setActive("support");
     } else if (location.pathname === "/link") {
       setActive("link");
     }
+  }, [visualPathname, location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname === "/link") return;
+    setShowMobileNav(false);
   }, [location.pathname]);
 
   useEffect(() => {
-    setShowMobileNav(false);
-  }, [location.pathname]);
+    if (location.pathname === "/link") return;
+    writeLastNonLinkRoute(`${location.pathname}${location.search || ""}`);
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     if (notificationsLoading) return;
@@ -7698,7 +7868,21 @@ function Layout() {
       .filter((item) => item?.readByMe !== true)
       .map((item) => String(item?.id || "").trim())
       .filter(Boolean);
+    const localUnreadIds = unreadIds.filter((id) => isLocalLinkReminderId(id));
+    const serverUnreadIds = unreadIds.filter((id) => !isLocalLinkReminderId(id));
+    if (localUnreadIds.length > 0) {
+      writeLinkReminderReadStamp(userId, getLocalDateStamp());
+    }
     if (unreadIds.length === 0) {
+      setUnread(0);
+      return;
+    }
+    if (serverUnreadIds.length === 0) {
+      setNotifications((prev) =>
+        prev.map((item) =>
+          unreadIds.includes(String(item?.id || "")) ? { ...item, readByMe: true } : item,
+        ),
+      );
       setUnread(0);
       return;
     }
@@ -7706,7 +7890,7 @@ function Layout() {
       await apiFetchWithToken(getToken, true, "/api/notifications/read", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: unreadIds }),
+        body: JSON.stringify({ ids: serverUnreadIds }),
       });
       setNotifications((prev) =>
         prev.map((item) =>
@@ -7734,6 +7918,15 @@ function Layout() {
     }
   }
 
+  function openLinkModal() {
+    const backgroundHref = `${location.pathname}${location.search || ""}`;
+    navigate("/link", { state: { backgroundHref }, replace: false });
+  }
+
+  function closeLinkModal() {
+    navigate(linkBackgroundHref || "/", { replace: true });
+  }
+
   function addToCart(item) {
     if (!isSignedIn) {
       setPendingItem(item);
@@ -7742,7 +7935,7 @@ function Layout() {
     }
     if (!isLinkedAccount) {
       setCartStatus("Link your game account on /link before using the store.");
-      navigate("/link");
+      openLinkModal();
       return;
     }
     setCartStatus("");
@@ -7995,6 +8188,7 @@ function Layout() {
                 alt="Hardtale"
               />`
             : html``}
+          ${LOCAL_DEV_MODE ? html`<span className="dev-mode-pill">DEV MODE</span>` : html``}
           <${DesktopNavShell} />
           <${DesktopAuthButtonsBlock} />
         </div>
@@ -8023,6 +8217,7 @@ function Layout() {
                     />
                   </div>`
                 : html``}
+              ${LOCAL_DEV_MODE ? html`<span className="dev-mode-pill mobile">DEV MODE</span>` : html``}
               <div className=${`mobile-top-actions ${menuSide === "left" ? "menu-left" : "menu-right"}`}>
                 ${menuSide === "left"
                   ? html`
@@ -8074,6 +8269,7 @@ function Layout() {
               onError=${handleLogoError}
             />
           <//>
+          ${LOCAL_DEV_MODE ? html`<span className="dev-mode-pill">DEV MODE</span>` : html``}
           ${desktopStickyVisible
             ? html``
             : html`
@@ -8085,13 +8281,13 @@ function Layout() {
         <${AppRoutes}
           Routes=${Routes}
           Route=${Route}
+          routesLocation=${routesLocation}
           HomePage=${HomePage}
           NewsPage=${NewsPage}
           StorePage=${StorePage}
           VotePage=${VotePage}
           ForumPage=${ForumPage}
           SubscriptionsPage=${SubscriptionsPage}
-          LinkPage=${LinkPage}
           NotFoundPage=${NotFoundPage}
           sortedNews=${sortedNews}
           loading=${loading}
@@ -8125,6 +8321,13 @@ function Layout() {
           </div>
         </footer>
       </div>
+      ${location.pathname === "/link"
+        ? html`<div className="popup-overlay link-modal-overlay" onClick=${closeLinkModal}>
+            <div className="popup link-modal-shell" onClick=${(event) => event.stopPropagation()}>
+              <${LinkPage} onClose=${closeLinkModal} />
+            </div>
+          </div>`
+        : html``}
 
       ${isMobile
         ? html`<div className=${`mobile-drawer ${menuSide === "left" ? "drawer-left" : "drawer-right"} ${showMobileNav ? "open" : ""}`}>

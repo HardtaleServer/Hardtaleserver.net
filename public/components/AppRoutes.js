@@ -6,13 +6,13 @@ const html = htm.bind(React.createElement);
 export default function AppRoutes({
   Routes,
   Route,
+  routesLocation,
   HomePage,
   NewsPage,
   StorePage,
   VotePage,
   ForumPage,
   SubscriptionsPage,
-  LinkPage,
   NotFoundPage,
   sortedNews,
   loading,
@@ -29,7 +29,7 @@ export default function AppRoutes({
   cart,
 }) {
   return html`
-    <${Routes}>
+    <${Routes} location=${routesLocation}>
       <${Route}
         path="/"
         element=${html`<${HomePage}
@@ -77,7 +77,18 @@ export default function AppRoutes({
       <${Route} path="/vote" element=${html`<${VotePage} />`} />
       <${Route} path="/forum" element=${html`<${ForumPage} isAdmin=${isAdmin} />`} />
       <${Route} path="/subscriptions" element=${html`<${SubscriptionsPage} />`} />
-      <${Route} path="/link" element=${html`<${LinkPage} />`} />
+      <${Route}
+        path="/link"
+        element=${html`<${HomePage}
+          news=${sortedNews}
+          loading=${loading}
+          error=${error}
+          playRef=${playRef}
+          onPlayClick=${openHowModal}
+          onNewsClick=${() => navigate("/news")}
+          onHowClick=${() => openHowModal()}
+        />`}
+      />
       <${Route}
         path="*"
         element=${html`<${NotFoundPage}

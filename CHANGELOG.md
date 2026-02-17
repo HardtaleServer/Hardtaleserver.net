@@ -2,6 +2,17 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.36)
+- Switched `/link` to a route-triggered modal overlay while keeping `/link` and `/link?` deep-link parsing/verification behavior intact.
+- Added dismissible modal close (`X`) and background-restore behavior so closing `/link` returns users to the previous page (or Home fallback).
+- Added daily system-style link reminder notifications for unlinked users in the bell feed until the account is linked.
+- Added local reminder read-state handling so local daily reminders do not interfere with server notification read sync.
+- Added local dev startup mode (`npm run dev` / `npm run start:dev`) that forces `LINK_SERVICE_BASE_URL=http://127.0.0.1:8080`.
+- Added frontend local-dev environment signal and a red `DEV MODE` pill that appears only in local dev mode.
+- Added temporary Smurfis verified-link test override so profile/link status renders UUID `826ac345-e6fe-4ec7-a5fd-0b170b9d6439` for UI validation.
+- Updated local linking docs to standardize `127.0.0.1` loopback testing defaults.
+- Updated donor rank text/glow palette tokens: Legend is now `#9e7411` and Mythic is now `#e100ff`.
+
 ## 2026-02-16 (v1.3.35)
 - Added role-tier staff visual hierarchy with distinct Dev/Admin/Mod/Helper gradient identities across staff pills, rank text, and staff badge chips.
 - Added dynamic profile link-state badges (`🔓 Unlinked` / `🔗 Linked`) in profile card badge rows for clearer account-link visibility.
