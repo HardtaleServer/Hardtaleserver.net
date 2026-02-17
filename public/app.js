@@ -81,20 +81,20 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.49";
-const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
-const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
-const COPYRIGHT_ICON_SVG = "/Images/SVGs/Copyright.svg";
-const FEATURED_BADGE_ICON_SVG = "/Images/SVGs/Featured.svg";
-const DELETE_ICON_SVG = "/Images/SVGs/Delete.svg";
-const NOTIFICATIONS_ICON_SVG = "/Images/SVGs/Notifications.svg";
-const LINKED_STATUS_ICON_SVG = "/Images/SVGs/LINKED.svg";
-const UNLINKED_STATUS_ICON_SVG = "/Images/SVGs/UNLINKED.svg";
-const DEFAULT_PROFILE_AVATAR_SVG = "/Images/SVGs/DEFAULT_PROFILE_AVATAR.svg";
+const VERSION = "1.3.50";
+const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
+const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
+const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
+const FEATURED_BADGE_ICON_SVG = "/Images/SVGs/ui/Featured.svg";
+const DELETE_ICON_SVG = "/Images/SVGs/ui/Delete.svg";
+const NOTIFICATIONS_ICON_SVG = "/Images/SVGs/ui/Notifications.svg";
+const LINKED_STATUS_ICON_SVG = "/Images/SVGs/link/LINKED.svg";
+const UNLINKED_STATUS_ICON_SVG = "/Images/SVGs/link/UNLINKED.svg";
+const DEFAULT_PROFILE_AVATAR_SVG = "/Images/SVGs/ui/DEFAULT_PROFILE_AVATAR.svg";
 const STORE_RANK_ICON_SVG = {
-  star: "/Images/SVGs/RANK_HERO.svg",
-  crown: "/Images/SVGs/RANK_LEGEND.svg",
-  shield: "/Images/SVGs/RANK_MYTHIC.svg",
+  star: "/Images/SVGs/ranks/RANK_HERO.svg",
+  crown: "/Images/SVGs/ranks/RANK_LEGEND.svg",
+  shield: "/Images/SVGs/ranks/RANK_MYTHIC.svg",
 };
 const STAFF_EMAILS = new Set([
   "chashsmurfis@gmail.com",
@@ -125,7 +125,7 @@ const MOBILE_LOGO_MAP = {
 const DESKTOP_LOGO_MAP = MOBILE_LOGO_MAP;
 const CRITICAL_IMAGE_SOURCES = [
   LOGO_SRC,
-  "/Images/SVGs/SETTINGS_SVG.svg",
+  "/Images/SVGs/ui/SETTINGS_SVG.svg",
   "/assets/HardTale_H_Fiery.png",
   "/assets/HardTale_H_Golden.png",
   "/assets/HardTale_H_GreyScale.png",
@@ -169,6 +169,14 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.50",
+    date: "2026-02-17",
+    items: [
+      "Reorganized SVG assets into grouped folders (`ui`, `link`, `ranks`, `toasts`, `brand`) under `Images/SVGs`.",
+      "Updated all frontend references to the new SVG paths so icons/badges/toasts continue working without behavior changes.",
+    ],
+  },
   {
     version: "1.3.49",
     date: "2026-02-17",
@@ -7849,7 +7857,7 @@ function NewsPage({
               >
                 <img
                   className="news-manage-icon"
-                  src="/Images/SVGs/Admin_Panel.svg"
+                  src="/Images/SVGs/ui/Admin_Panel.svg"
                   alt=""
                   aria-hidden="true"
                 />

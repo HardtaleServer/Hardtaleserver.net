@@ -1,4 +1,4 @@
-@import "./components/HardtaleLoader.css";
+﻿@import "./components/HardtaleLoader.css";
 
 :root {
   --bg: #0c1018;
@@ -635,13 +635,13 @@ body[data-theme="dark"] {
 }
 
 .settings-icon-mask {
-  -webkit-mask-image: url("/Images/SVGs/SETTINGS_SVG.svg");
-  mask-image: url("/Images/SVGs/SETTINGS_SVG.svg");
+  -webkit-mask-image: url("/Images/SVGs/ui/SETTINGS_SVG.svg");
+  mask-image: url("/Images/SVGs/ui/SETTINGS_SVG.svg");
 }
 
 .notif-icon-mask {
-  -webkit-mask-image: var(--notif-icon, url("/Images/SVGs/Notifications.svg"));
-  mask-image: var(--notif-icon, url("/Images/SVGs/Notifications.svg"));
+  -webkit-mask-image: var(--notif-icon, url("/Images/SVGs/ui/Notifications.svg"));
+  mask-image: var(--notif-icon, url("/Images/SVGs/ui/Notifications.svg"));
 }
 
 .settings-button.spin .settings-icon-mask {

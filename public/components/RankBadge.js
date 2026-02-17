@@ -1,10 +1,10 @@
-import React from "react";
+﻿import React from "react";
 import htm from "htm";
 import { getRankDisplayLabel, getRankIconType } from "./rankConfig.js";
 
 const html = htm.bind(React.createElement);
-const LINKED_STATUS_ICON_SVG = "/Images/SVGs/LINKED.svg";
-const UNLINKED_STATUS_ICON_SVG = "/Images/SVGs/UNLINKED.svg";
+const LINKED_STATUS_ICON_SVG = "/Images/SVGs/link/LINKED.svg";
+const UNLINKED_STATUS_ICON_SVG = "/Images/SVGs/link/UNLINKED.svg";
 
 function renderRankIcon(type) {
   switch (type) {

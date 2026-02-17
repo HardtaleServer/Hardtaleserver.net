@@ -1,13 +1,13 @@
-import React from "react";
+﻿import React from "react";
 import htm from "htm";
 
 const html = htm.bind(React.createElement);
 
 export const APP_TOAST_EVENT = "hardtale:toast";
 const DEFAULT_ICON_BY_KIND = {
-  success: "/Images/SVGs/Success.svg",
-  warning: "/Images/SVGs/Warning.svg",
-  error: "/Images/SVGs/Error.svg",
+  success: "/Images/SVGs/toasts/Success.svg",
+  warning: "/Images/SVGs/toasts/Warning.svg",
+  error: "/Images/SVGs/toasts/Error.svg",
 };
 
 function normalizeToastKind(value) {
