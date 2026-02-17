@@ -1773,6 +1773,11 @@ body[data-theme="light"] .button.primary {
   box-shadow: 0 0 12px rgba(94, 247, 166, 0.7);
 }
 
+.dot.offline {
+  background: #e14f4f;
+  box-shadow: 0 0 12px rgba(225, 79, 79, 0.65);
+}
+
 .ip {
   font-size: 22px;
   font-weight: 700;

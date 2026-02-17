@@ -179,6 +179,9 @@ const LINK_REDEEM_DOWNSTREAM_FALLBACK_ENABLED = String(
 ).toLowerCase() === "true";
 const LINK_CODE_TTL_SEC = Math.max(60, Math.min(Number(process.env.LINK_CODE_TTL_SEC || 300), 3600));
 const LINK_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const SERVER_HEARTBEAT_INTERVAL_MS = 15 * 60 * 1000;
+const SERVER_HEARTBEAT_STALE_AFTER_MS = SERVER_HEARTBEAT_INTERVAL_MS * 2;
+const DEFAULT_SERVER_ID = "prod";
 const SMURFIS_TEST_LINK_UUID = "826ac345-e6fe-4ec7-a5fd-0b170b9d6439";
 const SMURFIS_TEST_LINK_USERNAMES = new Set(["smurfis"]);
 const SMURFIS_TEST_LINK_EMAILS = new Set([
@@ -246,6 +249,7 @@ let hytaleJwksCache = {
   expiresAt: 0,
   keys: [],
 };
+const serverHeartbeatById = new Map();
 
 function resetMongoState() {
   mongoClient = null;
@@ -744,7 +748,123 @@ function requireServerSecret(req, res, routeLabel = "server_api") {
     res.status(403).json({ error: "invalid_server_secret" });
     return false;
   }
+  recordServerHeartbeat(req, routeLabel);
   return true;
+}
+
+function parseBoundedInt(value, min = 0, max = 10000) {
+  const next = Number(value);
+  if (!Number.isFinite(next)) return null;
+  const truncated = Math.trunc(next);
+  if (truncated < min || truncated > max) return null;
+  return truncated;
+}
+
+function parseServerIdFromHeartbeatRequest(req) {
+  const raw =
+    req.query?.serverId ||
+    req.query?.server ||
+    req.body?.serverId ||
+    req.body?.server ||
+    req.headers?.["x-server-id"] ||
+    DEFAULT_SERVER_ID;
+  const normalized = String(raw || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, "")
+    .slice(0, 40);
+  return normalized || DEFAULT_SERVER_ID;
+}
+
+function parseHeartbeatPlayerCount(req) {
+  const candidates = [
+    req.query?.playerCount,
+    req.query?.players,
+    req.query?.onlinePlayers,
+    req.query?.online,
+    req.body?.playerCount,
+    req.body?.players,
+    req.body?.onlinePlayers,
+    req.body?.online,
+  ];
+  for (const value of candidates) {
+    const parsed = parseBoundedInt(value, 0, 20000);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+}
+
+function parseHeartbeatMaxPlayers(req) {
+  const candidates = [
+    req.query?.maxPlayers,
+    req.query?.capacity,
+    req.body?.maxPlayers,
+    req.body?.capacity,
+  ];
+  for (const value of candidates) {
+    const parsed = parseBoundedInt(value, 1, 20000);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+}
+
+function recordServerHeartbeat(req, routeLabel = "server_api") {
+  const nowMs = Date.now();
+  const serverId = parseServerIdFromHeartbeatRequest(req);
+  const playerCount = parseHeartbeatPlayerCount(req);
+  const maxPlayers = parseHeartbeatMaxPlayers(req);
+  const previous = serverHeartbeatById.get(serverId) || {
+    serverId,
+    playerCount: null,
+    maxPlayers: null,
+    lastSeenAtMs: 0,
+    lastRoute: "",
+  };
+  const next = {
+    ...previous,
+    serverId,
+    lastSeenAtMs: nowMs,
+    lastRoute: String(routeLabel || "server_api"),
+  };
+  if (playerCount !== null) next.playerCount = playerCount;
+  if (maxPlayers !== null) next.maxPlayers = maxPlayers;
+  if (next.maxPlayers !== null && next.playerCount !== null && next.playerCount > next.maxPlayers) {
+    next.playerCount = next.maxPlayers;
+  }
+  serverHeartbeatById.set(serverId, next);
+}
+
+function resolvePublicServerHeartbeat(nowMs = Date.now()) {
+  const preferred = serverHeartbeatById.get(DEFAULT_SERVER_ID);
+  const selected = preferred
+    ? preferred
+    : Array.from(serverHeartbeatById.values()).sort((a, b) => (b.lastSeenAtMs || 0) - (a.lastSeenAtMs || 0))[0] || null;
+  if (!selected || !selected.lastSeenAtMs) {
+    return {
+      serverId: DEFAULT_SERVER_ID,
+      status: "offline",
+      online: false,
+      playerCount: null,
+      maxPlayers: null,
+      lastSeenAt: "",
+      staleAfterMs: SERVER_HEARTBEAT_STALE_AFTER_MS,
+      heartbeatIntervalMs: SERVER_HEARTBEAT_INTERVAL_MS,
+    };
+  }
+  const ageMs = Math.max(0, nowMs - selected.lastSeenAtMs);
+  const online = ageMs <= SERVER_HEARTBEAT_STALE_AFTER_MS;
+  return {
+    serverId: selected.serverId || DEFAULT_SERVER_ID,
+    status: online ? "online" : "offline",
+    online,
+    playerCount: online ? (selected.playerCount ?? null) : null,
+    maxPlayers: online ? (selected.maxPlayers ?? null) : null,
+    lastSeenAt: new Date(selected.lastSeenAtMs).toISOString(),
+    ageMs,
+    lastRoute: selected.lastRoute || "",
+    staleAfterMs: SERVER_HEARTBEAT_STALE_AFTER_MS,
+    heartbeatIntervalMs: SERVER_HEARTBEAT_INTERVAL_MS,
+  };
 }
 
 function resolveRequestBaseUrl(req) {
@@ -6165,6 +6285,7 @@ app.get("/health", (req, res) => {
     uptimeSec: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
     mongodb: mongoReady ? "connected" : "reconnecting",
+    server: resolvePublicServerHeartbeat(),
   });
 });
 

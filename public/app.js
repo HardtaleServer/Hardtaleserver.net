@@ -8500,6 +8500,12 @@ function HomePage({
   const navigate = useNavigate();
   const [forumPreview, setForumPreview] = useState([]);
   const [forumLoading, setForumLoading] = useState(true);
+  const [serverRuntime, setServerRuntime] = useState({
+    online: false,
+    playerCount: null,
+    maxPlayers: null,
+    loading: true,
+  });
 
   useEffect(() => {
     let alive = true;
@@ -8541,6 +8547,50 @@ function HomePage({
     };
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    async function loadServerRuntime() {
+      try {
+        const response = await fetch("/health");
+        const data = await response.json().catch(() => ({}));
+        if (!alive || !response.ok) return;
+        const server = data?.server || {};
+        const playerCount =
+          Number.isFinite(Number(server?.playerCount)) && Number(server?.playerCount) >= 0
+            ? Math.trunc(Number(server.playerCount))
+            : null;
+        const maxPlayers =
+          Number.isFinite(Number(server?.maxPlayers)) && Number(server?.maxPlayers) > 0
+            ? Math.trunc(Number(server.maxPlayers))
+            : null;
+        setServerRuntime({
+          online: server?.online === true,
+          playerCount,
+          maxPlayers,
+          loading: false,
+        });
+      } catch {
+        if (!alive) return;
+        setServerRuntime((prev) => ({ ...prev, loading: false }));
+      }
+    }
+    loadServerRuntime();
+    const timer = window.setInterval(loadServerRuntime, 60_000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  const onlineLabel = serverRuntime.online ? "Server online" : "Server offline";
+  const activePlayersLabel = serverRuntime.loading
+    ? `Active Players: ${PLAYER_COUNT}`
+    : serverRuntime.online
+    ? serverRuntime.playerCount !== null
+      ? `Active Players: ${serverRuntime.maxPlayers ? `${serverRuntime.playerCount}/${serverRuntime.maxPlayers}` : serverRuntime.playerCount}`
+      : "Active Players: Online"
+    : "Active Players: Offline";
+
   return html`
     <section className="home-stack">
       <div className="hero fade-in">
@@ -8581,8 +8631,10 @@ function HomePage({
             />
           </div>
           <div className="server-pill">
-            <span className="server-status"><span className="dot"></span> Server online</span>
-            <span className="server-players">Active Players: ${PLAYER_COUNT}</span>
+            <span className="server-status">
+              <span className=${`dot ${serverRuntime.online ? "" : "offline"}`.trim()}></span> ${onlineLabel}
+            </span>
+            <span className="server-players">${activePlayersLabel}</span>
           </div>
           <div className="discord-pill">
             <span className="discord-text">Discord online: -/-</span>
