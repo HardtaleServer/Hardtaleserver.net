@@ -27,6 +27,8 @@ import PopUp from "./components/PopUp.js";
 import ToastSystem, { APP_TOAST_EVENT, createToastPayload, emitAppToast } from "./components/ToastSystem.js";
 import SeoManager from "./components/SeoManager.js";
 import SkillLeaderboardCard from "./components/SkillLeaderboardCard.js";
+import NotificationsPanel from "./components/NotificationsPanel.js";
+import SiteFooter from "./components/SiteFooter.js";
 import { markdownExcerpt } from "./components/forumMarkdown.js";
 import { getRankDisplayLabel, getRankIconType } from "./components/rankConfig.js";
 import {
@@ -82,7 +84,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.53";
+const VERSION = "1.3.55";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -173,6 +175,20 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.55",
+    date: "2026-02-17",
+    items: [
+      "Extracted reusable `SiteFooter` component from Layout to further reduce `app.js` size while preserving footer behavior and styling.",
+    ],
+  },
+  {
+    version: "1.3.54",
+    date: "2026-02-17",
+    items: [
+      "Extracted Notifications panel rendering into reusable `components/NotificationsPanel.js` to reduce `app.js` size and keep UI behavior unchanged.",
+    ],
+  },
   {
     version: "1.3.53",
     date: "2026-02-17",
@@ -7535,84 +7551,6 @@ function renderProfileGroupsCard(entry) {
   </div>`;
 }
 
-function NotificationsPanel({ notifications, onView, onOpenProfile }) {
-  if (!notifications.length) {
-    return html`<p className="muted">No notifications yet.</p>`;
-  }
-
-  return html`
-    <div className="notif-list">
-      ${notifications.map((item) => {
-        const authorLabel = String(item?.authorName || item?.author || "System");
-        const authorRank = getRankDisplayLabel(item?.authorRank || "Registered");
-        const authorRankSlug = String(authorRank || "Registered")
-          .trim()
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "-");
-        const authorImage = String(item?.authorImage || "/assets/HardTale_H_GreyScale.png");
-        const authorUserId = String(item?.authorUserId || "").trim();
-        const isSystemAuthor = /^system$/i.test(authorLabel) || authorUserId === "";
-        const canOpenProfile =
-          typeof onOpenProfile === "function" &&
-          !isSystemAuthor &&
-          Boolean(authorUserId);
-        return html`<div key=${item.id} className="notif-card">
-          <div className="notif-title">
-            ${item.featured ? renderFeaturedBadge(true) : html``}
-            ${item.title}
-          </div>
-          <div className="notif-body">${item.message}</div>
-          <div className="notif-author-row">
-            <div className="notif-author">
-              <div className="notif-author-line">
-                <span className="notif-author-prefix">Sent by</span>
-                ${canOpenProfile
-                  ? html`<button
-                      className="notif-profile-peek"
-                      type="button"
-                      onClick=${() => onOpenProfile(item)}
-                      title="Open profile card"
-                      aria-label="Open profile card"
-                    >
-                      <img className="notif-profile-avatar" src=${authorImage} alt=${authorLabel} />
-                    </button>`
-                  : html`<span className="notif-profile-peek static" aria-hidden="true">
-                      <img className="notif-profile-avatar" src=${authorImage} alt=${authorLabel} />
-                    </span>`}
-                ${canOpenProfile
-                  ? html`<button
-                      className="notif-author-name-btn"
-                      type="button"
-                      onClick=${() => onOpenProfile(item)}
-                      title="Open profile card"
-                    >
-                      <${AuthorName} value=${authorLabel} isStaffLabel=${isStaffLabel} />
-                    </button>`
-                  : html`<span className="notif-author-name-static">
-                      <${AuthorName} value=${authorLabel} isStaffLabel=${isStaffLabel} />
-                    </span>`}
-                ${isSystemAuthor
-                  ? html``
-                  : html`<span className=${`profile-owned-badge notif-rank-pill rank-${authorRankSlug}`.trim()}>
-                      <span>${authorRank}</span>
-                    </span>`}
-              </div>
-              <${TimestampText} value=${item.createdAt} formatTimestamp=${formatTimestamp} />
-            </div>
-          </div>
-          ${item.readMoreUrl
-            ? html`<div className="notif-actions">
-                <button className="ghost-btn" type="button" onClick=${() => onView(item)}>
-                  View
-                </button>
-              </div>`
-            : html``}
-        </div>`;
-      })}
-    </div>
-  `;
-}
-
 function HomePage({
   news,
   loading,
@@ -9717,28 +9655,14 @@ function Layout() {
           cart=${cart}
         />
 
-        <footer ref=${footerRef} className=${`footer ${footerInView ? "fx-active" : "fx-paused"}`.trim()}>
-          <div className="footer-top">
-            <div className="footer-top-left">
-              <button className="footer-link footer-version-trigger" type="button" onClick=${() => setShowChangelog(true)}>
-                Version ${VERSION}
-              </button>
-              <div className="footer-links">
-                <${Link} className="footer-link" to="/">Home</${Link}>
-                <${Link} className="footer-link" to="/about-us">About Us</${Link}>
-                <${Link} className="footer-link" to="/news">News</${Link}>
-                <${Link} className="footer-link" to="/store">Store</${Link}>
-                <${Link} className="footer-link" to="/vote">Vote</${Link}>
-                <${Link} className="footer-link" to="/support">Support</${Link}>
-                <${Link} className="footer-link" to="/subscriptions">Subscriptions</${Link}>
-              </div>
-            </div>
-            <span className="footer-copyright footer-emphasis">
-              <img src=${COPYRIGHT_ICON_SVG} alt="" aria-hidden="true" />
-              <span>${`${year} Hardtale.net`}</span>
-            </span>
-          </div>
-        </footer>
+        <${SiteFooter}
+          footerRef=${footerRef}
+          footerInView=${footerInView}
+          onOpenChangelog=${() => setShowChangelog(true)}
+          version=${VERSION}
+          year=${year}
+          copyrightIconSrc=${COPYRIGHT_ICON_SVG}
+        />
       </div>
       ${location.pathname === "/link"
         ? html`<div className="popup-overlay link-modal-overlay" onClick=${closeLinkModal}>
@@ -9944,6 +9868,9 @@ function Layout() {
           notifications=${sortedNotifications}
           onView=${viewNotification}
           onOpenProfile=${openNotificationProfile}
+          formatTimestamp=${formatTimestamp}
+          isStaffLabel=${isStaffLabel}
+          featuredIconSrc=${FEATURED_BADGE_ICON_SVG}
         />
       <//>
       <${PopUp}
