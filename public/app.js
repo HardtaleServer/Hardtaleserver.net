@@ -85,7 +85,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.56";
+const VERSION = "1.3.57";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -176,6 +176,14 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.57",
+    date: "2026-02-17",
+    items: [
+      "Moved profile-card Hytale metadata to the top of player cards and renamed fields to `Hytale Username:` and `UUID:`.",
+      "Added click-to-copy behavior for Hytale Username/UUID values with clipboard toast feedback (no extra buttons added).",
+    ],
+  },
   {
     version: "1.3.56",
     date: "2026-02-17",
@@ -2902,6 +2910,25 @@ function CommentThread({
     openProfileCard(entry);
   }
 
+  async function copyProfileMetaValue(label, value) {
+    const raw = String(value || "").trim();
+    if (!raw || raw.toLowerCase() === "n/a") return;
+    try {
+      await navigator.clipboard.writeText(raw);
+      emitAppToast({
+        kind: "success",
+        title: "Copied",
+        message: `${label} copied to clipboard.`,
+      });
+    } catch {
+      emitAppToast({
+        kind: "warning",
+        title: "Copy failed",
+        message: `Couldn't copy ${label}.`,
+      });
+    }
+  }
+
   return html`
     <div className=${`comment-thread ${isForumThread ? "forum-thread" : ""}`.trim()}>
       <button className="comment-toggle" type="button" onClick=${() => setOpen(!open)}>
@@ -3286,6 +3313,24 @@ function CommentThread({
       >
         ${profileUser
           ? html`<div className="profile-card">
+              <div className="profile-card-link-meta">
+                <span className="muted">Hytale Username:</span>
+                <span
+                  title="Click to copy Hytale Username"
+                  onClick=${() => copyProfileMetaValue("Hytale Username", profileUser.hytalePlayerName || "")}
+                >
+                  ${profileUser.hytalePlayerName || "N/A"}
+                </span>
+              </div>
+              <div className="profile-card-link-meta">
+                <span className="muted">UUID:</span>
+                <span
+                  title="Click to copy UUID"
+                  onClick=${() => copyProfileMetaValue("UUID", profileUser.hytalePlayerUuid || "")}
+                >
+                  ${profileUser.hytalePlayerUuid || "N/A"}
+                </span>
+              </div>
               <img
                 className=${`profile-card-avatar avatar-rank-${rankClassSlug(
                   profileUser.rankLabel || "Unregistered",
@@ -3310,14 +3355,6 @@ function CommentThread({
               ${profileUser.username
                 ? html`<div className="profile-card-username">@${profileUser.username}</div>`
                 : html``}
-              <div className="profile-card-link-meta">
-                <span className="muted">Hytale</span>
-                <span>${profileUser.hytalePlayerName || "N/A"}</span>
-              </div>
-              <div className="profile-card-link-meta">
-                <span className="muted">UUID</span>
-                <span>${profileUser.hytalePlayerUuid || "N/A"}</span>
-              </div>
               <div
                 className=${`comment-rank ${
                   profileUser.staff ? `staff ${resolveStaffRoleClass(profileUser)}`.trim() : ""
@@ -5288,6 +5325,25 @@ function ForumPage({ isAdmin = false }) {
     openForumProfileCard(entry);
   }
 
+  async function copyForumProfileMetaValue(label, value) {
+    const raw = String(value || "").trim();
+    if (!raw || raw.toLowerCase() === "n/a") return;
+    try {
+      await navigator.clipboard.writeText(raw);
+      emitAppToast({
+        kind: "success",
+        title: "Copied",
+        message: `${label} copied to clipboard.`,
+      });
+    } catch {
+      emitAppToast({
+        kind: "warning",
+        title: "Copy failed",
+        message: `Couldn't copy ${label}.`,
+      });
+    }
+  }
+
   function isForumPostForcedEdit(post) {
     return Boolean(post?.staffForcedEdit);
   }
@@ -5909,6 +5965,24 @@ function ForumPage({ isAdmin = false }) {
   function renderForumProfileCard() {
     if (!forumProfileUser) return html``;
     return html`<div className="profile-card">
+      <div className="profile-card-link-meta">
+        <span className="muted">Hytale Username:</span>
+        <span
+          title="Click to copy Hytale Username"
+          onClick=${() => copyForumProfileMetaValue("Hytale Username", forumProfileUser.hytalePlayerName || "")}
+        >
+          ${forumProfileUser.hytalePlayerName || "N/A"}
+        </span>
+      </div>
+      <div className="profile-card-link-meta">
+        <span className="muted">UUID:</span>
+        <span
+          title="Click to copy UUID"
+          onClick=${() => copyForumProfileMetaValue("UUID", forumProfileUser.hytalePlayerUuid || "")}
+        >
+          ${forumProfileUser.hytalePlayerUuid || "N/A"}
+        </span>
+      </div>
       <img
         className=${`profile-card-avatar avatar-rank-${rankSlug(
           forumProfileUser.rankLabel || "Unregistered",
@@ -5930,14 +6004,6 @@ function ForumPage({ isAdmin = false }) {
       ${forumProfileUser.username
         ? html`<div className="profile-card-username">@${forumProfileUser.username}</div>`
         : html``}
-      <div className="profile-card-link-meta">
-        <span className="muted">Hytale</span>
-        <span>${forumProfileUser.hytalePlayerName || "N/A"}</span>
-      </div>
-      <div className="profile-card-link-meta">
-        <span className="muted">UUID</span>
-        <span>${forumProfileUser.hytalePlayerUuid || "N/A"}</span>
-      </div>
       <div
         className=${`comment-rank ${forumProfileUser.staff ? `staff ${resolveStaffRoleClass(forumProfileUser)}`.trim() : ""} profile-card-rank ${
           forumProfileUser.staff && forumProfileUser.showStaffGradient === false
@@ -9067,6 +9133,27 @@ function Layout() {
     });
   }
 
+  async function copyNotificationProfileMetaValue(label, value) {
+    const raw = String(value || "").trim();
+    if (!raw || raw.toLowerCase() === "n/a") return;
+    try {
+      await navigator.clipboard.writeText(raw);
+      pushToast({
+        kind: "success",
+        title: "Copied",
+        message: `${label} copied to clipboard.`,
+        duration: 2600,
+      });
+    } catch {
+      pushToast({
+        kind: "warning",
+        title: "Copy failed",
+        message: `Couldn't copy ${label}.`,
+        duration: 3200,
+      });
+    }
+  }
+
   useEffect(() => {
     function onToast(event) {
       const detail = event?.detail || {};
@@ -9819,9 +9906,18 @@ function Layout() {
               name=${notificationProfileUser.name}
               username=${notificationProfileUser.username}
               metaRows=${[
-                { label: "Hytale", value: notificationProfileUser.hytalePlayerName || "N/A" },
-                { label: "UUID", value: notificationProfileUser.hytalePlayerUuid || "N/A" },
+                {
+                  label: "Hytale Username:",
+                  value: notificationProfileUser.hytalePlayerName || "N/A",
+                  copyValue: notificationProfileUser.hytalePlayerName || "",
+                },
+                {
+                  label: "UUID:",
+                  value: notificationProfileUser.hytalePlayerUuid || "N/A",
+                  copyValue: notificationProfileUser.hytalePlayerUuid || "",
+                },
               ]}
+              onMetaRowClick=${copyNotificationProfileMetaValue}
               rankNode=${html`<div
                 className=${`comment-rank ${
                   notificationProfileUser.staff
