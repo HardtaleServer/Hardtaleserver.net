@@ -9032,12 +9032,13 @@ function LinkPage({ onClose = null }) {
 
   useEffect(() => {
     if (!isAuthLoaded) return;
+    if (linkedInfo.linked) return;
     if (!urlCode || !LINK_CODE_REGEX.test(urlCode)) return;
     if (autoSubmittedCodeRef.current === urlCode) return;
     if (isSubmitting || isCooldownActive) return;
     autoSubmittedCodeRef.current = urlCode;
     onVerifyClick();
-  }, [urlCode, isAuthLoaded, isSubmitting, isCooldownActive]);
+  }, [urlCode, isAuthLoaded, isSubmitting, isCooldownActive, linkedInfo.linked]);
 
   useEffect(() => {
     let cancelled = false;
@@ -9255,6 +9256,12 @@ function LinkPage({ onClose = null }) {
       setStatusMessage("Sign in first to link your game account.");
       notifyLinkResult("error", "Link failed", "Sign in first to link your game account.");
       if (openSignIn) openSignIn({});
+      return;
+    }
+    if (linkedInfo.linked) {
+      const message = "Your game account is already linked.";
+      setStatusType("success");
+      setStatusMessage(message);
       return;
     }
     if (!isComplete || isSubmitting || isCooldownActive) return;
