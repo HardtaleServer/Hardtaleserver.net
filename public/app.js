@@ -26,6 +26,7 @@ import ProfileOptionsActions from "./components/ProfileOptionsActions.js";
 import PopUp from "./components/PopUp.js";
 import ToastSystem, { APP_TOAST_EVENT, createToastPayload, emitAppToast } from "./components/ToastSystem.js";
 import SeoManager from "./components/SeoManager.js";
+import SkillLeaderboardCard from "./components/SkillLeaderboardCard.js";
 import { markdownExcerpt } from "./components/forumMarkdown.js";
 import { getRankDisplayLabel, getRankIconType } from "./components/rankConfig.js";
 import {
@@ -81,13 +82,16 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.52";
+const VERSION = "1.3.53";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
 const FEATURED_BADGE_ICON_SVG = "/Images/SVGs/ui/Featured.svg";
 const DELETE_ICON_SVG = "/Images/SVGs/ui/Delete.svg";
 const NOTIFICATIONS_ICON_SVG = "/Images/SVGs/ui/Notifications.svg";
+const WARNING_STATUS_ICON_SVG = "/Images/SVGs/toasts/Warning.svg";
+const ACHIEVEMENT_STAR_ICON_SVG = "/Images/SVGs/ui/Achievement_Star.svg";
+const LEADERBOARD_ICON_SVG = "/Images/SVGs/ui/Leaderboard_SVG.svg";
 const LINKED_STATUS_ICON_SVG = "/Images/SVGs/link/LINKED.svg";
 const UNLINKED_STATUS_ICON_SVG = "/Images/SVGs/link/UNLINKED.svg";
 const DEFAULT_PROFILE_AVATAR_SVG = "/Images/SVGs/ui/DEFAULT_PROFILE_AVATAR.svg";
@@ -169,6 +173,16 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.53",
+    date: "2026-02-17",
+    items: [
+      "Removed the icon from the main profile-card STAFF badge for a cleaner text-first STAFF chip.",
+      "Updated linked-status badges: staff now resolves as Linked in profile badge stacks, Linked now uses a verified tick, and Unlinked now uses warning styling/icon.",
+      "Hooked achievement unlock toasts to the new achievement SVG icon.",
+      "Replaced Home leaderstats placeholder copy with a fake leaderboard preview card powered by enabled/disabled skill toggle configuration.",
+    ],
+  },
   {
     version: "1.3.52",
     date: "2026-02-17",
@@ -7448,9 +7462,20 @@ function renderStaffBadge(entry) {
     entry.showStaffGradient === false ? "staff-static" : ""
   }`.trim();
   return html`<div className=${badgeClass}>
-    <img className="staff-badge-icon" src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" />
     <span>STAFF</span>
   </div>`;
+}
+
+function renderLinkedStatusIcon(linked = false) {
+  if (linked) {
+    return html`<span className="link-state-icon link-state-icon-verified" aria-hidden="true">✓</span>`;
+  }
+  return html`<img
+    className="link-state-icon link-state-icon-warning"
+    src=${WARNING_STATUS_ICON_SVG}
+    alt=""
+    aria-hidden="true"
+  />`;
 }
 
 function renderOwnedRankBadges(entry) {
@@ -7460,8 +7485,8 @@ function renderOwnedRankBadges(entry) {
     showAllOwnedRankBadges: entry?.showAllOwnedRankBadges !== false,
     selectedOwnedBadge: entry?.selectedOwnedBadge || "",
   });
-  const linkedBadgeLabel = entry.linkedAccount ? "Linked" : "Unlinked";
-  const linkedBadgeIcon = entry.linkedAccount ? "🔗" : "🔓";
+  const linkedResolved = Boolean(entry.linkedAccount || isStaffUser);
+  const linkedBadgeLabel = linkedResolved ? "Linked" : "Unlinked";
   const showStaffBadgeChip = isStaffUser && entry.showStaffBadge !== false;
   const showStaffBadgeIcon = entry.showStaffBadgeIcon !== false;
   const roleClass = resolveStaffRoleClass(entry);
@@ -7480,7 +7505,7 @@ function renderOwnedRankBadges(entry) {
                 </span>`
               : html``}
             <span className=${`profile-owned-badge rank-${linkedBadgeLabel.toLowerCase()}`.trim()}>
-              <span aria-hidden="true">${linkedBadgeIcon}</span>
+              ${renderLinkedStatusIcon(linkedResolved)}
               <span>${linkedBadgeLabel}</span>
             </span>
             ${badges.map((label) => {
@@ -7768,10 +7793,7 @@ function HomePage({
           <button className="button ghost-btn" type="button" onClick=${() => navigate("/forum")}>
             View forum
           </button>
-          <div className="home-leaderstats-note">
-            <div className="muted"><strong>Leaderstats</strong> (MMO Trees) integration coming soon.</div>
-            <div className="muted">Top player and progression highlights will appear here.</div>
-          </div>
+          <${SkillLeaderboardCard} iconSrc=${LEADERBOARD_ICON_SVG} />
         </div>
       </section>
     </section>
@@ -9226,6 +9248,7 @@ function Layout() {
         kind: "success",
         title: String(item?.title || "Achievement unlocked"),
         message: String(item?.message || "").trim(),
+        icon: ACHIEVEMENT_STAR_ICON_SVG,
         duration: 7000,
       });
     });

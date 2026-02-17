@@ -1983,6 +1983,81 @@ body[data-theme="light"] .button.primary {
   gap: 6px;
 }
 
+.home-leaderboard-preview {
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--stroke);
+  display: grid;
+  gap: 8px;
+}
+
+.home-leaderboard-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.home-leaderboard-icon {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.home-leaderboard-title {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.home-leaderboard-subtitle {
+  font-size: 12px;
+}
+
+.home-leaderboard-list {
+  display: grid;
+  gap: 6px;
+}
+
+.home-leaderboard-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-areas:
+    "rank name xp"
+    "rank meta xp";
+  gap: 2px 8px;
+  align-items: center;
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  padding: 7px 9px;
+  background: color-mix(in srgb, var(--bg-soft) 86%, var(--accent) 14%);
+}
+
+.home-leaderboard-rank {
+  grid-area: rank;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.home-leaderboard-name {
+  grid-area: name;
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.home-leaderboard-meta {
+  grid-area: meta;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.home-leaderboard-xp {
+  grid-area: xp;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-3);
+  text-align: right;
+}
+
 .news-card {
   border: 1px solid var(--stroke);
   border-radius: 16px;
@@ -3701,14 +3776,16 @@ emoji-picker.reaction-picker-panel {
 
 .profile-owned-badge.rank-registered,
 .profile-owned-badge.rank-linked {
-  color: var(--rank-registered);
-  border-color: color-mix(in srgb, var(--rank-registered) 42%, var(--stroke));
-  background: color-mix(in srgb, var(--rank-registered) 10%, var(--bg-soft));
+  color: var(--accent-3);
+  border-color: color-mix(in srgb, var(--accent-3) 44%, var(--stroke));
+  background: color-mix(in srgb, var(--accent-3) 11%, var(--bg-soft));
 }
 
 .profile-owned-badge.rank-unregistered,
 .profile-owned-badge.rank-unlinked {
-  color: var(--muted);
+  color: var(--accent-2);
+  border-color: color-mix(in srgb, var(--accent-2) 46%, var(--stroke));
+  background: color-mix(in srgb, var(--accent-2) 10%, var(--bg-soft));
 }
 
 .profile-owned-badge.staff-owned-badge {
@@ -3734,6 +3811,26 @@ emoji-picker.reaction-picker-panel {
 .profile-owned-badge .rank-icon {
   width: 12px;
   height: 12px;
+}
+
+.link-state-icon {
+  width: 12px;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 12px;
+}
+
+.link-state-icon-verified {
+  color: var(--accent-3);
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 800;
+}
+
+.link-state-icon-warning {
+  object-fit: contain;
 }
 
 .profile-card-badges-empty {
