@@ -166,6 +166,14 @@ const VOTE_SITES = [
 ];
 const CHANGELOG_ENTRIES = [
   {
+    version: "1.3.43",
+    date: "2026-02-17",
+    items: [
+      "Enabled the custom Hardtale loading overlay while profile cards and profile previews load from API data.",
+      "Extended loader usage to forum post fetch states so longer loads use the same branded loading experience.",
+    ],
+  },
+  {
     version: "1.3.42",
     date: "2026-02-17",
     items: [
@@ -1703,6 +1711,7 @@ function CommentThread({
   const [profileDonorGradientSaving, setProfileDonorGradientSaving] = useState(false);
   const [profileOwnedBadgesSaving, setProfileOwnedBadgesSaving] = useState(false);
   const [profileAvatarVfxSaving, setProfileAvatarVfxSaving] = useState(false);
+  const [profileCardLoading, setProfileCardLoading] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState([]);
   const [replyTargets, setReplyTargets] = useState({});
@@ -2624,6 +2633,8 @@ function CommentThread({
 
   async function openProfileCard(entry) {
     if (!entry) return;
+    setProfileCardLoading(true);
+    try {
     const authorUserId = String(entry?.userId || entry?.authorUserId || entry?.createdBy || "");
     const rank = resolveRank(entry);
     const isOwn = Boolean(userId && entry.userId && entry.userId === userId);
@@ -2734,6 +2745,9 @@ function CommentThread({
       groups,
     });
     setProfileOpen(true);
+    } finally {
+      setProfileCardLoading(false);
+    }
   }
 
   function openCommentProfileEntry(entry) {
@@ -3405,6 +3419,7 @@ function CommentThread({
               )}
             </div>`}
       <//>
+      <${LoadingScreen} show=${profileCardLoading} />
     </div>
   `;
 }
@@ -5085,6 +5100,7 @@ function ForumPage({ isAdmin = false }) {
   const [forumProfileDonorGradientSaving, setForumProfileDonorGradientSaving] = useState(false);
   const [forumProfileOwnedBadgesSaving, setForumProfileOwnedBadgesSaving] = useState(false);
   const [forumProfileAvatarVfxSaving, setForumProfileAvatarVfxSaving] = useState(false);
+  const [forumProfileCardLoading, setForumProfileCardLoading] = useState(false);
   const [editingPostId, setEditingPostId] = useState("");
   const [editingPostTitle, setEditingPostTitle] = useState("");
   const [editingPostBody, setEditingPostBody] = useState("");
@@ -5325,6 +5341,8 @@ function ForumPage({ isAdmin = false }) {
 
   async function openForumProfileCard(entry) {
     if (!entry) return;
+    setForumProfileCardLoading(true);
+    try {
     const rankLabel = String(entry.authorRank || "Unregistered");
     const authorName = String(entry.authorName || "User");
     const authorUsername = String(entry.authorUsername || "");
@@ -5434,6 +5452,9 @@ function ForumPage({ isAdmin = false }) {
       groups,
     });
     setForumProfileOpen(true);
+    } finally {
+      setForumProfileCardLoading(false);
+    }
   }
 
   async function updateOwnForumDisplayTitle(nextTitle) {
@@ -6383,6 +6404,9 @@ function ForumPage({ isAdmin = false }) {
           >
             ${renderForumHistoryContent()}
           <//>
+          <${LoadingScreen}
+            show=${forumProfileCardLoading || postsLoading || selectedPostLoading}
+          />
         </section>
       `;
     }
@@ -6718,6 +6742,9 @@ function ForumPage({ isAdmin = false }) {
             </div>
           </article>
         <//>
+        <${LoadingScreen}
+          show=${forumProfileCardLoading || postsLoading || selectedPostLoading}
+        />
       </section>
     `;
   }
@@ -8272,6 +8299,7 @@ function Layout() {
   const [notificationProfileOpen, setNotificationProfileOpen] = useState(false);
   const [notificationProfileUser, setNotificationProfileUser] = useState(null);
   const [notificationProfileInfoTab, setNotificationProfileInfoTab] = useState("badges");
+  const [notificationProfileLoading, setNotificationProfileLoading] = useState(false);
   const [drawerProfileSummary, setDrawerProfileSummary] = useState({
     rankLabel: "Unregistered",
     ownedRank: "Unregistered",
@@ -9236,6 +9264,8 @@ function Layout() {
 
   async function openNotificationProfile(item) {
     if (!item) return;
+    setNotificationProfileLoading(true);
+    try {
     const name = String(item.authorName || item.author || "User");
     const username = formatUsernameForDisplay(item.authorUsername);
     const rankLabel = String(item.authorRank || "Unregistered");
@@ -9275,6 +9305,9 @@ function Layout() {
       groups,
     });
     setNotificationProfileOpen(true);
+    } finally {
+      setNotificationProfileLoading(false);
+    }
   }
 
   function openDrawerSelfProfileCard() {
@@ -9389,7 +9422,7 @@ function Layout() {
   const notificationCount = isSignedIn ? unread : sortedNotifications.length;
   const year = new Date().getFullYear();
   const displayName = getUserDisplayName(user);
-  const showLoader = !appHydrated || authTransitionLoading;
+  const showLoader = !appHydrated || authTransitionLoading || notificationProfileLoading;
   const desktopStickyVisible = !isMobile && hideLogo;
   const stickyTransparentActive =
     desktopStickyVisible && desktopStickyStyle === "transparent" && !isMobile;
