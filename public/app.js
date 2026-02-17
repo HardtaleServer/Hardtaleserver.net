@@ -89,7 +89,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.91";
+const VERSION = "1.3.92";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -190,6 +190,13 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.92",
+    date: "2026-02-17",
+    items: [
+      "Restored empty-cart visibility behavior so the cart button hides when checkout cart count is zero.",
+    ],
+  },
   {
     version: "1.3.91",
     date: "2026-02-17",
@@ -4891,6 +4898,7 @@ function SettingsMenu({
 }
 
 function CartButton({ onClick, count }) {
+  if (Number(count || 0) <= 0) return null;
   const [cartPopActive, setCartPopActive] = useState(false);
   const previousCountRef = useRef(Number(count || 0));
 

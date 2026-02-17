@@ -2,6 +2,9 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.92)
+- Restored empty-cart visibility behavior so the cart button hides when cart count is zero.
+
 ## 2026-02-17 (v1.3.91)
 - Imported `PenumbraSerifStd-Bold` via `@font-face` for store in-game donor tag display.
 - Applied the Penumbra font specifically to `[HERO]`, `[LEGEND]`, and `[MYTHIC]` tag text on `/store/ranks` card previews.
