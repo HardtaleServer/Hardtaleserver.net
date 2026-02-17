@@ -8893,6 +8893,7 @@ function LinkPage({ onClose = null }) {
   const location = useLocation();
   const { getToken, isSignedIn, isLoaded: isAuthLoaded } = useAuth();
   const { openSignIn } = useClerk();
+  const LINK_BAD_QUERY_TELEMETRY_UNTIL_MS = Date.parse("2026-02-24T23:59:59Z");
   const LINK_CODE_LENGTH = 8;
   const LINK_CODE_REGEX = new RegExp(`^[A-Z0-9]{${LINK_CODE_LENGTH}}$`);
   const EMPTY_CODE_ARRAY = useMemo(
@@ -8901,70 +8902,39 @@ function LinkPage({ onClose = null }) {
   );
   const inputRefs = useRef([]);
   const autoSubmittedCodeRef = useRef("");
+  const badQueryTelemetryRef = useRef("");
 
   function normalizeCode(value) {
     return String(value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   }
 
-  function extractCodeFromPathname(pathname) {
-    const rawPath = String(pathname || "").trim();
-    if (!rawPath) return "";
-    const parts = rawPath.split("/").filter(Boolean);
-    if (parts.length < 2) return "";
-    if (String(parts[0] || "").toLowerCase() !== "link") return "";
-    const normalized = normalizeCode(parts[1] || "");
-    if (normalized.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(normalized)) {
-      return normalized;
-    }
-    return "";
-  }
-
-  function extractCodeFromSearch(search) {
+  function parseStrictLinkQuery(search) {
     const rawSearch = String(search || "").replace(/^\?/, "");
-    if (!rawSearch) return "";
-
-    let decoded = rawSearch;
-    try {
-      decoded = decodeURIComponent(rawSearch);
-    } catch {}
-
+    const hasAnyQuery = rawSearch.length > 0;
     const params = new URLSearchParams(rawSearch);
-    const prioritizedKeys = ["code", "link", "token", "redeem", "c"];
-    for (const key of prioritizedKeys) {
-      const values = params.getAll(key);
-      for (const value of values) {
-        const normalized = normalizeCode(value);
-        if (normalized.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(normalized)) {
-          return normalized;
-        }
-      }
-    }
-
-    if (!rawSearch.includes("=") && !rawSearch.includes("&")) {
-      const normalized = normalizeCode(rawSearch);
-      if (normalized.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(normalized)) {
-        return normalized;
-      }
-    }
-
-    for (const value of params.values()) {
-      const normalized = normalizeCode(value);
-      if (normalized.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(normalized)) {
-        return normalized;
-      }
-    }
-
-    return "";
+    const codeValues = params.getAll("code");
+    const normalizedCode = normalizeCode(codeValues[0] || "");
+    const unexpectedKeys = Array.from(new Set(Array.from(params.keys()).filter((key) => key !== "code"))).slice(0, 12);
+    const hasMultipleCode = codeValues.length > 1;
+    const hasUnexpectedKeys = unexpectedKeys.length > 0;
+    const hasCode = codeValues.length > 0;
+    const isValidCode = hasCode && !hasMultipleCode && !hasUnexpectedKeys && LINK_CODE_REGEX.test(normalizedCode);
+    const queryIssue = hasAnyQuery && !isValidCode;
+    return {
+      hasAnyQuery,
+      hasCode,
+      code: isValidCode ? normalizedCode : "",
+      queryIssue,
+      unexpectedKeys,
+      hasMultipleCode,
+      rawSearch: rawSearch.slice(0, 400),
+    };
   }
 
-  function extractCodeFromLocation(pathname, search) {
-    const fromSearch = extractCodeFromSearch(search);
-    if (fromSearch) return fromSearch;
-    return extractCodeFromPathname(pathname);
-  }
+  const strictQuery = useMemo(() => parseStrictLinkQuery(location.search), [location.search]);
 
   const [digits, setDigits] = useState(() => {
-    const initialCode = extractCodeFromLocation(location.pathname, location.search);
+    const initialCode = strictQuery.code;
     return initialCode ? initialCode.split("") : [...EMPTY_CODE_ARRAY];
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -8981,14 +8951,50 @@ function LinkPage({ onClose = null }) {
   });
   const fullCode = digits.join("");
   const isComplete = fullCode.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(fullCode);
-  const urlCode = extractCodeFromLocation(location.pathname, location.search);
+  const urlCode = strictQuery.code;
   const isCooldownActive = cooldownLeft > 0;
 
   useEffect(() => {
-    const parsedCode = extractCodeFromLocation(location.pathname, location.search);
+    const parsedCode = strictQuery.code;
     if (!parsedCode) return;
     setDigits(parsedCode.split(""));
-  }, [location.pathname, location.search, LINK_CODE_LENGTH]);
+  }, [strictQuery.code, LINK_CODE_LENGTH]);
+
+  useEffect(() => {
+    if (!strictQuery.queryIssue) return;
+    const signature = JSON.stringify({
+      rawSearch: strictQuery.rawSearch,
+      unexpectedKeys: strictQuery.unexpectedKeys,
+      hasMultipleCode: strictQuery.hasMultipleCode,
+    });
+    if (badQueryTelemetryRef.current === signature) return;
+    badQueryTelemetryRef.current = signature;
+    console.warn("[link.strict-mode] Unexpected /link query format", {
+      search: strictQuery.rawSearch,
+      unexpectedKeys: strictQuery.unexpectedKeys,
+      hasMultipleCode: strictQuery.hasMultipleCode,
+    });
+    if (Date.now() > LINK_BAD_QUERY_TELEMETRY_UNTIL_MS) return;
+    fetch("/api/telemetry/link-bad-query", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      keepalive: true,
+      body: JSON.stringify({
+        path: location.pathname,
+        search: strictQuery.rawSearch,
+        unexpectedKeys: strictQuery.unexpectedKeys,
+        hasMultipleCode: strictQuery.hasMultipleCode,
+        source: "link_page_strict_mode",
+      }),
+    }).catch(() => {});
+  }, [
+    LINK_BAD_QUERY_TELEMETRY_UNTIL_MS,
+    location.pathname,
+    strictQuery.hasMultipleCode,
+    strictQuery.queryIssue,
+    strictQuery.rawSearch,
+    strictQuery.unexpectedKeys,
+  ]);
 
   useEffect(() => {
     if (!cooldownUntil) {
@@ -9212,6 +9218,11 @@ function LinkPage({ onClose = null }) {
         <p className="link-copy">
           Enter your 8-character link code. This page is prepared for the upcoming HardtaleNetwork plugin auth flow.
         </p>
+        ${strictQuery.queryIssue
+          ? html`<div className="link-status link-status-error">
+              This link code is invalid or expired. Run /link in-game to generate a new one.
+            </div>`
+          : html``}
         <div className="link-code-grid" onPaste=${onPaste}>
           ${digits.map(
             (digit, index) => html`<input

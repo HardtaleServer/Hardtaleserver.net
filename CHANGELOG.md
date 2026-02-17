@@ -2,6 +2,28 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.98)
+- Enforced strict `/link` query parsing on frontend: only `/link?code=ABCDEFGH` is treated as valid deep-link input.
+- Removed legacy link-query acceptance in the `/link` parser (`link`, `token`, `redeem`, bare query values, and path-segment code extraction are no longer accepted).
+- Added telemetry-only bad-query safety net for `/link`: unexpected query keys are logged to console and sent non-blocking to `POST /api/telemetry/link-bad-query`.
+- Added backend telemetry endpoint `POST /api/telemetry/link-bad-query` to capture malformed link query patterns without allowing legacy redemption.
+
+## 2026-02-17 (v1.3.97)
+- Switched `/link` to hosted link-code first mode by default: `/api/link/redeem` now returns `INVALID_CODE` when code is unknown instead of attempting downstream plugin redeem unless explicitly enabled.
+- Added `LINK_REDEEM_DOWNSTREAM_FALLBACK_ENABLED` feature flag (default `false`) to keep old downstream redeem path opt-in only.
+- Expanded plugin API auth to accept any configured shared token from `HARDTALE_API_TOKEN`, `FULFILLMENT_API_TOKEN`, or `LINK_SERVICE_AUTH_TOKEN`.
+- Kept existing plugin outbound endpoints active (`/api/link/create`, `/api/link/status?playerUuid=...`, `/api/fulfillment/pending`, `/api/fulfillment/ack`) for Render-only architecture.
+
+## 2026-02-17 (v1.3.96)
+- Added plugin-auth `/api/link/create` to issue 8-character link codes for player UUIDs with Mongo-backed expiry.
+- Extended `/api/link/status` to support plugin UUID checks (`?playerUuid=...`) with shared-token auth while preserving existing signed-in web-user status behavior.
+- Added Mongo `link_codes` collection/indexes (`code` unique, `expiresAt` TTL) for outbound plugin linking.
+- Updated `/api/link/redeem` to consume locally-issued hosted link codes first, then fallback to existing JWT/plugin-redeem flow for backward compatibility.
+- Upgraded plugin auth header support to accept both `Authorization: Bearer ...` and `X-Service-Auth`.
+- Updated fulfillment endpoints for plugin action-style polling:
+  - `/api/fulfillment/pending` now returns `actions[]` (plus legacy `purchases[]`).
+  - `/api/fulfillment/ack` now accepts `id` + `status` (`APPLIED`/`FAILED`) with idempotent final-state handling.
+
 ## 2026-02-17 (v1.3.95)
 - Fixed `/store/ranks` card image overlap by constraining rank artwork height and adding a small spacing buffer above profile preview cards.
 

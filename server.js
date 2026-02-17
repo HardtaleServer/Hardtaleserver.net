@@ -139,6 +139,12 @@ const ACHIEVEMENT_DEFS = [
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI || "";
 const MONGO_DB_NAME = process.env.MONGO_DB || process.env.MONGODB_DB || "hardtaledb";
 const FULFILLMENT_API_TOKEN = String(process.env.FULFILLMENT_API_TOKEN || "").trim();
+const HARDTALE_API_TOKEN = String(process.env.HARDTALE_API_TOKEN || "").trim();
+const PLUGIN_API_TOKENS = Array.from(
+  new Set(
+    [HARDTALE_API_TOKEN, FULFILLMENT_API_TOKEN, String(process.env.LINK_SERVICE_AUTH_TOKEN || "").trim()].filter(Boolean),
+  ),
+);
 const LINK_SERVICE_BASE_URL = LOCAL_DEV_MODE
   ? LOCAL_DEV_LINK_SERVICE_BASE_URL
   : String(process.env.LINK_SERVICE_BASE_URL || "").trim();
@@ -167,6 +173,11 @@ const LINK_SERVICE_TIMEOUT_MS = Math.max(
   2000,
   Math.min(Number(process.env.LINK_SERVICE_TIMEOUT_MS || 8000), 20000),
 );
+const LINK_REDEEM_DOWNSTREAM_FALLBACK_ENABLED = String(
+  process.env.LINK_REDEEM_DOWNSTREAM_FALLBACK_ENABLED || "false",
+).toLowerCase() === "true";
+const LINK_CODE_TTL_SEC = Math.max(60, Math.min(Number(process.env.LINK_CODE_TTL_SEC || 300), 3600));
+const LINK_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const SMURFIS_TEST_LINK_UUID = "826ac345-e6fe-4ec7-a5fd-0b170b9d6439";
 const SMURFIS_TEST_LINK_USERNAMES = new Set(["smurfis"]);
 const SMURFIS_TEST_LINK_EMAILS = new Set([
@@ -223,6 +234,7 @@ let supportTicketsCollection = null;
 let forumPostsCollection = null;
 let linkedAccountsCollection = null;
 let userAchievementsCollection = null;
+let linkCodesCollection = null;
 let mongoConnectInFlight = null;
 let mongoReconnectTimer = null;
 let mongoReconnectDelayMs = 1000;
@@ -248,6 +260,7 @@ function resetMongoState() {
   forumPostsCollection = null;
   linkedAccountsCollection = null;
   userAchievementsCollection = null;
+  linkCodesCollection = null;
   mongoConnectInFlight = null;
 }
 
@@ -283,7 +296,8 @@ async function connectMongo() {
     supportTicketsCollection &&
     forumPostsCollection &&
     linkedAccountsCollection &&
-    userAchievementsCollection
+    userAchievementsCollection &&
+    linkCodesCollection
   ) {
     return;
   }
@@ -318,6 +332,7 @@ async function connectMongo() {
       forumPostsCollection = mongoDb.collection("forum_posts");
       linkedAccountsCollection = mongoDb.collection("linked_accounts");
       userAchievementsCollection = mongoDb.collection("user_achievements");
+      linkCodesCollection = mongoDb.collection("link_codes");
       await commentsCollection.createIndex({ newsId: 1, createdAt: 1 });
       await commentsCollection.createIndex({ userId: 1 });
       await commentRevisionsCollection.createIndex({ commentId: 1, createdAt: 1 });
@@ -335,6 +350,7 @@ async function connectMongo() {
       await purchasesCollection.createIndex({ userId: 1, createdAt: -1 });
       await purchasesCollection.createIndex({ purchaseId: 1 }, { unique: true, sparse: true });
       await purchasesCollection.createIndex({ fulfilled: 1, status: 1, createdAt: 1 });
+      await purchasesCollection.createIndex({ status: 1, fulfillmentState: 1, fulfilled: 1, createdAt: 1 });
       await purchasesCollection.createIndex({ uuid: 1, fulfilled: 1, status: 1, createdAt: 1 });
       await supportTicketsCollection.createIndex({ id: 1 }, { unique: true });
       await supportTicketsCollection.createIndex({ createdBy: 1, createdAt: -1 });
@@ -347,6 +363,9 @@ async function connectMongo() {
       await linkedAccountsCollection.createIndex({ updatedAt: -1 });
       await userAchievementsCollection.createIndex({ userId: 1, key: 1 }, { unique: true });
       await userAchievementsCollection.createIndex({ userId: 1, unlockedAt: -1 });
+      await linkCodesCollection.createIndex({ code: 1 }, { unique: true });
+      await linkCodesCollection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+      await linkCodesCollection.createIndex({ playerUuid: 1, createdAt: -1 });
       mongoReconnectDelayMs = 1000;
       console.log("Connected to MongoDB");
     } catch (error) {
@@ -475,7 +494,8 @@ async function requireMongoReady(res) {
     !forumPostsCollection ||
     !forumPostRevisionsCollection ||
     !linkedAccountsCollection ||
-    !userAchievementsCollection
+    !userAchievementsCollection ||
+    !linkCodesCollection
   ) {
     try {
       await connectMongo();
@@ -497,7 +517,8 @@ async function requireMongoReady(res) {
     !forumPostsCollection ||
     !forumPostRevisionsCollection ||
     !linkedAccountsCollection ||
-    !userAchievementsCollection
+    !userAchievementsCollection ||
+    !linkCodesCollection
   ) {
     res.status(503).json({
       error: "Database not connected",
@@ -637,14 +658,16 @@ function requireCommentAuth(req, res) {
 }
 
 function requireFulfillmentAuth(req, res) {
-  if (!FULFILLMENT_API_TOKEN) {
-    res.status(503).json({ error: "Fulfillment API token is not configured" });
+  if (PLUGIN_API_TOKENS.length === 0) {
+    res.status(503).json({ error: "Plugin API token is not configured" });
     return false;
   }
   const authHeader = String(req.headers?.authorization || "");
   const prefix = "Bearer ";
-  const token = authHeader.startsWith(prefix) ? authHeader.slice(prefix.length).trim() : "";
-  if (!token || token !== FULFILLMENT_API_TOKEN) {
+  const bearerToken = authHeader.startsWith(prefix) ? authHeader.slice(prefix.length).trim() : "";
+  const serviceToken = normalizeText(req.headers?.["x-service-auth"], 4096);
+  const token = bearerToken || serviceToken;
+  if (!token || !PLUGIN_API_TOKENS.includes(token)) {
     res.status(401).json({ error: "Unauthorized" });
     return false;
   }
@@ -818,6 +841,121 @@ function maskPlayerUuid(value) {
   return `${uuid.slice(0, 8)}-****-****-****-${uuid.slice(-12)}`;
 }
 
+function generateLinkCode() {
+  let code = "";
+  for (let i = 0; i < 8; i += 1) {
+    const index = Math.floor(Math.random() * LINK_CODE_ALPHABET.length);
+    code += LINK_CODE_ALPHABET[index];
+  }
+  return code;
+}
+
+async function createHostedLinkCode({ playerUuid, playerName }) {
+  if (!linkCodesCollection) {
+    return { ok: false, status: 503, code: "SERVER_UNAVAILABLE", error: "Link code storage is unavailable" };
+  }
+  const uuid = normalizePlayerUuid(playerUuid);
+  if (!uuid) {
+    return { ok: false, status: 400, code: "INVALID_UUID", error: "playerUuid is invalid" };
+  }
+  const safeName = normalizeText(playerName || "", 60);
+  const now = new Date();
+  const existing = await linkCodesCollection.findOne({
+    playerUuid: uuid,
+    usedAt: { $exists: false },
+    expiresAt: { $gt: now },
+  });
+  if (existing?.code) {
+    return {
+      ok: true,
+      reused: true,
+      code: normalizeLinkCode(existing.code),
+      expiresAt: existing.expiresAt instanceof Date ? existing.expiresAt.toISOString() : "",
+    };
+  }
+
+  const expiresAt = new Date(Date.now() + LINK_CODE_TTL_SEC * 1000);
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const code = generateLinkCode();
+    try {
+      await linkCodesCollection.insertOne({
+        code,
+        playerUuid: uuid,
+        playerName: safeName,
+        createdAt: now,
+        updatedAt: now,
+        expiresAt,
+      });
+      return { ok: true, reused: false, code, expiresAt: expiresAt.toISOString() };
+    } catch (error) {
+      if (error?.code === 11000) continue;
+      throw error;
+    }
+  }
+  return { ok: false, status: 503, code: "SERVER_UNAVAILABLE", error: "Failed to allocate unique link code" };
+}
+
+async function consumeHostedLinkCode({ code, webUserId }) {
+  if (!linkCodesCollection) {
+    return { ok: false, status: 503, code: "SERVER_UNAVAILABLE", error: "Link code storage is unavailable" };
+  }
+  const normalizedCode = normalizeLinkCode(code);
+  if (normalizedCode.length !== 8) {
+    return { ok: false, status: 400, code: "INVALID_CODE", error: "Link code must be 8 letters/numbers" };
+  }
+  const now = new Date();
+  const found = await linkCodesCollection.findOne({ code: normalizedCode });
+  if (!found) {
+    return { ok: false, status: 404, code: "NOT_FOUND", error: "Link code not found" };
+  }
+  if (found.expiresAt instanceof Date && found.expiresAt.getTime() <= now.getTime()) {
+    return { ok: false, status: 400, code: "EXPIRED_CODE", error: "Link code expired" };
+  }
+  if (found.usedAt) {
+    return { ok: false, status: 409, code: "ALREADY_USED", error: "Link code was already used" };
+  }
+  const linkedUuid = normalizePlayerUuid(found.playerUuid);
+  if (!linkedUuid) {
+    return { ok: false, status: 502, code: "DOWNSTREAM_FAILURE", error: "Link code record missing player UUID" };
+  }
+
+  const existingByPlayer = await linkedAccountsCollection.findOne({ playerUuid: linkedUuid });
+  if (existingByPlayer && existingByPlayer.webUserId !== webUserId) {
+    return { ok: false, status: 409, code: "ALREADY_LINKED", error: "That game account is already linked" };
+  }
+
+  const claimed = await linkCodesCollection.findOneAndUpdate(
+    {
+      code: normalizedCode,
+      usedAt: { $exists: false },
+      expiresAt: { $gt: now },
+    },
+    {
+      $set: {
+        usedAt: now,
+        usedByUserId: webUserId,
+        updatedAt: now,
+      },
+    },
+    { returnDocument: "after" },
+  );
+  if (!claimed) {
+    const latest = await linkCodesCollection.findOne({ code: normalizedCode });
+    if (latest?.usedAt) {
+      return { ok: false, status: 409, code: "ALREADY_USED", error: "Link code was already used" };
+    }
+    if (latest?.expiresAt instanceof Date && latest.expiresAt.getTime() <= now.getTime()) {
+      return { ok: false, status: 400, code: "EXPIRED_CODE", error: "Link code expired" };
+    }
+    return { ok: false, status: 404, code: "NOT_FOUND", error: "Link code not found" };
+  }
+  return {
+    ok: true,
+    playerUuid: linkedUuid,
+    playerName: normalizeText(claimed.playerName || found.playerName || "", 60),
+  };
+}
+
 function parseJsonSafely(raw) {
   if (!raw) return null;
   try {
@@ -862,8 +1000,12 @@ async function redeemLinkCodeWithGameServer({ code, webUserId, idempotencyKey })
   const requestBody = JSON.stringify({ code, webUserId });
   let lastNotFound = "";
 
+  console.log("LINK_SERVICE_BASE_URL =", LINK_SERVICE_BASE_URL);
+  console.log("Resolved redeem base URL =", baseUrl);
+
   for (const endpointPath of endpointPaths) {
     const endpoint = `${baseUrl}${endpointPath}`;
+    console.log("Resolved redeem URL =", endpoint);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), LINK_SERVICE_TIMEOUT_MS);
     try {
@@ -4477,12 +4619,9 @@ app.get("/api/fulfillment/pending", async (req, res) => {
     if (!(await requireMongoReady(res))) return;
     if (!requireFulfillmentAuth(req, res)) return;
 
-    const serverId = normalizeText(req.query?.serverId, 80);
-    if (!serverId) {
-      return res.status(400).json({ error: "serverId is required" });
-    }
+    const serverId = normalizeText(req.query?.server || req.query?.serverId, 80) || "default";
     const limitRaw = Number(req.query?.limit);
-    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 500) : 100;
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 500) : 50;
     const uuids = [
       ...normalizeUuidList(req.query?.uuid),
       ...normalizeUuidList(req.query?.uuids),
@@ -4492,6 +4631,7 @@ app.get("/api/fulfillment/pending", async (req, res) => {
     const filter = {
       status: "PAID",
       fulfilled: { $ne: true },
+      fulfillmentState: { $nin: ["APPLIED", "FAILED"] },
     };
     if (uuids.length > 0) {
       filter.uuid = { $in: Array.from(new Set(uuids)) };
@@ -4521,7 +4661,19 @@ app.get("/api/fulfillment/pending", async (req, res) => {
       fulfilled: Boolean(doc.fulfilled),
       createdAt: doc.createdAt || new Date().toISOString(),
     }));
-    return res.json({ purchases });
+    const actions = purchases
+      .filter((purchase) => purchase.purchaseId && purchase.uuid)
+      .map((purchase) => ({
+        id: purchase.purchaseId,
+        playerUuid: purchase.uuid,
+        type: "PURCHASE_GRANT",
+        payload: {
+          purchaseId: purchase.purchaseId,
+          grants: purchase.grants,
+        },
+        createdAt: purchase.createdAt,
+      }));
+    return res.json({ server: serverId, actions, purchases });
   } catch (error) {
     console.error("Failed to load pending fulfillments", error);
     return res.status(500).json({ error: "Failed to load pending fulfillments" });
@@ -4533,26 +4685,32 @@ app.post("/api/fulfillment/ack", async (req, res) => {
     if (!(await requireMongoReady(res))) return;
     if (!requireFulfillmentAuth(req, res)) return;
 
-    const purchaseId = normalizeText(req.body?.purchaseId, 128);
+    const purchaseId = normalizeText(req.body?.purchaseId || req.body?.id, 128);
     if (!purchaseId) {
-      return res.status(400).json({ error: "purchaseId is required" });
+      return res.status(400).json({ error: "id is required" });
     }
     const now = new Date().toISOString();
+    const requestedStatus = normalizeText(req.body?.status, 20).toUpperCase();
+    let finalStatus = requestedStatus === "FAILED" ? "FAILED" : "APPLIED";
+    if (!requestedStatus && req.body?.ok === false) {
+      finalStatus = "FAILED";
+    }
     const resultPayload = req.body?.result && typeof req.body.result === "object"
       ? req.body.result
       : {
-          ok: req.body?.ok !== false,
+          ok: finalStatus === "APPLIED",
           detail: normalizeText(req.body?.detail || "", 300),
-          serverId: normalizeText(req.body?.serverId || "", 80),
+          serverId: normalizeText(req.body?.server || req.body?.serverId || "", 80),
+          error: normalizeText(req.body?.error || "", 500),
         };
     const ackFilter = {
       $or: [{ purchaseId }, { id: purchaseId }],
-      status: "PAID",
-      fulfilled: { $ne: true },
+      fulfillmentState: { $nin: ["APPLIED", "FAILED"] },
     };
     const ackUpdate = {
       $set: {
         fulfilled: true,
+        fulfillmentState: finalStatus,
         fulfilledAt: now,
         fulfillmentResult: resultPayload,
         updatedAt: now,
@@ -4562,19 +4720,23 @@ app.post("/api/fulfillment/ack", async (req, res) => {
     if (updated.modifiedCount > 0) {
       return res.json({
         success: true,
+        id: purchaseId,
         purchaseId,
-        alreadyFulfilled: false,
+        status: finalStatus,
+        alreadyFinal: false,
       });
     }
     const existing = await purchasesCollection.findOne(
       { $or: [{ purchaseId }, { id: purchaseId }] },
-      { projection: { _id: 0, fulfilled: 1 } },
+      { projection: { _id: 0, fulfilled: 1, fulfillmentState: 1 } },
     );
-    if (existing && existing.fulfilled === true) {
+    if (existing && (existing.fulfilled === true || ["APPLIED", "FAILED"].includes(existing.fulfillmentState))) {
       return res.json({
         success: true,
+        id: purchaseId,
         purchaseId,
-        alreadyFulfilled: true,
+        status: normalizeText(existing.fulfillmentState, 20) || "APPLIED",
+        alreadyFinal: true,
       });
     }
     return res.status(404).json({ error: "Purchase not found" });
@@ -4584,9 +4746,66 @@ app.post("/api/fulfillment/ack", async (req, res) => {
   }
 });
 
+app.post("/api/link/create", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    if (!requireFulfillmentAuth(req, res)) return;
+
+    const playerUuid = normalizePlayerUuid(req.body?.playerUuid || req.body?.uuid);
+    if (!playerUuid) {
+      return res.status(400).json({ error: "playerUuid is required" });
+    }
+    const playerName = normalizeText(req.body?.playerName || req.body?.username || "", 60);
+    const linked = await linkedAccountsCollection.findOne(
+      { playerUuid },
+      { projection: { _id: 0, webUserId: 1 } },
+    );
+    if (linked?.webUserId) {
+      return res.status(409).json({
+        code: "ALREADY_LINKED",
+        error: "Player UUID is already linked",
+        accountId: linked.webUserId,
+      });
+    }
+
+    const created = await createHostedLinkCode({ playerUuid, playerName });
+    if (!created.ok) {
+      return res.status(created.status || 500).json({
+        code: created.code || "SERVER_UNAVAILABLE",
+        error: created.error || "Failed to create link code",
+      });
+    }
+    return res.json({
+      code: created.code,
+      expiresAt: created.expiresAt,
+      playerUuid,
+      reused: Boolean(created.reused),
+    });
+  } catch (error) {
+    console.error("Failed to create link code", error);
+    return res.status(500).json({ error: "Failed to create link code" });
+  }
+});
+
 app.get("/api/link/status", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
+    const pluginPlayerUuidRaw = normalizeText(req.query?.playerUuid || req.query?.uuid, 64);
+    if (pluginPlayerUuidRaw) {
+      if (!requireFulfillmentAuth(req, res)) return;
+      const playerUuid = normalizePlayerUuid(pluginPlayerUuidRaw);
+      if (!playerUuid) {
+        return res.status(400).json({ error: "playerUuid is invalid" });
+      }
+      const linked = await linkedAccountsCollection.findOne(
+        { playerUuid },
+        { projection: { _id: 0, webUserId: 1 } },
+      );
+      return res.json({
+        linked: Boolean(linked?.webUserId),
+        accountId: linked?.webUserId || null,
+      });
+    }
     const auth = requireCommentAuth(req, res);
     if (!auth) return;
     const doc = await linkedAccountsCollection.findOne({ webUserId: auth.userId });
@@ -4714,6 +4933,28 @@ app.post("/api/link/redeem", async (req, res) => {
       if (!codeProvided) {
         return res.status(400).json({ code: "INVALID_CODE", error: "Link code must be 8 letters/numbers" });
       }
+      const hostedCodeResult = await consumeHostedLinkCode({
+        code,
+        webUserId: auth.userId,
+      });
+      if (hostedCodeResult.ok) {
+        linkResult = {
+          ok: true,
+          playerUuid: hostedCodeResult.playerUuid,
+          playerName: hostedCodeResult.playerName,
+        };
+        linkSource = "CODE";
+      } else if (hostedCodeResult.code !== "NOT_FOUND") {
+        const statusOut = hostedCodeResult.status || 400;
+        const codeOut = normalizeText(hostedCodeResult.code || "INVALID_CODE", 80).toUpperCase();
+        return res.status(statusOut).json({
+          code: codeOut,
+          error: hostedCodeResult.error || "Redeem failed",
+        });
+      }
+    }
+
+    if (!linkResult && LINK_REDEEM_DOWNSTREAM_FALLBACK_ENABLED) {
       let redeemResult;
       if (LINKING_ENABLED) {
         const idempotencyKey = crypto.randomUUID();
@@ -4770,6 +5011,12 @@ app.post("/api/link/redeem", async (req, res) => {
         playerName: normalizeText(payload.playerName || payload.username || payload.playerUsername || "", 60),
       };
       linkSource = "CODE";
+    }
+    if (!linkResult) {
+      return res.status(400).json({
+        code: "INVALID_CODE",
+        error: "Invalid or expired link code",
+      });
     }
 
     const persisted = await persistLinkedAccountForUser({
@@ -5401,7 +5648,8 @@ app.get("/health", (req, res) => {
     forumPostsCollection &&
     forumPostRevisionsCollection &&
     linkedAccountsCollection &&
-    userAchievementsCollection,
+    userAchievementsCollection &&
+    linkCodesCollection,
   );
   res.status(200).json({
     status: "ok",
@@ -5410,6 +5658,31 @@ app.get("/health", (req, res) => {
     timestamp: new Date().toISOString(),
     mongodb: mongoReady ? "connected" : "reconnecting",
   });
+});
+
+app.post("/api/telemetry/link-bad-query", (req, res) => {
+  try {
+    const pathValue = normalizeText(req.body?.path || "", 120);
+    const searchValue = normalizeText(req.body?.search || "", 500);
+    const source = normalizeText(req.body?.source || "unknown", 80);
+    const hasMultipleCode = Boolean(req.body?.hasMultipleCode);
+    const unexpectedKeys = Array.isArray(req.body?.unexpectedKeys)
+      ? req.body.unexpectedKeys.map((key) => normalizeText(key, 40)).filter(Boolean).slice(0, 20)
+      : [];
+    console.warn(
+      "[link.telemetry.bad_query]",
+      JSON.stringify({
+        source,
+        path: pathValue,
+        search: searchValue,
+        hasMultipleCode,
+        unexpectedKeys,
+      }),
+    );
+    return res.status(204).end();
+  } catch {
+    return res.status(204).end();
+  }
 });
 
 app.use("/Images", express.static(imagesDir));
@@ -5429,9 +5702,18 @@ app.listen(PORT, HOST, () => {
       `Open the site at http://127.0.0.1:${PORT} to ensure frontend API calls stay local.`,
     );
   }
-  if (LINKING_ENABLED && LINK_SERVICE_LOCALHOST_PATTERN.test(LINK_SERVICE_BASE_URL)) {
+  if (
+    LINK_REDEEM_DOWNSTREAM_FALLBACK_ENABLED &&
+    LINKING_ENABLED &&
+    LINK_SERVICE_LOCALHOST_PATTERN.test(LINK_SERVICE_BASE_URL)
+  ) {
     console.warn(
       "LINKING_ENABLED is true but LINK_SERVICE_BASE_URL points to localhost/127.x.x.x. In Render this is usually unreachable for external game/plugin services.",
+    );
+  }
+  if (!LINK_REDEEM_DOWNSTREAM_FALLBACK_ENABLED) {
+    console.log(
+      "Hosted link-code mode active: /api/link/redeem uses Mongo link codes; downstream plugin redeem fallback is disabled.",
     );
   }
 });
