@@ -33,6 +33,7 @@ import SiteFooter from "./components/SiteFooter.js";
 import SubscriptionsPage from "./components/SubscriptionsPage.js";
 import CopyAction from "./components/CopyAction.js";
 import GradientScrollArea from "./components/GradientScrollArea.js";
+import InlineDropdownToggle from "./components/InlineDropdownToggle.js";
 import { markdownExcerpt } from "./components/forumMarkdown.js";
 import { getRankDisplayLabel, getRankIconType } from "./components/rankConfig.js";
 import {
@@ -88,7 +89,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.89";
+const VERSION = "1.3.90";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -189,6 +190,16 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.90",
+    date: "2026-02-17",
+    items: [
+      "Reworked `/store/ranks` card order to title -> artwork -> profile preview -> centered rank tag for cleaner hierarchy.",
+      "Added in-game donor tag preview line (SVG + bracket format like `[HERO]`) above `Titles unlocked`.",
+      "Added reusable `InlineDropdownToggle` component and migrated rank perks into a comment-style dropdown section with count pill + accent arrow.",
+      "Retuned Hero/Legend store icon/text effects: Hero subtle glow/gradient pass and brighter, more noticeable Legend intensity.",
+    ],
+  },
   {
     version: "1.3.89",
     date: "2026-02-17",
@@ -5017,6 +5028,7 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
   const [showComparison, setShowComparison] = useState(false);
   const [previewItemId, setPreviewItemId] = useState("");
   const [rankDetailItemId, setRankDetailItemId] = useState("");
+  const [openPerkRows, setOpenPerkRows] = useState({});
   const [message, setMessage] = useState("");
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [cooldownLeft, setCooldownLeft] = useState(0);
@@ -5189,6 +5201,13 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
     return html`<span className="store-comparison-value-text">${String(value || "-")}</span>`;
   }
 
+  function togglePerkRow(itemId) {
+    setOpenPerkRows((prev) => ({
+      ...prev,
+      [itemId]: !prev[itemId],
+    }));
+  }
+
   function renderComparisonHeaderCell(item, keyPrefix = "comparison", includeBuy = true) {
     const rankLabel = getStoreRankLabel(item);
     const rankSlug = getStoreRankSlug(item);
@@ -5275,6 +5294,10 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
             ${SAMPLE_STORE.map(
               (item) => {
                 const addMeta = getStoreAddMeta(item);
+                const itemSlug = getStoreRankSlug(item);
+                const perkItems = perkBullets(item.blurb).map((entry) => capitalizePerk(entry));
+                const perksOpen = Boolean(openPerkRows[item.id]);
+                const rankLabel = getStoreRankLabel(item);
                 return html`<div key=${item.id} className=${`store-card rank-preview-${getStoreRankSlug(item)}`.trim()}>
                 ${addMeta.alreadyInCart
                   ? html`<button
@@ -5287,6 +5310,13 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
                       <img src=${DELETE_ICON_SVG} alt="" aria-hidden="true" />
                     </button>`
                   : html``}
+                <div className=${`comment-rank store-rank-title rank-${itemSlug}`.trim()}>
+                  ${(() => {
+                    const iconType = getRankIconType(getStoreRankLabel(item));
+                    return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                      <span>${item.name}</span>`;
+                  })()}
+                </div>
                 <div className="store-rank-card-art-wrap">
                   <button
                     type="button"
@@ -5303,20 +5333,6 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
                     />
                   </button>
                 </div>
-                <div className=${`comment-rank store-profile-rank rank-${getStoreRankSlug(item)}`.trim()}>
-                  ${(() => {
-                    const iconType = getRankIconType(getStoreRankLabel(item));
-                    return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
-                      <span>${getStoreRankLabel(item)}</span>`;
-                  })()}
-                </div>
-                <div className=${`comment-rank store-rank-title rank-${getStoreRankSlug(item)}`.trim()}>
-                  ${(() => {
-                    const iconType = getRankIconType(getStoreRankLabel(item));
-                    return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
-                      <span>${item.name}</span>`;
-                  })()}
-                </div>
                 <${ProfilePreviewButton}
                   onClick=${() => setPreviewItemId(item.id)}
                   title="Open profile preview"
@@ -5328,14 +5344,37 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
                     (label) => html`<${RankBadge} label=${label} className="store-owned-badge" />`,
                   )}
                 <//>
+                <div className=${`comment-rank store-profile-rank rank-${itemSlug}`.trim()}>
+                  ${(() => {
+                    const iconType = getRankIconType(getStoreRankLabel(item));
+                    return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                      <span>${rankLabel}</span>`;
+                  })()}
+                </div>
+                <div className="store-tag-preview-line">
+                  <span className="muted">In-game tag</span>
+                  <span className=${`comment-rank store-tag-preview rank-${itemSlug}`.trim()}>
+                    ${(() => {
+                      const iconType = getRankIconType(rankLabel);
+                      return html`${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
+                        <span>[${rankLabel.toUpperCase()}]</span>`;
+                    })()}
+                  </span>
+                </div>
                 <div className="store-preview-note muted">
                   Titles unlocked: ${(STORE_PREVIEW_TITLES_BY_ID[item.id] || []).join(", ")}
                 </div>
                 <div className="store-desc">
-                  <div className="store-perks">
-                    ${perkBullets(item.blurb).map(
-                      (perk) => html`<div>${capitalizePerk(perk)}</div>`,
-                    )}
+                  <${InlineDropdownToggle}
+                    label="Perks"
+                    count=${perkItems.length}
+                    open=${perksOpen}
+                    onToggle=${() => togglePerkRow(item.id)}
+                  />
+                  <div className=${`store-perks-panel ${perksOpen ? "open" : ""}`.trim()}>
+                    <div className="store-perks">
+                      ${perkItems.map((perk) => html`<div>${perk}</div>`)}
+                    </div>
                   </div>
                 </div>
                 <div className="store-price">$${item.price.toFixed(2)}</div>

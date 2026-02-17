@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.90)
+- Reordered `/store/ranks` cards to title -> artwork -> profile preview -> centered rank row for cleaner vertical hierarchy.
+- Added in-game donor tag preview line (rank SVG + bracket format like `[HERO]`) above `Titles unlocked`.
+- Added reusable `InlineDropdownToggle` component and moved rank perk lists into comment-style collapsible dropdown sections with count pills and accent arrow.
+- Tuned Hero/Legend store icon/text visuals: subtle Hero glow/gradient pass and brighter/more noticeable Legend intensity.
+
 ## 2026-02-17 (v1.3.89)
 - Scaled `/store` gateway PNG artwork up significantly on desktop and mobile for stronger visual coverage.
 - Adjusted gateway card image sizing so artwork spans card width more effectively above section text.
