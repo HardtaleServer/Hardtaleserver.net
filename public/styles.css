@@ -2414,7 +2414,6 @@ emoji-picker.reaction-picker-panel {
 }
 
 .comment-rank.rank-hero span:not(.rank-icon),
-.profile-card-rank.rank-hero span:not(.rank-icon),
 .store-rank-title.rank-hero span:not(.rank-icon),
 .store-profile-rank.rank-hero span:not(.rank-icon),
 .profile-owned-badge.rank-hero span:not(.rank-icon),
@@ -2429,7 +2428,6 @@ emoji-picker.reaction-picker-panel {
 }
 
 .comment-rank.rank-legend span:not(.rank-icon),
-.profile-card-rank.rank-legend span:not(.rank-icon),
 .store-rank-title.rank-legend span:not(.rank-icon),
 .store-profile-rank.rank-legend span:not(.rank-icon),
 .profile-owned-badge.rank-legend span:not(.rank-icon),
@@ -2444,11 +2442,43 @@ emoji-picker.reaction-picker-panel {
 }
 
 .comment-rank.rank-mythic span:not(.rank-icon),
-.profile-card-rank.rank-mythic span:not(.rank-icon),
 .store-rank-title.rank-mythic span:not(.rank-icon),
 .store-profile-rank.rank-mythic span:not(.rank-icon),
 .profile-owned-badge.rank-mythic span:not(.rank-icon),
 .store-owned-badge.rank-mythic span:not(.rank-icon) {
+  background-image: linear-gradient(110deg, var(--rank-mythic) 0%, var(--rank-mythic) 65%, var(--rank-mythic-end) 100%);
+  background-size: 190% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: donorRankFlow 4s ease-in-out infinite;
+}
+
+.profile-card-name.donor-gradient-on.rank-hero,
+.profile-card-rank.donor-gradient-on.rank-hero span:not(.rank-icon) {
+  background-image: linear-gradient(110deg, var(--rank-hero) 0%, var(--rank-hero) 65%, var(--rank-hero-end) 100%);
+  background-size: 190% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: donorRankFlow 4s ease-in-out infinite;
+}
+
+.profile-card-name.donor-gradient-on.rank-legend,
+.profile-card-rank.donor-gradient-on.rank-legend span:not(.rank-icon) {
+  background-image: linear-gradient(110deg, var(--rank-legend) 0%, var(--rank-legend) 65%, var(--rank-legend-end) 100%);
+  background-size: 190% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: donorRankFlow 4s ease-in-out infinite;
+}
+
+.profile-card-name.donor-gradient-on.rank-mythic,
+.profile-card-rank.donor-gradient-on.rank-mythic span:not(.rank-icon) {
   background-image: linear-gradient(110deg, var(--rank-mythic) 0%, var(--rank-mythic) 65%, var(--rank-mythic-end) 100%);
   background-size: 190% 100%;
   background-clip: text;

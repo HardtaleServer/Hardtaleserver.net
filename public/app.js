@@ -576,6 +576,11 @@ function normalizeOwnedRankLabel(value) {
   return Object.prototype.hasOwnProperty.call(OWNED_RANK_TIER, label) ? label : "Unregistered";
 }
 
+function isDonorOwnedRank(value) {
+  const normalized = normalizeOwnedRankLabel(value);
+  return normalized === "Hero" || normalized === "Legend" || normalized === "Mythic";
+}
+
 function buildOwnedRankBadges(ownedRank, isStaffUser = false) {
   if (isStaffUser) return [...OWNED_RANK_ORDER];
   const tier = OWNED_RANK_TIER[normalizeOwnedRankLabel(ownedRank)] || 0;
@@ -1390,6 +1395,7 @@ function CommentThread({
   const [profileStaffGradientSaving, setProfileStaffGradientSaving] = useState(false);
   const [profileRankEffectsSaving, setProfileRankEffectsSaving] = useState(false);
   const [profileRankFontSaving, setProfileRankFontSaving] = useState(false);
+  const [profileDonorGradientSaving, setProfileDonorGradientSaving] = useState(false);
   const [profileAvatarVfxSaving, setProfileAvatarVfxSaving] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historyItems, setHistoryItems] = useState([]);
@@ -1766,6 +1772,8 @@ function CommentThread({
         showRankEffects: data?.showRankEffects !== false,
         canToggleRankFont: Boolean(data?.canToggleRankFont),
         useRankFont: data?.useRankFont !== false,
+        canToggleDonorGradient: Boolean(data?.canToggleDonorGradient),
+        showDonorGradient: data?.showDonorGradient !== false,
         canToggleAvatarVfx: Boolean(data?.canToggleAvatarVfx),
         showAvatarVfx: data?.showAvatarVfx !== false,
       };
@@ -2145,6 +2153,51 @@ function CommentThread({
     }
   }
 
+  async function updateOwnDonorGradientVisibility(nextVisible) {
+    if (!profileUser?.isOwn || !profileUser?.canToggleDonorGradient || profileDonorGradientSaving) return;
+    setProfileDonorGradientSaving(true);
+    setProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/donor-gradient", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showDonorGradient: Boolean(nextVisible) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save donor gradient setting.");
+      }
+      const data = await response.json();
+      const showDonorGradient = data?.showDonorGradient !== false;
+      setProfileUser((prev) => (prev ? { ...prev, showDonorGradient } : prev));
+      setComments((prev) =>
+        prev.map((comment) => {
+          if (!comment) return comment;
+          const nextComment =
+            comment.userId === userId
+              ? { ...comment, authorShowDonorGradient: showDonorGradient }
+              : comment;
+          const replies = Array.isArray(nextComment.replies) ? nextComment.replies : [];
+          if (replies.length === 0) return nextComment;
+          return {
+            ...nextComment,
+            replies: replies.map((reply) =>
+              reply?.userId === userId
+                ? { ...reply, authorShowDonorGradient: showDonorGradient }
+                : reply,
+            ),
+          };
+        }),
+      );
+      setProfileTitleStatus("Saved.");
+      setTimeout(() => setProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setProfileTitleStatus(error?.message || "Failed to save donor gradient setting.");
+    } finally {
+      setProfileDonorGradientSaving(false);
+    }
+  }
+
   async function updateOwnAvatarVfxVisibility(nextVisible) {
     if (!profileUser?.isOwn || !profileUser?.canToggleAvatarVfx || profileAvatarVfxSaving) return;
     setProfileAvatarVfxSaving(true);
@@ -2215,6 +2268,8 @@ function CommentThread({
     let showRankEffects = entry?.authorShowRankEffects !== false;
     let canToggleRankFont = false;
     let useRankFont = entry?.authorUseRankFont !== false;
+    let canToggleDonorGradient = false;
+    let showDonorGradient = entry?.authorShowDonorGradient !== false;
     let canToggleAvatarVfx = false;
     let showAvatarVfx = entry?.authorShowAvatarVfx !== false;
     if (isOwn && isSignedIn) {
@@ -2232,9 +2287,14 @@ function CommentThread({
         showRankEffects = settings.showRankEffects !== false;
         canToggleRankFont = Boolean(settings.canToggleRankFont);
         useRankFont = settings.useRankFont !== false;
+        canToggleDonorGradient = Boolean(settings.canToggleDonorGradient);
+        showDonorGradient = settings.showDonorGradient !== false;
         canToggleAvatarVfx = Boolean(settings.canToggleAvatarVfx);
         showAvatarVfx = settings.showAvatarVfx !== false;
       }
+    }
+    if (!isDonorOwnedRank(ownedRank)) {
+      showDonorGradient = false;
     }
     if (!isStaffLabel(selectedTitle)) {
       showStaffGradient = false;
@@ -2268,6 +2328,8 @@ function CommentThread({
       showRankEffects,
       canToggleRankFont,
       useRankFont,
+      canToggleDonorGradient,
+      showDonorGradient,
       canToggleAvatarVfx,
       showAvatarVfx,
       hytalePlayerName: linkStatus.playerName,
@@ -2677,6 +2739,8 @@ function CommentThread({
                   profileUser.showRankEffects === false ? "rank-effects-off" : ""
                 } ${
                   profileUser.useRankFont === false ? "rank-font-off" : "rank-font-on"
+                } ${
+                  profileUser.showDonorGradient === false ? "donor-gradient-off" : "donor-gradient-on"
                 } rank-${String(profileUser.rankLabel || "Unregistered")
                   .trim()
                   .toLowerCase()
@@ -2702,6 +2766,8 @@ function CommentThread({
                   profileUser.staff && profileUser.showStaffGradient === false ? "staff-static" : ""
                 } profile-card-rank ${
                   profileUser.showRankEffects === false ? "rank-effects-off" : ""
+                } ${
+                  profileUser.showDonorGradient === false ? "donor-gradient-off" : "donor-gradient-on"
                 } rank-${String(profileUser.rankLabel || "Unregistered")
                   .trim()
                   .toLowerCase()
@@ -2750,6 +2816,17 @@ function CommentThread({
                       onChange=${(event) => updateOwnRankFontVisibility(event.target.checked)}
                     />
                     <span>Enable rank font styling</span>
+                  </label>`
+                : html``}
+              ${profileUser.isOwn && profileUser.canToggleDonorGradient
+                ? html`<label className="profile-card-toggle">
+                    <input
+                      type="checkbox"
+                      checked=${profileUser.showDonorGradient !== false}
+                      disabled=${profileDonorGradientSaving}
+                      onChange=${(event) => updateOwnDonorGradientVisibility(event.target.checked)}
+                    />
+                    <span>Enable donor text gradient</span>
                   </label>`
                 : html``}
               ${profileUser.isOwn && profileUser.canToggleAvatarVfx
@@ -4413,6 +4490,7 @@ function ForumPage({ isAdmin = false }) {
   const [forumProfileStaffGradientSaving, setForumProfileStaffGradientSaving] = useState(false);
   const [forumProfileRankEffectsSaving, setForumProfileRankEffectsSaving] = useState(false);
   const [forumProfileRankFontSaving, setForumProfileRankFontSaving] = useState(false);
+  const [forumProfileDonorGradientSaving, setForumProfileDonorGradientSaving] = useState(false);
   const [forumProfileAvatarVfxSaving, setForumProfileAvatarVfxSaving] = useState(false);
   const [editingPostId, setEditingPostId] = useState("");
   const [editingPostTitle, setEditingPostTitle] = useState("");
@@ -4542,6 +4620,8 @@ function ForumPage({ isAdmin = false }) {
         showRankEffects: data?.showRankEffects !== false,
         canToggleRankFont: Boolean(data?.canToggleRankFont),
         useRankFont: data?.useRankFont !== false,
+        canToggleDonorGradient: Boolean(data?.canToggleDonorGradient),
+        showDonorGradient: data?.showDonorGradient !== false,
         canToggleAvatarVfx: Boolean(data?.canToggleAvatarVfx),
         showAvatarVfx: data?.showAvatarVfx !== false,
       };
@@ -4607,6 +4687,8 @@ function ForumPage({ isAdmin = false }) {
     let showRankEffects = true;
     let canToggleRankFont = false;
     let useRankFont = entry?.authorUseRankFont !== false;
+    let canToggleDonorGradient = false;
+    let showDonorGradient = entry?.authorShowDonorGradient !== false;
     let canToggleAvatarVfx = false;
     let showAvatarVfx = true;
     if (isOwn && isSignedIn) {
@@ -4624,9 +4706,14 @@ function ForumPage({ isAdmin = false }) {
         showRankEffects = settings.showRankEffects !== false;
         canToggleRankFont = Boolean(settings.canToggleRankFont);
         useRankFont = settings.useRankFont !== false;
+        canToggleDonorGradient = Boolean(settings.canToggleDonorGradient);
+        showDonorGradient = settings.showDonorGradient !== false;
         canToggleAvatarVfx = Boolean(settings.canToggleAvatarVfx);
         showAvatarVfx = settings.showAvatarVfx !== false;
       }
+    }
+    if (!isDonorOwnedRank(ownedRank)) {
+      showDonorGradient = false;
     }
     if (!isStaffLabel(selectedTitle)) {
       showStaffGradient = false;
@@ -4660,6 +4747,8 @@ function ForumPage({ isAdmin = false }) {
       showRankEffects,
       canToggleRankFont,
       useRankFont,
+      canToggleDonorGradient,
+      showDonorGradient,
       canToggleAvatarVfx,
       showAvatarVfx,
       authorUserId,
@@ -4953,6 +5042,46 @@ function ForumPage({ isAdmin = false }) {
     }
   }
 
+  async function updateOwnForumDonorGradientVisibility(nextVisible) {
+    if (!forumProfileUser?.isOwn || !forumProfileUser?.canToggleDonorGradient || forumProfileDonorGradientSaving) return;
+    setForumProfileDonorGradientSaving(true);
+    setForumProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/donor-gradient", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showDonorGradient: Boolean(nextVisible) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save donor gradient setting.");
+      }
+      const data = await response.json();
+      const showDonorGradient = data?.showDonorGradient !== false;
+      setForumProfileUser((prev) => (prev ? { ...prev, showDonorGradient } : prev));
+      setPosts((prev) =>
+        prev.map((post) => {
+          const postAuthorUserId = String(post?.authorUserId || post?.createdBy || "");
+          return userId && postAuthorUserId && String(userId) === postAuthorUserId
+            ? { ...post, authorShowDonorGradient: showDonorGradient }
+            : post;
+        }),
+      );
+      setSelectedPost((prev) => {
+        const postAuthorUserId = String(prev?.authorUserId || prev?.createdBy || "");
+        return userId && prev && postAuthorUserId && String(userId) === postAuthorUserId
+          ? { ...prev, authorShowDonorGradient: showDonorGradient }
+          : prev;
+      });
+      setForumProfileTitleStatus("Saved.");
+      setTimeout(() => setForumProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setForumProfileTitleStatus(error?.message || "Failed to save donor gradient setting.");
+    } finally {
+      setForumProfileDonorGradientSaving(false);
+    }
+  }
+
   async function updateOwnForumAvatarVfxVisibility(nextVisible) {
     if (!forumProfileUser?.isOwn || !forumProfileUser?.canToggleAvatarVfx || forumProfileAvatarVfxSaving) return;
     setForumProfileAvatarVfxSaving(true);
@@ -4994,6 +5123,8 @@ function ForumPage({ isAdmin = false }) {
           forumProfileUser.showRankEffects === false ? "rank-effects-off" : ""
         } ${
           forumProfileUser.useRankFont === false ? "rank-font-off" : "rank-font-on"
+        } ${
+          forumProfileUser.showDonorGradient === false ? "donor-gradient-off" : "donor-gradient-on"
         } rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}
       >
         ${forumProfileUser.name}
@@ -5016,6 +5147,8 @@ function ForumPage({ isAdmin = false }) {
             : ""
         } ${
           forumProfileUser.showRankEffects === false ? "rank-effects-off" : ""
+        } ${
+          forumProfileUser.showDonorGradient === false ? "donor-gradient-off" : "donor-gradient-on"
         } rank-${rankSlug(forumProfileUser.rankLabel || "Unregistered")}`.trim()}
       >
         ${(() => {
@@ -5059,6 +5192,17 @@ function ForumPage({ isAdmin = false }) {
               onChange=${(event) => updateOwnForumRankFontVisibility(event.target.checked)}
             />
             <span>Enable rank font styling</span>
+          </label>`
+        : html``}
+      ${forumProfileUser.isOwn && forumProfileUser.canToggleDonorGradient
+        ? html`<label className="profile-card-toggle">
+            <input
+              type="checkbox"
+              checked=${forumProfileUser.showDonorGradient !== false}
+              disabled=${forumProfileDonorGradientSaving}
+              onChange=${(event) => updateOwnForumDonorGradientVisibility(event.target.checked)}
+            />
+            <span>Enable donor text gradient</span>
           </label>`
         : html``}
       ${forumProfileUser.isOwn && forumProfileUser.canToggleAvatarVfx
@@ -7682,6 +7826,7 @@ function Layout() {
       showStaffBadgeIcon: item?.authorShowStaffBadgeIcon !== false,
       showStaffGradient: item?.authorShowStaffGradient !== false,
       useRankFont: item?.authorUseRankFont !== false,
+      showDonorGradient: item?.authorShowDonorGradient !== false,
       hytalePlayerName: linkStatus.playerName,
       hytalePlayerUuid: linkStatus.playerUuid,
       linkedAccount: linkStatus.linked,
@@ -8172,6 +8317,10 @@ function Layout() {
               <div
                 className=${`profile-card-name ${
                   notificationProfileUser.useRankFont === false ? "rank-font-off" : "rank-font-on"
+                } ${
+                  notificationProfileUser.showDonorGradient === false
+                    ? "donor-gradient-off"
+                    : "donor-gradient-on"
                 } rank-${String(
                   notificationProfileUser.rankLabel || "Unregistered",
                 )
@@ -8201,7 +8350,11 @@ function Layout() {
                   notificationProfileUser.staff && notificationProfileUser.showStaffGradient === false
                     ? "staff-static"
                     : ""
-                } profile-card-rank rank-${String(
+                } profile-card-rank ${
+                  notificationProfileUser.showDonorGradient === false
+                    ? "donor-gradient-off"
+                    : "donor-gradient-on"
+                } rank-${String(
                   notificationProfileUser.rankLabel || "Unregistered",
                 )
                   .trim()

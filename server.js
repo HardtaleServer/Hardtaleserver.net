@@ -85,6 +85,7 @@ const STORE_RANK_PRODUCTS = {
 };
 const STORE_PRODUCT_IDS = new Set(Object.keys(STORE_RANK_PRODUCTS));
 const STORE_RANK_BY_LABEL = { Hero: 1, Legend: 2, Mythic: 3 };
+const DONOR_RANK_SET = new Set(["Hero", "Legend", "Mythic"]);
 const DISPLAY_TITLES = ["Registered", "Hero", "Legend", "Mythic"];
 const STAFF_DISPLAY_TITLE = "Staff";
 const DISPLAY_TITLE_TIER = { Registered: 0, Hero: 1, Legend: 2, Mythic: 3 };
@@ -324,6 +325,7 @@ function normalizeComment(doc) {
     authorShowRankEffects: rest.authorShowRankEffects !== false,
     authorShowAvatarVfx: rest.authorShowAvatarVfx !== false,
     authorUseRankFont: rest.authorUseRankFont !== false,
+    authorShowDonorGradient: rest.authorShowDonorGradient !== false,
   };
   if (
     normalized.authorName &&
@@ -348,6 +350,7 @@ function normalizeComment(doc) {
         authorShowRankEffects: reply.authorShowRankEffects !== false,
         authorShowAvatarVfx: reply.authorShowAvatarVfx !== false,
         authorUseRankFont: reply.authorUseRankFont !== false,
+        authorShowDonorGradient: reply.authorShowDonorGradient !== false,
       };
       if (
         nextReply.authorName &&
@@ -816,6 +819,14 @@ function resolveRankFontVisible(metadata = {}) {
   return metadata?.useRankFont !== false;
 }
 
+function resolveDonorGradientVisible(metadata = {}) {
+  return metadata?.showDonorGradient !== false;
+}
+
+function hasDonorOwnedRank(value) {
+  return DONOR_RANK_SET.has(normalizeOwnedRank(value));
+}
+
 async function getFreshAuthorSnapshot(userId, cache = new Map()) {
   const key = normalizeText(userId, 128);
   if (!key) return null;
@@ -845,6 +856,7 @@ async function getFreshAuthorSnapshot(userId, cache = new Map()) {
       authorShowRankEffects: resolveRankEffectsVisible(user?.publicMetadata || {}),
       authorShowAvatarVfx: resolveAvatarVfxVisible(user?.publicMetadata || {}),
       authorUseRankFont: resolveRankFontVisible(user?.publicMetadata || {}),
+      authorShowDonorGradient: resolveDonorGradientVisible(user?.publicMetadata || {}),
     };
     cache.set(key, snapshot);
     return snapshot;
@@ -925,6 +937,8 @@ async function applyNotificationAuthorAliases(list = []) {
       authorShowStaffGradient: snapshot.authorShowStaffGradient,
       authorShowRankEffects: snapshot.authorShowRankEffects,
       authorShowAvatarVfx: snapshot.authorShowAvatarVfx,
+      authorUseRankFont: snapshot.authorUseRankFont,
+      authorShowDonorGradient: snapshot.authorShowDonorGradient,
     };
   });
 }
@@ -946,7 +960,8 @@ function hasAuthorSnapshotChanged(entry, snapshot) {
     Boolean(entry.authorShowStaffGradient) !== Boolean(snapshot.authorShowStaffGradient) ||
     Boolean(entry.authorShowRankEffects) !== Boolean(snapshot.authorShowRankEffects) ||
     Boolean(entry.authorShowAvatarVfx) !== Boolean(snapshot.authorShowAvatarVfx) ||
-    Boolean(entry.authorUseRankFont) !== Boolean(snapshot.authorUseRankFont)
+    Boolean(entry.authorUseRankFont) !== Boolean(snapshot.authorUseRankFont) ||
+    Boolean(entry.authorShowDonorGradient) !== Boolean(snapshot.authorShowDonorGradient)
   );
 }
 
@@ -1005,6 +1020,7 @@ async function refreshCommentAuthorFields(comments = []) {
         setPayload.authorShowRankEffects = nextComment.authorShowRankEffects;
         setPayload.authorShowAvatarVfx = nextComment.authorShowAvatarVfx;
         setPayload.authorUseRankFont = nextComment.authorUseRankFont;
+        setPayload.authorShowDonorGradient = nextComment.authorShowDonorGradient;
       }
       if (repliesChanged) {
         setPayload.replies = nextComment.replies;
@@ -1269,6 +1285,8 @@ async function notifyAchievementUnlocked(userId, achievement) {
     authorShowStaffBadge: false,
     authorShowStaffBadgeIcon: false,
     authorShowStaffGradient: false,
+    authorUseRankFont: false,
+    authorShowDonorGradient: false,
     featured: false,
     type: "achievement_unlock",
     targetUserId: normalizeText(userId, 128),
@@ -1559,6 +1577,7 @@ function normalizeForumPost(doc) {
     authorShowStaffBadgeIcon: stripped.authorShowStaffBadgeIcon !== false,
     authorShowStaffGradient: stripped.authorShowStaffGradient !== false,
     authorUseRankFont: stripped.authorUseRankFont !== false,
+    authorShowDonorGradient: stripped.authorShowDonorGradient !== false,
     editCount: Number.isFinite(Number(stripped.editCount)) ? Number(stripped.editCount) : 0,
     editedAt: stripped.editedAt || "",
     editedByUserId: normalizeText(stripped.editedByUserId, 128),
@@ -1596,7 +1615,8 @@ async function refreshForumPostAuthorFields(posts = []) {
           Boolean(item.authorShowStaffBadge) !== Boolean(snapshot.authorShowStaffBadge) ||
           Boolean(item.authorShowStaffBadgeIcon) !== Boolean(snapshot.authorShowStaffBadgeIcon) ||
           Boolean(item.authorShowStaffGradient) !== Boolean(snapshot.authorShowStaffGradient) ||
-          Boolean(item.authorUseRankFont) !== Boolean(snapshot.authorUseRankFont);
+          Boolean(item.authorUseRankFont) !== Boolean(snapshot.authorUseRankFont) ||
+          Boolean(item.authorShowDonorGradient) !== Boolean(snapshot.authorShowDonorGradient);
         if (authorChanged) {
           nextItem = {
             ...nextItem,
@@ -1611,6 +1631,7 @@ async function refreshForumPostAuthorFields(posts = []) {
             authorShowStaffBadgeIcon: snapshot.authorShowStaffBadgeIcon,
             authorShowStaffGradient: snapshot.authorShowStaffGradient,
             authorUseRankFont: snapshot.authorUseRankFont,
+            authorShowDonorGradient: snapshot.authorShowDonorGradient,
           };
           if (item._id) {
             ops.push({
@@ -1629,6 +1650,7 @@ async function refreshForumPostAuthorFields(posts = []) {
                     authorShowStaffBadgeIcon: nextItem.authorShowStaffBadgeIcon,
                     authorShowStaffGradient: nextItem.authorShowStaffGradient,
                     authorUseRankFont: nextItem.authorUseRankFont,
+                    authorShowDonorGradient: nextItem.authorShowDonorGradient,
                     updatedAt: new Date().toISOString(),
                   },
                 },
@@ -1784,6 +1806,7 @@ app.post("/api/admin/users/:userId/role", async (req, res) => {
     const showRankEffects = resolveRankEffectsVisible(refreshedUser?.publicMetadata || {});
     const showAvatarVfx = resolveAvatarVfxVisible(refreshedUser?.publicMetadata || {});
     const useRankFont = resolveRankFontVisible(refreshedUser?.publicMetadata || {});
+    const showDonorGradient = resolveDonorGradientVisible(refreshedUser?.publicMetadata || {});
 
     await commentsCollection.updateMany(
       { userId: targetUserId, isDeleted: false },
@@ -1799,6 +1822,7 @@ app.post("/api/admin/users/:userId/role", async (req, res) => {
           authorShowRankEffects: showRankEffects,
           authorShowAvatarVfx: showAvatarVfx,
           authorUseRankFont: useRankFont,
+          authorShowDonorGradient: showDonorGradient,
           updatedAt: new Date(),
         },
       },
@@ -1815,6 +1839,7 @@ app.post("/api/admin/users/:userId/role", async (req, res) => {
           authorShowStaffBadgeIcon: showStaffBadgeIcon,
           authorShowStaffGradient: showStaffGradient,
           authorUseRankFont: useRankFont,
+          authorShowDonorGradient: showDonorGradient,
           updatedAt: new Date().toISOString(),
         },
       },
@@ -1888,6 +1913,8 @@ app.get("/api/profile/title", async (req, res) => {
       showRankEffects: resolveRankEffectsVisible(user?.publicMetadata || {}),
       canToggleRankFont: isStaff || ownedRank !== "Unregistered",
       useRankFont: resolveRankFontVisible(user?.publicMetadata || {}),
+      canToggleDonorGradient: hasDonorOwnedRank(ownedRank),
+      showDonorGradient: resolveDonorGradientVisible(user?.publicMetadata || {}),
       canToggleAvatarVfx: isStaff || ownedRank !== "Unregistered",
       showAvatarVfx: resolveAvatarVfxVisible(user?.publicMetadata || {}),
     });
@@ -2071,6 +2098,40 @@ app.post("/api/profile/rank-font", async (req, res) => {
   } catch (error) {
     console.error("Failed to update rank font settings", error);
     return res.status(500).json({ error: "Failed to update rank font settings" });
+  }
+});
+
+app.post("/api/profile/donor-gradient", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const user = await clerkClient.users.getUser(auth.userId);
+    const isStaff = isStaffUser(user);
+    const linked = await isLinkedUserId(auth.userId);
+    const rankInfo = resolveDisplayRankFromMetadata(user?.publicMetadata || {}, isStaff, linked);
+    if (!hasDonorOwnedRank(rankInfo.ownedRank)) {
+      return res.status(400).json({ error: "Donor gradient unavailable for this rank" });
+    }
+    const showDonorGradient = req.body?.showDonorGradient !== false;
+    await clerkClient.users.updateUserMetadata(auth.userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        showDonorGradient,
+      },
+    });
+    await commentsCollection.updateMany(
+      { userId: auth.userId, isDeleted: false },
+      { $set: { authorShowDonorGradient: showDonorGradient, updatedAt: new Date() } },
+    );
+    await forumPostsCollection.updateMany(
+      { authorUserId: auth.userId, isDeleted: false },
+      { $set: { authorShowDonorGradient: showDonorGradient, updatedAt: new Date().toISOString() } },
+    );
+    return res.json({ showDonorGradient });
+  } catch (error) {
+    console.error("Failed to update donor gradient settings", error);
+    return res.status(500).json({ error: "Failed to update donor gradient settings" });
   }
 });
 
@@ -2518,6 +2579,7 @@ app.post("/api/comments", async (req, res) => {
     const showStaffBadgeIcon = resolveStaffBadgeIconVisible(user?.publicMetadata || {});
     const showStaffGradient = resolveStaffGradientVisible(user?.publicMetadata || {});
     const useRankFont = resolveRankFontVisible(user?.publicMetadata || {});
+    const showDonorGradient = resolveDonorGradientVisible(user?.publicMetadata || {});
     const authorIsStaff = Boolean(staffRole);
     const showRankEffects = resolveRankEffectsVisible(user?.publicMetadata || {});
     const showAvatarVfx = resolveAvatarVfxVisible(user?.publicMetadata || {});
@@ -2547,6 +2609,7 @@ app.post("/api/comments", async (req, res) => {
       authorShowRankEffects: showRankEffects,
       authorShowAvatarVfx: showAvatarVfx,
       authorUseRankFont: useRankFont,
+      authorShowDonorGradient: showDonorGradient,
       replies: [],
       isDeleted: false,
       createdAt: new Date(),
@@ -2671,6 +2734,7 @@ app.post("/api/comments/:id/replies", async (req, res) => {
     const showRankEffects = resolveRankEffectsVisible(user?.publicMetadata || {});
     const showAvatarVfx = resolveAvatarVfxVisible(user?.publicMetadata || {});
     const useRankFont = resolveRankFontVisible(user?.publicMetadata || {});
+    const showDonorGradient = resolveDonorGradientVisible(user?.publicMetadata || {});
     const linked = await isLinkedUserId(auth.userId);
     const rankInfo = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
@@ -2700,6 +2764,7 @@ app.post("/api/comments/:id/replies", async (req, res) => {
       authorShowRankEffects: showRankEffects,
       authorShowAvatarVfx: showAvatarVfx,
       authorUseRankFont: useRankFont,
+      authorShowDonorGradient: showDonorGradient,
       repliedToReplyId: effectiveRepliedToReplyId,
       repliedToCommentId: effectiveRepliedToCommentId,
       repliedToName: repliedToAuthorName,
@@ -2751,6 +2816,8 @@ app.post("/api/comments/:id/replies", async (req, res) => {
         authorShowStaffGradient: showStaffGradient,
         authorShowRankEffects: showRankEffects,
         authorShowAvatarVfx: showAvatarVfx,
+        authorUseRankFont: useRankFont,
+        authorShowDonorGradient: showDonorGradient,
         featured: false,
         type: "reply",
         targetUserId: repliedToUserId,
@@ -3709,6 +3776,8 @@ app.post("/api/forum/posts", async (req, res) => {
     const showStaffBadge = resolveStaffBadgeVisible(user?.publicMetadata || {});
     const showStaffBadgeIcon = resolveStaffBadgeIconVisible(user?.publicMetadata || {});
     const showStaffGradient = resolveStaffGradientVisible(user?.publicMetadata || {});
+    const useRankFont = resolveRankFontVisible(user?.publicMetadata || {});
+    const showDonorGradient = resolveDonorGradientVisible(user?.publicMetadata || {});
     const now = new Date().toISOString();
     const post = {
       id: crypto.randomUUID(),
@@ -3728,6 +3797,7 @@ app.post("/api/forum/posts", async (req, res) => {
       authorShowStaffBadgeIcon: showStaffBadgeIcon,
       authorShowStaffGradient: showStaffGradient,
       authorUseRankFont: useRankFont,
+      authorShowDonorGradient: showDonorGradient,
       isDeleted: false,
       createdAt: now,
       updatedAt: now,
@@ -3833,6 +3903,7 @@ app.patch("/api/forum/posts/:id", async (req, res) => {
         authorShowStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
         authorShowStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
         authorUseRankFont: resolveRankFontVisible(user?.publicMetadata || {}),
+        authorShowDonorGradient: resolveDonorGradientVisible(user?.publicMetadata || {}),
         featured: false,
         type: "forum_post_staff_edit",
         targetUserId: doc.createdBy,
@@ -3916,6 +3987,7 @@ app.delete("/api/forum/posts/:id", async (req, res) => {
         authorShowStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
         authorShowStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
         authorUseRankFont: resolveRankFontVisible(user?.publicMetadata || {}),
+        authorShowDonorGradient: resolveDonorGradientVisible(user?.publicMetadata || {}),
         featured: false,
         type: "forum_post_staff_delete",
         targetUserId: doc.createdBy,
