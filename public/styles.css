@@ -3177,6 +3177,10 @@ emoji-picker.reaction-picker-panel {
   letter-spacing: normal;
 }
 
+.comment-staff-pill.staff-role-op,
+.forum-staff-pill.staff-role-op,
+.profile-card-badge.staff-badge.staff-role-op,
+.profile-owned-badge.staff-owned-badge.staff-role-op,
 .comment-staff-pill.staff-role-dev,
 .forum-staff-pill.staff-role-dev,
 .profile-card-badge.staff-badge.staff-role-dev,
@@ -3209,6 +3213,13 @@ emoji-picker.reaction-picker-panel {
   background: color-mix(in srgb, var(--staff-helper-start) 12%, var(--bg-soft));
 }
 
+.comment-staff-pill.staff-role-op .staff-pill-label,
+.forum-staff-pill.staff-role-op .staff-pill-label,
+.comment-author.staff.staff-role-op,
+.comment-text.staff.staff-role-op,
+.comment-rank.staff.staff-role-op,
+.profile-card-badge.staff-badge.staff-role-op span,
+.profile-owned-badge.staff-owned-badge.staff-role-op span,
 .comment-staff-pill.staff-role-dev .staff-pill-label,
 .forum-staff-pill.staff-role-dev .staff-pill-label,
 .comment-author.staff.staff-role-dev,

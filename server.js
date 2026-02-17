@@ -76,11 +76,11 @@ const COMMUNITY_FILE = "community.json";
 const POLLS_FILE = "polls.json";
 const PERMISSIONS_FILE = "permissions.json";
 const RANK_PRIORITY = ["Mythic", "Legend", "Hero", "Registered", "Unregistered"];
-const STAFF_ROLE_ORDER = ["Developer", "Admin", "Moderator", "Helper"];
+const STAFF_ROLE_ORDER = ["Operator", "Developer", "Admin", "Moderator", "Helper", "Staff"];
 const STAFF_ROLE_SET = new Set(STAFF_ROLE_ORDER);
-const TOP_STAFF_ROLE_SET = new Set(["Developer", "Admin"]);
+const TOP_STAFF_ROLE_SET = new Set(["Operator", "Developer", "Admin"]);
 const DEFAULT_STAFF_ROLE_BY_USERNAME = new Map([
-  ["smurfis", "Developer"],
+  ["smurfis", "Operator"],
   ["hardtale", "Admin"],
 ]);
 const NOTIFICATION_PROFILE_ALIAS_SOURCE_USERNAME = String(
@@ -955,14 +955,16 @@ function usernameKey(value) {
 function normalizeStaffRole(value) {
   const raw = normalizeText(value, 40).toLowerCase();
   if (!raw) return "";
+  if (raw === "operator" || raw === "op") return "Operator";
   if (raw === "dev" || raw === "developer") return "Developer";
   if (raw === "admin" || raw === "administrator") return "Admin";
   if (raw === "mod" || raw === "moderator") return "Moderator";
   if (raw === "helper") return "Helper";
+  if (raw === "staff") return "Staff";
   return "";
 }
 
-function resolveStaffRoleForUser(user) {
+function resolveStaffRoleBaseForUser(user) {
   const metadataRole = normalizeStaffRole(user?.publicMetadata?.staffRole);
   if (metadataRole) return metadataRole;
   const mapped = DEFAULT_STAFF_ROLE_BY_USERNAME.get(usernameKey(user?.username));
@@ -977,6 +979,34 @@ function resolveStaffRoleForUser(user) {
     return "Admin";
   }
   return "";
+}
+
+function getAllowedStaffRolePreviewOptions(baseRole) {
+  switch (baseRole) {
+    case "Operator":
+      return ["Operator", "Developer", "Admin", "Moderator", "Helper", "Staff"];
+    case "Developer":
+      return ["Developer", "Admin", "Moderator", "Helper", "Staff"];
+    case "Admin":
+      return ["Admin", "Moderator", "Helper", "Staff"];
+    case "Moderator":
+      return ["Moderator", "Helper", "Staff"];
+    case "Helper":
+      return ["Helper", "Staff"];
+    case "Staff":
+      return ["Staff"];
+    default:
+      return [];
+  }
+}
+
+function resolveStaffRoleForUser(user) {
+  const baseRole = resolveStaffRoleBaseForUser(user);
+  if (!baseRole) return "";
+  const previewRole = normalizeStaffRole(user?.publicMetadata?.staffRolePreview);
+  if (!previewRole || previewRole === baseRole) return baseRole;
+  const options = getAllowedStaffRolePreviewOptions(baseRole);
+  return options.includes(previewRole) ? previewRole : baseRole;
 }
 
 function isStaffUser(user) {
@@ -2220,8 +2250,11 @@ app.get("/api/profile/title", async (req, res) => {
     if (!auth) return;
     const user = await clerkClient.users.getUser(auth.userId);
     const linked = await isLinkedUserId(auth.userId);
+    const staffRoleBase = resolveStaffRoleBaseForUser(user);
     const staffRole = resolveStaffRoleForUser(user);
-    const isStaff = Boolean(staffRole);
+    const isStaff = Boolean(staffRoleBase);
+    const staffRolePreviewOptions = getAllowedStaffRolePreviewOptions(staffRoleBase);
+    const staffRolePreview = normalizeStaffRole(user?.publicMetadata?.staffRolePreview);
     const { ownedRank, displayRank, availableTitles } = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
       isStaff,
@@ -2236,6 +2269,12 @@ app.get("/api/profile/title", async (req, res) => {
       selectedOwnedBadge: resolveSelectedOwnedBadge(user?.publicMetadata || {}, ownedRank),
       ownedBadgeOptions: getOwnedDonorBadgeOptions(ownedRank),
       staffRole,
+      staffRoleBase,
+      canPreviewStaffRole: staffRolePreviewOptions.length > 0,
+      staffRolePreviewOptions,
+      staffRolePreview: staffRolePreview && staffRolePreviewOptions.includes(staffRolePreview)
+        ? staffRolePreview
+        : staffRole,
       achievements: await getUserAchievements(auth.userId),
       canToggleStaffBadge: isStaff,
       showStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
@@ -3852,6 +3891,49 @@ app.post("/api/payments/stripe/create-payment-intent", async (req, res) => {
       code: stripeCode || undefined,
       type: stripeType || undefined,
     });
+  }
+});
+
+app.post("/api/profile/staff-role-preview", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const user = await clerkClient.users.getUser(auth.userId);
+    const baseRole = resolveStaffRoleBaseForUser(user);
+    const options = getAllowedStaffRolePreviewOptions(baseRole);
+    if (options.length === 0) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+    const requestedRole = normalizeStaffRole(req.body?.staffRolePreview);
+    if (!requestedRole || !options.includes(requestedRole)) {
+      return res.status(400).json({ error: "Invalid staff role preview" });
+    }
+
+    await clerkClient.users.updateUserMetadata(auth.userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        staffRolePreview: requestedRole,
+      },
+    });
+
+    await commentsCollection.updateMany(
+      { userId: auth.userId, isDeleted: false },
+      { $set: { authorStaffRole: requestedRole, updatedAt: new Date() } },
+    );
+    await forumPostsCollection.updateMany(
+      { authorUserId: auth.userId, isDeleted: false },
+      { $set: { authorStaffRole: requestedRole, updatedAt: new Date().toISOString() } },
+    );
+
+    return res.json({
+      staffRole: requestedRole,
+      staffRolePreview: requestedRole,
+      staffRolePreviewOptions: options,
+    });
+  } catch (error) {
+    console.error("Failed to update staff role preview", error);
+    return res.status(500).json({ error: "Failed to update staff role preview" });
   }
 });
 

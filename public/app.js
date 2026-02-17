@@ -86,7 +86,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.63";
+const VERSION = "1.3.64";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -177,6 +177,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.64",
+    date: "2026-02-17",
+    items: [
+      "Added the new `Operator` staff role and mapped Smurfis to Operator for profile/group badge display.",
+      "Added staff role preview controls with tiered fallback paths (Operator > Developer > Administrator > Moderator > Helper > Staff).",
+      "Applied Operator staff role styling with the same thematic visual treatment as Developer.",
+    ],
+  },
   {
     version: "1.3.63",
     date: "2026-02-17",
@@ -1392,6 +1401,7 @@ function isStaffLabel(label = "") {
   const text = String(label || "").trim().toLowerCase();
   if (!text) return false;
   if (text === "staff") return true;
+  if (text === "operator" || text === "op") return true;
   if (text === "developer" || text === "dev") return true;
   if (text === "admin" || text === "administrator") return true;
   if (text === "moderator" || text === "mod") return true;
@@ -1407,6 +1417,7 @@ function toStaffPillTitle(value = "") {
     .toLowerCase()
     .replace(/[\s_-]+/g, "");
   if (!key) return "";
+  if (key === "operator" || key === "op") return "Operator";
   if (key === "moderator" || key === "mod") return "Moderator";
   if (key === "developer" || key === "dev") return "Developer";
   if (key === "admin" || key === "administrator") return "Administrator";
@@ -1421,6 +1432,7 @@ function normalizeStaffRoleKey(value = "") {
     .toLowerCase()
     .replace(/[\s_-]+/g, "");
   if (!key) return "";
+  if (key === "operator" || key === "op") return "op";
   if (key === "developer" || key === "dev") return "dev";
   if (key === "admin" || key === "administrator") return "admin";
   if (key === "moderator" || key === "mod") return "mod";
@@ -1457,6 +1469,7 @@ function resolveStaffRoleClass(entry) {
 function resolveStaffPillTitle(entry) {
   if (!entry) return "";
   const explicitRole = resolveStaffRoleKey(entry);
+  if (explicitRole === "op") return "Operator";
   if (explicitRole === "dev") return "Developer";
   if (explicitRole === "admin") return "Administrator";
   if (explicitRole === "mod") return "Moderator";
@@ -2313,6 +2326,13 @@ function CommentThread({
         ownedRank,
         availableTitles: availableTitles.length > 0 ? availableTitles : fallbackTitles,
         selectedTitle: selectedTitle || ownedRank || "Unregistered",
+        staffRole: String(data?.staffRole || ""),
+        staffRoleBase: String(data?.staffRoleBase || ""),
+        canPreviewStaffRole: Boolean(data?.canPreviewStaffRole),
+        staffRolePreview: String(data?.staffRolePreview || ""),
+        staffRolePreviewOptions: Array.isArray(data?.staffRolePreviewOptions)
+          ? data.staffRolePreviewOptions
+          : [],
         canToggleOwnedBadges: Boolean(data?.canToggleOwnedBadges),
         showAllOwnedRankBadges: data?.showAllOwnedRankBadges !== false,
         selectedOwnedBadge: String(data?.selectedOwnedBadge || ""),
@@ -2870,6 +2890,11 @@ function CommentThread({
       isStaffLabel(authorName) ||
       isStaffLabel(rank.label);
     let availableTitles = [];
+    let staffRole = String(entry?.authorStaffRole || "");
+    let staffRoleBase = "";
+    let canPreviewStaffRole = false;
+    let staffRolePreview = "";
+    let staffRolePreviewOptions = [];
     let selectedTitle = rank.label;
     let ownedRank = normalizeOwnedRankLabel(entry?.authorOwnedRank || rank.label);
     let canToggleOwnedBadges = false;
@@ -2892,6 +2917,13 @@ function CommentThread({
     if (isOwn && isSignedIn) {
       const settings = await loadOwnProfileTitleSettings();
       if (settings) {
+        staffRole = String(settings.staffRole || staffRole);
+        staffRoleBase = String(settings.staffRoleBase || "");
+        canPreviewStaffRole = Boolean(settings.canPreviewStaffRole);
+        staffRolePreview = String(settings.staffRolePreview || "");
+        staffRolePreviewOptions = Array.isArray(settings.staffRolePreviewOptions)
+          ? settings.staffRolePreviewOptions
+          : [];
         ownedRank = normalizeOwnedRankLabel(settings.ownedRank);
         availableTitles = settings.availableTitles;
         selectedTitle = settings.selectedTitle || rank.label;
@@ -2941,7 +2973,11 @@ function CommentThread({
       selectedOwnedBadge,
       ownedBadgeOptions,
       staff: isStaffUser && showStaffBadge && isStaffLabel(selectedTitle),
-      staffRole: String(entry?.authorStaffRole || ""),
+      staffRole,
+      staffRoleBase,
+      canPreviewStaffRole,
+      staffRolePreview,
+      staffRolePreviewOptions,
       username: formatUsernameForDisplay(entry.authorUsername),
       isOwn,
       isStaffUser,
@@ -2981,6 +3017,59 @@ function CommentThread({
       return;
     }
     openProfileCard(entry);
+  }
+
+  async function updateOwnStaffRolePreview(nextRole) {
+    if (!profileUser?.isOwn || !profileUser?.canPreviewStaffRole || !nextRole) return;
+    const current = String(profileUser.staffRolePreview || profileUser.staffRole || "");
+    if (nextRole === current) return;
+    setProfileTitleSaving(true);
+    setProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/staff-role-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ staffRolePreview: nextRole }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save group badge preview.");
+      }
+      const data = await response.json();
+      const staffRole = String(data?.staffRole || nextRole);
+      const options = Array.isArray(data?.staffRolePreviewOptions) ? data.staffRolePreviewOptions : [];
+      setProfileUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              staffRole,
+              staffRolePreview: String(data?.staffRolePreview || staffRole),
+              staffRolePreviewOptions: options.length > 0 ? options : prev.staffRolePreviewOptions,
+            }
+          : prev,
+      );
+      setComments((prev) =>
+        prev.map((comment) => {
+          if (!comment) return comment;
+          const nextComment =
+            comment.userId === userId ? { ...comment, authorStaffRole: staffRole } : comment;
+          const replies = Array.isArray(nextComment.replies) ? nextComment.replies : [];
+          if (replies.length === 0) return nextComment;
+          return {
+            ...nextComment,
+            replies: replies.map((reply) =>
+              reply?.userId === userId ? { ...reply, authorStaffRole: staffRole } : reply,
+            ),
+          };
+        }),
+      );
+      setProfileTitleStatus("Saved.");
+      setTimeout(() => setProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setProfileTitleStatus(error?.message || "Failed to save group badge preview.");
+    } finally {
+      setProfileTitleSaving(false);
+    }
   }
 
   async function copyProfileMetaValue(label, value) {
@@ -3479,6 +3568,23 @@ function CommentThread({
                         ? profileUser.availableTitles
                         : ["Unregistered"]
                       ).map((title) => html`<option value=${title}>${getRankDisplayLabel(title)}</option>`)}
+                    </select>
+                  </label>`
+                : html``}
+              ${profileUser.isOwn &&
+              profileUser.canPreviewStaffRole &&
+              Array.isArray(profileUser.staffRolePreviewOptions) &&
+              profileUser.staffRolePreviewOptions.length > 0
+                ? html`<label className="profile-card-title-picker">
+                    <span className="muted">Group badge preview</span>
+                    <select
+                      value=${profileUser.staffRolePreview || profileUser.staffRole || ""}
+                      disabled=${profileTitleSaving}
+                      onChange=${(event) => updateOwnStaffRolePreview(event.target.value)}
+                    >
+                      ${profileUser.staffRolePreviewOptions.map((role) => html`<option value=${role}>
+                        ${toStaffPillTitle(role) || role}
+                      </option>`)}
                     </select>
                   </label>`
                 : html``}
@@ -5524,6 +5630,13 @@ function ForumPage({ isAdmin = false }) {
         ownedRank,
         availableTitles: availableTitles.length > 0 ? availableTitles : fallbackTitles,
         selectedTitle: selectedTitle || ownedRank || "Unregistered",
+        staffRole: String(data?.staffRole || ""),
+        staffRoleBase: String(data?.staffRoleBase || ""),
+        canPreviewStaffRole: Boolean(data?.canPreviewStaffRole),
+        staffRolePreview: String(data?.staffRolePreview || ""),
+        staffRolePreviewOptions: Array.isArray(data?.staffRolePreviewOptions)
+          ? data.staffRolePreviewOptions
+          : [],
         canToggleOwnedBadges: Boolean(data?.canToggleOwnedBadges),
         showAllOwnedRankBadges: data?.showAllOwnedRankBadges !== false,
         selectedOwnedBadge: String(data?.selectedOwnedBadge || ""),
@@ -5610,6 +5723,11 @@ function ForumPage({ isAdmin = false }) {
       isStaffLabel(authorUsername) ||
       isStaffLabel(rankLabel);
     let availableTitles = [];
+    let staffRole = String(entry?.authorStaffRole || "");
+    let staffRoleBase = "";
+    let canPreviewStaffRole = false;
+    let staffRolePreview = "";
+    let staffRolePreviewOptions = [];
     let selectedTitle = rankLabel;
     let ownedRank = normalizeOwnedRankLabel(entry?.authorOwnedRank || rankLabel);
     let canToggleOwnedBadges = false;
@@ -5632,6 +5750,13 @@ function ForumPage({ isAdmin = false }) {
     if (isOwn && isSignedIn) {
       const settings = await loadOwnForumProfileTitleSettings();
       if (settings) {
+        staffRole = String(settings.staffRole || staffRole);
+        staffRoleBase = String(settings.staffRoleBase || "");
+        canPreviewStaffRole = Boolean(settings.canPreviewStaffRole);
+        staffRolePreview = String(settings.staffRolePreview || "");
+        staffRolePreviewOptions = Array.isArray(settings.staffRolePreviewOptions)
+          ? settings.staffRolePreviewOptions
+          : [];
         ownedRank = normalizeOwnedRankLabel(settings.ownedRank);
         availableTitles = settings.availableTitles;
         selectedTitle = settings.selectedTitle || rankLabel;
@@ -5682,7 +5807,11 @@ function ForumPage({ isAdmin = false }) {
       selectedOwnedBadge,
       ownedBadgeOptions,
       staff: isStaffUser && showStaffBadge && isStaffLabel(selectedTitle),
-      staffRole: String(entry?.authorStaffRole || ""),
+      staffRole,
+      staffRoleBase,
+      canPreviewStaffRole,
+      staffRolePreview,
+      staffRolePreviewOptions,
       isStaffUser,
       isOwn,
       availableTitles,
@@ -6148,6 +6277,23 @@ function ForumPage({ isAdmin = false }) {
                 ? forumProfileUser.availableTitles
                 : ["Unregistered"]
               ).map((title) => html`<option value=${title}>${getRankDisplayLabel(title)}</option>`)}
+            </select>
+          </label>`
+        : html``}
+      ${forumProfileUser.isOwn &&
+      forumProfileUser.canPreviewStaffRole &&
+      Array.isArray(forumProfileUser.staffRolePreviewOptions) &&
+      forumProfileUser.staffRolePreviewOptions.length > 0
+        ? html`<label className="profile-card-title-picker">
+            <span className="muted">Group badge preview</span>
+            <select
+              value=${forumProfileUser.staffRolePreview || forumProfileUser.staffRole || ""}
+              disabled=${forumProfileTitleSaving}
+              onChange=${(event) => updateOwnForumStaffRolePreview(event.target.value)}
+            >
+              ${forumProfileUser.staffRolePreviewOptions.map((role) => html`<option value=${role}>
+                ${toStaffPillTitle(role) || role}
+              </option>`)}
             </select>
           </label>`
         : html``}
@@ -7542,6 +7688,59 @@ function renderStaffBadge(entry) {
 function renderLinkedStatusIcon(linked = false) {
   if (linked) {
     return html`<span className="link-state-icon link-state-icon-verified" aria-hidden="true">✓</span>`;
+  }
+
+  async function updateOwnForumStaffRolePreview(nextRole) {
+    if (!forumProfileUser?.isOwn || !forumProfileUser?.canPreviewStaffRole || !nextRole) return;
+    const current = String(forumProfileUser.staffRolePreview || forumProfileUser.staffRole || "");
+    if (nextRole === current) return;
+    setForumProfileTitleSaving(true);
+    setForumProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/staff-role-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ staffRolePreview: nextRole }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save group badge preview.");
+      }
+      const data = await response.json();
+      const staffRole = String(data?.staffRole || nextRole);
+      const options = Array.isArray(data?.staffRolePreviewOptions) ? data.staffRolePreviewOptions : [];
+      setForumProfileUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              staffRole,
+              staffRolePreview: String(data?.staffRolePreview || staffRole),
+              staffRolePreviewOptions: options.length > 0 ? options : prev.staffRolePreviewOptions,
+            }
+          : prev,
+      );
+      setPosts((prev) =>
+        prev.map((post) => {
+          const postAuthorUserId = String(post?.authorUserId || post?.createdBy || "");
+          return postAuthorUserId === String(userId || "")
+            ? { ...post, authorStaffRole: staffRole }
+            : post;
+        }),
+      );
+      setSelectedPost((prev) => {
+        if (!prev) return prev;
+        const postAuthorUserId = String(prev?.authorUserId || prev?.createdBy || "");
+        return postAuthorUserId === String(userId || "")
+          ? { ...prev, authorStaffRole: staffRole }
+          : prev;
+      });
+      setForumProfileTitleStatus("Saved.");
+      setTimeout(() => setForumProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setForumProfileTitleStatus(error?.message || "Failed to save group badge preview.");
+    } finally {
+      setForumProfileTitleSaving(false);
+    }
   }
   return html`<img
     className="link-state-icon link-state-icon-warning"

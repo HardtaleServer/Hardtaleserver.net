@@ -12,6 +12,7 @@ function toStaffPillTitle(value) {
     .toLowerCase()
     .replace(/[\s_-]+/g, "");
   if (!normalized) return "";
+  if (normalized === "operator" || normalized === "op") return "Operator";
   if (normalized === "moderator" || normalized === "mod") return "Moderator";
   if (normalized === "developer" || normalized === "dev") return "Developer";
   if (normalized === "admin" || normalized === "administrator") return "Administrator";
@@ -26,6 +27,7 @@ function normalizeStaffRoleKey(value = "") {
     .toLowerCase()
     .replace(/[\s_-]+/g, "");
   if (!key) return "";
+  if (key === "operator" || key === "op") return "op";
   if (key === "developer" || key === "dev") return "dev";
   if (key === "admin" || key === "administrator") return "admin";
   if (key === "moderator" || key === "mod") return "mod";
