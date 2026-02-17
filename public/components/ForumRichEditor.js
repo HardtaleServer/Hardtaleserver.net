@@ -60,10 +60,11 @@ export default function ForumRichEditor({
   draftScope = "",
   autosaveEnabled = true,
   showTemplatePicker = true,
+  templateOptions = null,
   initialMode = "edit",
+  showModeTabs = true,
 }) {
   const textareaRef = useRef(null);
-  const fileRef = useRef(null);
   const emojiPickerRef = useRef(null);
   const undoStackRef = useRef([]);
   const redoStackRef = useRef([]);
@@ -81,6 +82,28 @@ export default function ForumRichEditor({
   const tooShort = count > 0 && count < minLength;
   const canUndo = undoStackRef.current.length > 0;
   const canRedo = redoStackRef.current.length > 0;
+  const activeMode = showModeTabs ? mode : "edit";
+  const templates = Array.isArray(templateOptions) && templateOptions.length > 0
+    ? templateOptions
+    : [
+        {
+          id: "help",
+          label: "Help request",
+          content:
+            "## Help Request\n\n### Issue\nDescribe your issue.\n\n### Tried\n- Step 1\n- Step 2\n\n### Expected\nWhat should happen?",
+        },
+        {
+          id: "bug",
+          label: "Bug report",
+          content:
+            "## Bug Report\n\n### Summary\nShort summary.\n\n### Steps to Reproduce\n1. First step\n2. Second step\n\n### Expected\n\n### Actual\n",
+        },
+        {
+          id: "appeal",
+          label: "Appeal",
+          content: "## Appeal\n\n### Context\nWhat happened?\n\n### Why Appeal\n\n### Additional Notes\n",
+        },
+      ];
 
   function touchHistory() {
     setHistoryTick((prev) => prev + 1);
@@ -258,27 +281,21 @@ export default function ForumRichEditor({
 
   function applyTemplate(valueKey) {
     if (!valueKey || !onChange) return;
-    if (valueKey === "help") {
-      applyEditorValue(
-        "## Help Request\n\n### Issue\nDescribe your issue.\n\n### Tried\n- Step 1\n- Step 2\n\n### Expected\nWhat should happen?",
-      );
-    } else if (valueKey === "bug") {
-      applyEditorValue(
-        "## Bug Report\n\n### Summary\nShort summary.\n\n### Steps to Reproduce\n1. First step\n2. Second step\n\n### Expected\n\n### Actual\n",
-      );
-    } else if (valueKey === "appeal") {
-      applyEditorValue("## Appeal\n\n### Context\nWhat happened?\n\n### Why Appeal\n\n### Additional Notes\n");
-    }
+    const selected = templates.find((entry) => String(entry?.id || "") === valueKey);
+    if (!selected) return;
+    applyEditorValue(String(selected.content || ""));
   }
 
   return html`
     <div className="forum-editor">
       <div className="forum-editor-mode-row">
-        <div className="forum-editor-mode-group" role="tablist" aria-label="Editor mode">
-          <button type="button" className=${`ghost-btn ${mode === "edit" ? "active" : ""}`} onClick=${() => setMode("edit")}>Edit</button>
-          <button type="button" className=${`ghost-btn ${mode === "preview" ? "active" : ""}`} onClick=${() => setMode("preview")}>Preview</button>
-          <button type="button" className=${`ghost-btn ${mode === "split" ? "active" : ""}`} onClick=${() => setMode("split")}>Split</button>
-        </div>
+        ${showModeTabs
+          ? html`<div className="forum-editor-mode-group" role="tablist" aria-label="Editor mode">
+              <button type="button" className=${`ghost-btn ${mode === "edit" ? "active" : ""}`} onClick=${() => setMode("edit")}>Edit</button>
+              <button type="button" className=${`ghost-btn ${mode === "preview" ? "active" : ""}`} onClick=${() => setMode("preview")}>Preview</button>
+              <button type="button" className=${`ghost-btn ${mode === "split" ? "active" : ""}`} onClick=${() => setMode("split")}>Split</button>
+            </div>`
+          : html`<div className="forum-editor-mode-group muted">Write mode</div>`}
         <button type="button" className="ghost-btn forum-editor-toolbar-toggle" onClick=${() => setToolbarExpanded((prev) => !prev)}>Tools</button>
         <div className="forum-editor-status muted">${draftStatus}</div>
       </div>
@@ -318,26 +335,6 @@ export default function ForumRichEditor({
             insert(`![${alt}](${url})`);
           }}
         ><${ToolIcon} name="image" /></button>
-        <button type="button" className="ghost-btn" onClick=${() => fileRef.current && fileRef.current.click()}>Upload</button>
-        <input
-          ref=${fileRef}
-          type="file"
-          accept="image/*"
-          hidden
-          onChange=${(event) => {
-            const file = event.target.files?.[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = () => {
-              const result = String(reader.result || "");
-              if (!result) return;
-              insert(`![${file.name || "image"}](${result})`);
-            };
-            reader.readAsDataURL(file);
-            event.target.value = "";
-          }}
-        />
-        <button type="button" className="ghost-btn forum-editor-icon-btn" onClick=${() => insert("\n---\n")} title="Horizontal rule"><${ToolIcon} name="hr" /></button>
         <button type="button" className="ghost-btn forum-editor-icon-btn" onClick=${() => setShowEmoji((prev) => !prev)} title="Emoji"><${ToolIcon} name="emoji" /></button>
         <button type="button" className="ghost-btn" onClick=${() => applyEditorValue(clearMarkdownFormatting(value))}>Clear</button>
       </div>
@@ -356,15 +353,15 @@ export default function ForumRichEditor({
             <span className="muted">Insert template</span>
             <select onChange=${(event) => applyTemplate(event.target.value)}>
               <option value="">Choose template</option>
-              <option value="help">Help request</option>
-              <option value="bug">Bug report</option>
-              <option value="appeal">Appeal</option>
+              ${templates.map(
+                (entry) => html`<option key=${entry.id} value=${entry.id}>${entry.label}</option>`,
+              )}
             </select>
           </label>`
         : html``}
 
-      <div className=${`forum-editor-body mode-${mode}`.trim()}>
-        ${(mode === "edit" || mode === "split")
+      <div className=${`forum-editor-body mode-${activeMode}`.trim()}>
+        ${(activeMode === "edit" || activeMode === "split")
           ? html`<textarea
               ref=${textareaRef}
               className="forum-editor-textarea"
@@ -376,7 +373,7 @@ export default function ForumRichEditor({
               onInput=${(event) => applyEditorValue(event.target.value)}
             ></textarea>`
           : html``}
-        ${(mode === "preview" || mode === "split")
+        ${(activeMode === "preview" || activeMode === "split")
           ? html`<div className="forum-editor-preview"><${ForumRenderedMarkdown} value=${value} /></div>`
           : html``}
       </div>

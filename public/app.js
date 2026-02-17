@@ -19,6 +19,7 @@ import AppRoutes from "./components/AppRoutes.js";
 import RankBadge from "./components/RankBadge.js";
 import ProfileAchievementsCard from "./components/ProfileAchievementsCard.js";
 import ForumRichEditor, { ForumRenderedMarkdown } from "./components/ForumRichEditor.js";
+import ToastSystem, { APP_TOAST_EVENT, createToastPayload, emitAppToast } from "./components/ToastSystem.js";
 import { markdownExcerpt } from "./components/forumMarkdown.js";
 import { getRankDisplayLabel, getRankIconType } from "./components/rankConfig.js";
 import {
@@ -58,6 +59,9 @@ const LAST_NON_LINK_ROUTE_KEY = "hardtale-last-non-link-route";
 const LINK_REMINDER_LAST_SHOWN_PREFIX = "hardtale-link-reminder-last-shown";
 const LINK_REMINDER_READ_PREFIX = "hardtale-link-reminder-read";
 const LINK_REMINDER_LOCAL_ID_PREFIX = "local-link-reminder";
+const SUPPORT_ERROR_CONTEXTS_KEY = "hardtale-support-error-contexts";
+const SUPPORT_ERROR_MARKER_START = "[ATTACHED_ERROR_CONTEXT]";
+const SUPPORT_ERROR_MARKER_END = "[/ATTACHED_ERROR_CONTEXT]";
 const TICKET_COOLDOWN_KEY = "hardtale-ticket-cooldown";
 const TICKET_COOLDOWN_MS = 60 * 60 * 1000;
 const LOGO_SIDE_KEY = "hardtale-logo-side";
@@ -68,9 +72,13 @@ const DESKTOP_STICKY_WIDE_KEY = "hardtale-desktop-sticky-wide";
 const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
+const TOAST_SHAPE_KEY = "hardtale-toast-shape";
 const VERSION = "1.3.39";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
+const COPYRIGHT_ICON_SVG = "/Images/SVGs/Copyright.svg";
+const FEATURED_BADGE_ICON_SVG = "/Images/SVGs/Featured.svg";
+const DELETE_ICON_SVG = "/Images/SVGs/Delete.svg";
 const LINKED_STATUS_ICON_SVG = "/Images/SVGs/LINKED.svg";
 const UNLINKED_STATUS_ICON_SVG = "/Images/SVGs/UNLINKED.svg";
 const DEFAULT_PROFILE_AVATAR_SVG = "/Images/SVGs/DEFAULT_PROFILE_AVATAR.svg";
@@ -695,6 +703,65 @@ function buildDailyLinkReminderNotification(userId) {
   };
 }
 
+function readSupportErrorContexts() {
+  try {
+    const raw = localStorage.getItem(SUPPORT_ERROR_CONTEXTS_KEY);
+    const parsed = JSON.parse(raw || "[]");
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((entry) => ({
+        id: String(entry?.id || "").trim(),
+        title: String(entry?.title || "System Error").trim(),
+        message: String(entry?.message || "").trim(),
+        createdAt: String(entry?.createdAt || new Date().toISOString()),
+      }))
+      .filter((entry) => entry.id && entry.message)
+      .slice(-20)
+      .reverse();
+  } catch {
+    return [];
+  }
+}
+
+function writeSupportErrorContexts(list) {
+  try {
+    localStorage.setItem(SUPPORT_ERROR_CONTEXTS_KEY, JSON.stringify(Array.isArray(list) ? list : []));
+  } catch {
+    // noop
+  }
+}
+
+function addSupportErrorContext(entry) {
+  const next = {
+    id: `errctx-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+    title: String(entry?.title || "System Error").trim() || "System Error",
+    message: String(entry?.message || "").trim(),
+    createdAt: String(entry?.createdAt || new Date().toISOString()),
+  };
+  if (!next.message) return "";
+  const existing = readSupportErrorContexts().reverse();
+  const merged = [...existing, next].slice(-20);
+  writeSupportErrorContexts(merged);
+  return next.id;
+}
+
+function buildTicketBodyWithAttachedError(baseBody, errorContext) {
+  const body = String(baseBody || "").trim();
+  if (!errorContext || !errorContext.message) return body;
+  const title = String(errorContext.title || "System Error").trim() || "System Error";
+  const createdAt = String(errorContext.createdAt || new Date().toISOString());
+  const details = String(errorContext.message || "").trim();
+  const marker = [
+    SUPPORT_ERROR_MARKER_START,
+    `Title: ${title}`,
+    `When: ${createdAt}`,
+    "Details:",
+    details,
+    SUPPORT_ERROR_MARKER_END,
+  ].join("\n");
+  return `${body}\n\n${marker}`.trim();
+}
+
 function serializeCartItems(cart = []) {
   return cart
     .map((item) => ({ id: String(item?.id || "") }))
@@ -963,6 +1030,23 @@ function useUiFlash() {
   return { uiFlashEnabled, setUiFlashEnabled };
 }
 
+function useToastShape() {
+  const [toastShape, setToastShape] = useState(
+    localStorage.getItem(TOAST_SHAPE_KEY) === "rounded" ? "rounded" : "block",
+  );
+
+  useEffect(() => {
+    const normalized = toastShape === "rounded" ? "rounded" : "block";
+    if (normalized !== toastShape) {
+      setToastShape(normalized);
+      return;
+    }
+    localStorage.setItem(TOAST_SHAPE_KEY, normalized);
+  }, [toastShape]);
+
+  return { toastShape, setToastShape };
+}
+
 function useNews() {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1208,7 +1292,7 @@ function NewsCard({ item, focusCommentId, focusReplyId, autoOpenComments }) {
         : html``}
       <div className="news-header">
         <div className="news-title-row">
-          ${item.featured ? html`<span className="news-star" title="Featured">*</span>` : html``}
+          ${item.featured ? renderFeaturedBadge(false) : html``}
           <h3>${item.title}</h3>
         </div>
       </div>
@@ -1217,34 +1301,38 @@ function NewsCard({ item, focusCommentId, focusReplyId, autoOpenComments }) {
           ? html`<p className="news-body-paragraph">${visibleDescription}</p>`
           : renderNewsRichText(visibleDescription)}
       </div>
-      ${hasLongDescription
-        ? html`<button
-            type="button"
-            className="ghost-btn news-read-more-btn"
-            onClick=${() => setExpandedDescription((prev) => !prev)}
-          >
-            ${expandedDescription ? "Show less" : "Read more"}
-          </button>`
-        : html``}
       <div className="news-meta">
-        <span>
-          By <${AuthorName} value=${item.author} isStaffLabel=${isStaffLabel} />
-        </span>
-        <${TimestampText} value=${item.createdAt} formatTimestamp=${formatTimestamp} />
-        <div className="news-meta-actions">
-          ${item.imageUrl
+        <div className="news-meta-left">
+          <${TimestampText} value=${item.createdAt} formatTimestamp=${formatTimestamp} />
+        </div>
+        <div className="news-meta-right">
+          <span className="news-meta-author">
+            By <${AuthorName} value=${item.author} isStaffLabel=${isStaffLabel} />
+          </span>
+          <div className="news-meta-actions">
+            ${item.imageUrl
+              ? html`<button
+                  type="button"
+                  className="button ghost-btn news-image-preview-btn"
+                  onClick=${() => setShowImagePreview(true)}
+                >
+                  View image
+                </button>`
+              : html``}
+            ${item.readMoreUrl
+              ? html`<a href=${item.readMoreUrl} target="_blank" rel="noreferrer">
+                  Read source
+                </a>`
+              : html``}
+          </div>
+          ${hasLongDescription
             ? html`<button
                 type="button"
-                className="button ghost-btn news-image-preview-btn"
-                onClick=${() => setShowImagePreview(true)}
+                className="ghost-btn news-read-more-btn"
+                onClick=${() => setExpandedDescription((prev) => !prev)}
               >
-                View image
+                ${expandedDescription ? "Show less >" : "Read more >"}
               </button>`
-            : html``}
-          ${item.readMoreUrl
-            ? html`<a href=${item.readMoreUrl} target="_blank" rel="noreferrer">
-                Read source
-              </a>`
             : html``}
         </div>
       </div>
@@ -2771,12 +2859,12 @@ function CommentThread({
                                   Edit
                                 </button>
                                 <button
-                                  className="ghost-btn"
+                                  className="ghost-btn delete-action-btn"
                                   type="button"
                                   onMouseDown=${(event) => triggerFlash(event.currentTarget)}
                                   onClick=${() => deleteComment(comment.id)}
                                 >
-                                  Delete
+                                  ${renderDeleteLabel("Delete")}
                                 </button>`
                               : html``}
                             ${isSignedIn && !commentsLocked
@@ -2919,12 +3007,12 @@ function CommentThread({
                                                   Edit
                                                 </button>
                                                 <button
-                                                  className="ghost-btn"
+                                                  className="ghost-btn delete-action-btn"
                                                   type="button"
                                                   onMouseDown=${(event) => triggerFlash(event.currentTarget)}
                                                   onClick=${() => deleteReply(comment.id, reply.id)}
                                                 >
-                                                  Delete
+                                                  ${renderDeleteLabel("Delete")}
                                                 </button>`
                                               : html``}
                                             ${isSignedIn && !commentsLocked
@@ -3465,7 +3553,11 @@ function AdminPanel({
       const data = await response.json();
       onNewsUpdate(Array.isArray(data.news) ? data.news : []);
     } catch (err) {
-      alert("Failed to delete news.");
+      emitAppToast({
+        kind: "error",
+        title: "Delete failed",
+        message: "Failed to delete news.",
+      });
     }
   }
 
@@ -3484,7 +3576,11 @@ function AdminPanel({
       const data = await response.json();
       onNewsUpdate(Array.isArray(data.news) ? data.news : []);
     } catch (err) {
-      alert("Failed to update featured status.");
+      emitAppToast({
+        kind: "error",
+        title: "Update failed",
+        message: "Failed to update featured status.",
+      });
     }
   }
 
@@ -3503,7 +3599,11 @@ function AdminPanel({
       const data = await response.json();
       onNewsUpdate(Array.isArray(data.news) ? data.news : []);
     } catch (err) {
-      alert("Failed to update comment lock.");
+      emitAppToast({
+        kind: "error",
+        title: "Update failed",
+        message: "Failed to update comment lock.",
+      });
     }
   }
 
@@ -3526,7 +3626,11 @@ function AdminPanel({
         Array.isArray(data.notifications) ? data.notifications : [],
       );
     } catch (err) {
-      alert("Failed to delete notification.");
+      emitAppToast({
+        kind: "error",
+        title: "Delete failed",
+        message: "Failed to delete notification.",
+      });
     }
   }
 
@@ -3551,7 +3655,11 @@ function AdminPanel({
         Array.isArray(data.notifications) ? data.notifications : [],
       );
     } catch (err) {
-      alert("Failed to update featured status.");
+      emitAppToast({
+        kind: "error",
+        title: "Update failed",
+        message: "Failed to update featured status.",
+      });
     }
   }
 
@@ -3675,18 +3783,16 @@ function AdminPanel({
               (item) => html`<article key=${item.id} className="news-card">
                 <div className="news-header">
                   <div className="news-title-row">
-                    ${item.featured
-                      ? html`<span className="news-star" title="Featured">â˜…</span>`
-                      : html``}
+                    ${item.featured ? renderFeaturedBadge(false) : html``}
                     <h3>${item.title}</h3>
                   </div>
                   <button
-                    className="ghost-btn"
+                    className="ghost-btn delete-action-btn"
                     type="button"
                     onMouseDown=${(event) => triggerFlash(event.currentTarget)}
                     onClick=${() => deleteNews(item.id)}
                   >
-                    Delete
+                    ${renderDeleteLabel("Delete")}
                   </button>
                 </div>
                 <p>${item.description}</p>
@@ -3746,18 +3852,16 @@ function AdminPanel({
               (item) => html`<article key=${item.id} className="news-card">
                 <div className="news-header">
                   <div className="news-title-row">
-                    ${item.featured
-                      ? html`<span className="news-star" title="Featured">â˜…</span>`
-                      : html``}
+                    ${item.featured ? renderFeaturedBadge(false) : html``}
                     <h3>${item.title}</h3>
                   </div>
                   <button
-                    className="ghost-btn"
+                    className="ghost-btn delete-action-btn"
                     type="button"
                     onMouseDown=${(event) => triggerFlash(event.currentTarget)}
                     onClick=${() => deleteNotification(item.id)}
                   >
-                    Delete
+                    ${renderDeleteLabel("Delete")}
                   </button>
                 </div>
                 <p>${item.message}</p>
@@ -3806,6 +3910,8 @@ function SettingsMenu({
   setDesktopStickyLogoStyle,
   uiFlashEnabled,
   setUiFlashEnabled,
+  toastShape,
+  setToastShape,
   onOpenChange,
   isMobile,
 }) {
@@ -3971,6 +4077,16 @@ function SettingsMenu({
                         title="Toggle click flash"
                       ></button>
                     </div>
+                  </div>
+                  <div className="settings-row">
+                    <label>Toast corners</label>
+                    <select
+                      value=${toastShape}
+                      onChange=${(event) => setToastShape(event.target.value)}
+                    >
+                      <option value="block">Blocky</option>
+                      <option value="rounded">Rounded</option>
+                    </select>
                   </div>
                 `
               : html``}
@@ -4538,6 +4654,7 @@ function SupportPage({ isAdmin }) {
   const { getToken, isSignedIn } = useAuth();
   const { openSignIn, openUserProfile } = useClerk();
   const navigate = useNavigate();
+  const location = useLocation();
   const [showTicketModal, setShowTicketModal] = useState(true);
   const [tickets, setTickets] = useState([]);
   const [selectedTicketId, setSelectedTicketId] = useState("");
@@ -4547,6 +4664,8 @@ function SupportPage({ isAdmin }) {
   const [newSubject, setNewSubject] = useState("");
   const [newCategory, setNewCategory] = useState("support");
   const [newBody, setNewBody] = useState("");
+  const [errorContextOptions, setErrorContextOptions] = useState(() => readSupportErrorContexts());
+  const [selectedErrorContextId, setSelectedErrorContextId] = useState("");
   const [chatDraft, setChatDraft] = useState("");
   const [nextStatus, setNextStatus] = useState("pending");
 
@@ -4599,10 +4718,23 @@ function SupportPage({ isAdmin }) {
     loadTicketDetail(selectedTicketId);
   }, [selectedTicketId, isSignedIn]);
 
+  useEffect(() => {
+    const nextOptions = readSupportErrorContexts();
+    setErrorContextOptions(nextOptions);
+    const attachErrorId = String(new URLSearchParams(location.search || "").get("attachError") || "").trim();
+    if (attachErrorId && nextOptions.some((entry) => entry.id === attachErrorId)) {
+      setSelectedErrorContextId(attachErrorId);
+    }
+  }, [location.search, showTicketModal]);
+
   async function submitTicket(event) {
     event.preventDefault();
     if (!isSignedIn) return;
     if (!newSubject.trim() || !newBody.trim()) return;
+    const selectedErrorContext = errorContextOptions.find(
+      (entry) => entry.id === selectedErrorContextId,
+    );
+    const ticketBody = buildTicketBodyWithAttachedError(newBody, selectedErrorContext);
     setStatus("Creating ticket...");
     try {
       const response = await apiFetchWithToken(getToken, true, "/api/forum/tickets", {
@@ -4611,7 +4743,7 @@ function SupportPage({ isAdmin }) {
         body: JSON.stringify({
           subject: newSubject,
           category: newCategory,
-          body: newBody,
+          body: ticketBody,
         }),
       });
       if (!response.ok) throw new Error("Failed");
@@ -4620,6 +4752,7 @@ function SupportPage({ isAdmin }) {
       setNewSubject("");
       setNewCategory("support");
       setNewBody("");
+      setSelectedErrorContextId("");
       setStatus("Ticket created.");
       await loadTickets();
       if (created?.id) {
@@ -4728,6 +4861,9 @@ function SupportPage({ isAdmin }) {
                 setNewCategory=${setNewCategory}
                 newBody=${newBody}
                 setNewBody=${setNewBody}
+                errorContextOptions=${errorContextOptions}
+                selectedErrorContextId=${selectedErrorContextId}
+                setSelectedErrorContextId=${setSelectedErrorContextId}
                 status=${status}
               />
 
@@ -4759,11 +4895,102 @@ function SupportPage({ isAdmin }) {
   `;
 }
 
+function getForumTemplateOptions(sectionId) {
+  const key = String(sectionId || "").trim();
+  if (key === "bug-reports") {
+    return [
+      {
+        id: "bug-repro",
+        label: "Bug reproduction report",
+        content:
+          "## Bug Report\n\n### Summary\nShort summary of the bug.\n\n### Environment\n- Game version:\n- Region:\n- Device/OS:\n\n### Steps to Reproduce\n1. Step one\n2. Step two\n3. Step three\n\n### Expected Result\n\n### Actual Result\n\n### Screenshots / Video\n",
+      },
+      {
+        id: "bug-crash",
+        label: "Crash report",
+        content:
+          "## Crash Report\n\n### What happened\nDescribe the crash.\n\n### Last action before crash\n\n### Error text\nPaste exact error text if available.\n\n### Frequency\n- [ ] Once\n- [ ] Sometimes\n- [ ] Every time\n\n### Extra context\n",
+      },
+    ];
+  }
+  if (key === "help-feedback") {
+    return [
+      {
+        id: "help-account",
+        label: "Account help",
+        content:
+          "## Account Help\n\n### Issue\nWhat problem are you having?\n\n### Account details\n- Username:\n- Linked UUID:\n\n### What you tried\n- Step 1\n- Step 2\n\n### Expected outcome\n",
+      },
+      {
+        id: "help-gameplay",
+        label: "Gameplay question",
+        content:
+          "## Gameplay Question\n\n### Question\nWhat do you need help with?\n\n### Current progress\n\n### What you already tried\n\n### Extra details\n",
+      },
+      {
+        id: "feedback",
+        label: "General feedback",
+        content:
+          "## Feedback\n\n### Topic\nWhat area are you giving feedback on?\n\n### What feels good\n\n### What should improve\n\n### Suggested change\n",
+      },
+    ];
+  }
+  if (key === "suggestions") {
+    return [
+      {
+        id: "suggestion-standard",
+        label: "Suggestion",
+        content:
+          "## Suggestion\n\n### Idea\nDescribe your idea clearly.\n\n### Why this helps\n\n### Expected impact\n\n### Possible downsides\n",
+      },
+      {
+        id: "suggestion-qol",
+        label: "Quality of life",
+        content:
+          "## Quality of Life Suggestion\n\n### Current pain point\n\n### Proposed improvement\n\n### Who benefits\n\n### Implementation notes\n",
+      },
+    ];
+  }
+  if (key === "feature-requests") {
+    return [
+      {
+        id: "feature-system",
+        label: "System feature request",
+        content:
+          "## Feature Request\n\n### Feature summary\n\n### Problem it solves\n\n### Detailed behavior\n\n### Success criteria\n\n### Long-term value\n",
+      },
+      {
+        id: "feature-economy",
+        label: "Economy feature request",
+        content:
+          "## Economy Feature Request\n\n### Feature summary\n\n### Economy impact\n\n### Balance considerations\n\n### Abuse risks\n\n### Monitoring plan\n",
+      },
+    ];
+  }
+  if (key === "forum-help") {
+    return [
+      {
+        id: "forum-moderation",
+        label: "Moderation question",
+        content:
+          "## Moderation Question\n\n### Issue\n\n### Link to relevant post/comment\n\n### Expected moderation outcome\n\n### Extra context\n",
+      },
+      {
+        id: "forum-tools",
+        label: "Forum tools help",
+        content:
+          "## Forum Tools Help\n\n### Tool/feature\n\n### What is not working\n\n### Steps you tried\n\n### Expected behavior\n",
+      },
+    ];
+  }
+  return [];
+}
+
 function ForumPage({ isAdmin = false }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { isSignedIn, getToken, userId } = useAuth();
-  const { openSignIn } = useClerk();
+  const { openSignIn, openUserProfile } = useClerk();
   const { user } = useUser();
   const sections = [
     {
@@ -4812,6 +5039,7 @@ function ForumPage({ isAdmin = false }) {
   const [postsStatus, setPostsStatus] = useState("");
   const [createStatus, setCreateStatus] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCreatePreview, setShowCreatePreview] = useState(false);
   const [newPostTitle, setNewPostTitle] = useState("");
   const [newPostBody, setNewPostBody] = useState("");
   const [selectedPost, setSelectedPost] = useState(null);
@@ -4840,6 +5068,10 @@ function ForumPage({ isAdmin = false }) {
   const [forumSelfChooserOpen, setForumSelfChooserOpen] = useState(false);
   const [forumSelfChooserEntry, setForumSelfChooserEntry] = useState(null);
   const FORUM_BODY_MIN_LENGTH = 30;
+  const createTemplateOptions = useMemo(
+    () => getForumTemplateOptions(selectedSectionId),
+    [selectedSectionId],
+  );
 
   function getForumPreviewText(body, limit = 220) {
     return markdownExcerpt(body, limit);
@@ -5888,8 +6120,19 @@ function ForumPage({ isAdmin = false }) {
       if (editingPostId === postId) {
         cancelEditPost();
       }
+      emitAppToast({
+        kind: "success",
+        title: "Post deleted",
+        message: "Your forum post was deleted successfully.",
+      });
     } catch (error) {
-      setPostsStatus(error?.message || "Failed to delete post.");
+      const message = error?.message || "Failed to delete post.";
+      setPostsStatus(message);
+      emitAppToast({
+        kind: "error",
+        title: "Delete failed",
+        message,
+      });
     } finally {
       setDeletingPostId("");
     }
@@ -6045,12 +6288,14 @@ function ForumPage({ isAdmin = false }) {
                           Edit Post
                         </button>
                         <button
-                          className="ghost-btn"
+                          className="ghost-btn delete-action-btn"
                           type="button"
                           onClick=${() => deleteForumPost(selectedPost)}
                           disabled=${deletingPostId === String(selectedPost.id || "")}
                         >
-                          ${deletingPostId === String(selectedPost.id || "") ? "Deleting..." : "Delete Post"}
+                          ${deletingPostId === String(selectedPost.id || "")
+                            ? "Deleting..."
+                            : renderDeleteLabel("Delete Post")}
                         </button>
                       </div>`
                     : html``}
@@ -6263,12 +6508,14 @@ function ForumPage({ isAdmin = false }) {
                             Edit Post
                           </button>
                           <button
-                            className="ghost-btn"
+                            className="ghost-btn delete-action-btn"
                             type="button"
                             onClick=${() => deleteForumPost(post)}
                             disabled=${deletingPostId === String(post.id || "")}
                           >
-                            ${deletingPostId === String(post.id || "") ? "Deleting..." : "Delete Post"}
+                            ${deletingPostId === String(post.id || "")
+                              ? "Deleting..."
+                              : renderDeleteLabel("Delete Post")}
                           </button>
                         </div>`
                       : html``}
@@ -6361,7 +6608,10 @@ function ForumPage({ isAdmin = false }) {
 
         <${PopUp}
           show=${showCreateModal}
-          onClose=${() => setShowCreateModal(false)}
+          onClose=${() => {
+            setShowCreateModal(false);
+            setShowCreatePreview(false);
+          }}
           title=${`Create Post - ${selectedSection.title}`}
           className="forum-create-overlay"
         >
@@ -6379,15 +6629,57 @@ function ForumPage({ isAdmin = false }) {
               maxLength=${4000}
               minLength=${FORUM_BODY_MIN_LENGTH}
               draftScope=${`create:${selectedSectionId}`}
-              showTemplatePicker=${true}
+              showTemplatePicker=${createTemplateOptions.length > 0}
+              templateOptions=${createTemplateOptions}
+              showModeTabs=${false}
               placeholder="Write your post..."
             />
             <div className="comment-actions right submit-panel row">
               <span className="muted">Posting as ${getUserDisplayName(user)}</span>
+              <button
+                className="button ghost-btn"
+                type="button"
+                onClick=${() => setShowCreatePreview(true)}
+                disabled=${!newPostTitle.trim() && !newPostBody.trim()}
+              >
+                Preview
+              </button>
               <button className="button primary" type="submit">Post</button>
             </div>
             ${createStatus ? html`<div className="muted">${createStatus}</div>` : html``}
           </form>
+        <//>
+        <${PopUp}
+          show=${showCreatePreview}
+          onClose=${() => setShowCreatePreview(false)}
+          title="Post Preview"
+          className="forum-create-overlay"
+        >
+          <article className="news-card forum-post-card forum-preview-card">
+            <div className="forum-post-author-row">
+              <img
+                className="forum-post-author-avatar"
+                src=${user?.imageUrl || "/assets/HardTale_H_GreyScale.png"}
+                alt=${getUserDisplayName(user)}
+              />
+              <span className="muted">By</span>
+              <span className="forum-post-author-name-static">
+                <${AuthorName} value=${getUserDisplayName(user)} isStaffLabel=${isStaffLabel} />
+              </span>
+              <${TimestampText} value=${new Date().toISOString()} formatTimestamp=${formatTimestamp} />
+            </div>
+            <div className="forum-post-header-divider"></div>
+            <div className="news-header">
+              <div className="news-title-row">
+                <h3>${newPostTitle.trim() || "Post title preview"}</h3>
+              </div>
+            </div>
+            <div className="news-body">
+              <${ForumRenderedMarkdown}
+                value=${newPostBody.trim() || "Write content in the editor to preview your post body."}
+              />
+            </div>
+          </article>
         <//>
       </section>
     `;
@@ -6611,6 +6903,8 @@ function NotFoundPage({
   const [newSubject, setNewSubject] = useState("");
   const [newCategory, setNewCategory] = useState("support");
   const [newBody, setNewBody] = useState("");
+  const [errorContextOptions, setErrorContextOptions] = useState(() => readSupportErrorContexts());
+  const [selectedErrorContextId, setSelectedErrorContextId] = useState("");
   const [chatDraft, setChatDraft] = useState("");
   const [nextStatus, setNextStatus] = useState("pending");
   const logRef = useRef(null);
@@ -6634,7 +6928,11 @@ function NotFoundPage({
       setCopyLabel("Copied!");
       setTimeout(() => setCopyLabel("Copy Crash Log"), 1200);
     } catch (err) {
-      alert("Clipboard blocked. Copy manually.");
+      emitAppToast({
+        kind: "warning",
+        title: "Clipboard blocked",
+        message: "Copy manually.",
+      });
     }
   }
 
@@ -6684,6 +6982,10 @@ function NotFoundPage({
     event.preventDefault();
     if (!isSignedIn) return;
     if (!newSubject.trim() || !newBody.trim()) return;
+    const selectedErrorContext = errorContextOptions.find(
+      (entry) => entry.id === selectedErrorContextId,
+    );
+    const ticketBody = buildTicketBodyWithAttachedError(newBody, selectedErrorContext);
     setTicketStatus("Creating ticket...");
     try {
       const response = await apiFetchWithToken(getToken, true, "/api/forum/tickets", {
@@ -6692,7 +6994,7 @@ function NotFoundPage({
         body: JSON.stringify({
           subject: newSubject,
           category: newCategory,
-          body: newBody,
+          body: ticketBody,
         }),
       });
       if (!response.ok) throw new Error("Failed");
@@ -6701,6 +7003,7 @@ function NotFoundPage({
       setNewSubject("");
       setNewCategory("support");
       setNewBody("");
+      setSelectedErrorContextId("");
       setTicketStatus("Ticket created.");
       await loadTickets();
       if (created?.id) {
@@ -6769,6 +7072,15 @@ function NotFoundPage({
       setSelectedTicketId(ticketId);
     }
   }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    const nextOptions = readSupportErrorContexts();
+    setErrorContextOptions(nextOptions);
+    const attachErrorId = String(new URLSearchParams(location.search || "").get("attachError") || "").trim();
+    if (attachErrorId && nextOptions.some((entry) => entry.id === attachErrorId)) {
+      setSelectedErrorContextId(attachErrorId);
+    }
+  }, [location.search, showSupportModal]);
 
   useEffect(() => {
     loadTickets();
@@ -6943,6 +7255,9 @@ function NotFoundPage({
                 setNewCategory=${setNewCategory}
                 newBody=${newBody}
                 setNewBody=${setNewBody}
+                errorContextOptions=${errorContextOptions}
+                selectedErrorContextId=${selectedErrorContextId}
+                setSelectedErrorContextId=${setSelectedErrorContextId}
                 status=${ticketStatus}
               />
 
@@ -6995,6 +7310,19 @@ function NotFoundPage({
 function renderStoreIcon(type) {
   const src = STORE_RANK_ICON_SVG[String(type || "").trim()] || STORE_RANK_ICON_SVG.star;
   return html`<img src=${src} alt="" aria-hidden="true" />`;
+}
+
+function renderFeaturedBadge(mini = false) {
+  return html`<span className=${`news-star ${mini ? "mini" : ""}`.trim()} title="Featured" aria-label="Featured">
+    <img className="news-star-icon" src=${FEATURED_BADGE_ICON_SVG} alt="" aria-hidden="true" />
+  </span>`;
+}
+
+function renderDeleteLabel(label = "Delete") {
+  return html`<span className="delete-btn-content">
+    <span className="delete-btn-icon" style=${{ "--delete-icon": `url(${DELETE_ICON_SVG})` }} aria-hidden="true"></span>
+    <span>${label}</span>
+  </span>`;
 }
 
 function renderRankIcon(type) {
@@ -7115,13 +7443,12 @@ function NotificationsPanel({ notifications, onView, onOpenProfile }) {
           Boolean(authorUserId);
         return html`<div key=${item.id} className="notif-card">
           <div className="notif-title">
-            ${item.featured ? html`<span className="news-star mini" title="Featured">â˜…</span>` : html``}
+            ${item.featured ? renderFeaturedBadge(true) : html``}
             ${item.title}
           </div>
           <div className="notif-body">${item.message}</div>
           <div className="notif-author-row">
             <div className="notif-author">
-              <${TimestampText} value=${item.createdAt} formatTimestamp=${formatTimestamp} />
               <div className="notif-author-line">
                 <span className="notif-author-prefix">Sent by</span>
                 ${canOpenProfile
@@ -7155,6 +7482,7 @@ function NotificationsPanel({ notifications, onView, onOpenProfile }) {
                       <span>${authorRank}</span>
                     </span>`}
               </div>
+              <${TimestampText} value=${item.createdAt} formatTimestamp=${formatTimestamp} />
             </div>
           </div>
           ${item.readMoreUrl
@@ -7295,7 +7623,7 @@ function HomePage({
                   (item) => html`<div key=${item.id} className="news-mini-row">
                     <div className="mini-row-head">
                       <div className="news-mini-title">
-                        ${item.featured ? html`<span className="news-star mini" title="Featured">*</span>` : html``}
+                        ${item.featured ? renderFeaturedBadge(true) : html``}
                         ${item.title}
                       </div>
                       <button
@@ -7870,6 +8198,7 @@ function Layout() {
   const { desktopStickyWide, setDesktopStickyWide } = useDesktopStickyWide();
   const { desktopStickyLogoStyle, setDesktopStickyLogoStyle } = useDesktopStickyLogoStyle();
   const { uiFlashEnabled, setUiFlashEnabled } = useUiFlash();
+  const { toastShape, setToastShape } = useToastShape();
   const [active, setActive] = useState("home");
   const [hideLogo, setHideLogo] = useState(false);
   const [showMobileNav, setShowMobileNav] = useState(false);
@@ -7883,9 +8212,17 @@ function Layout() {
   const [notificationProfileOpen, setNotificationProfileOpen] = useState(false);
   const [notificationProfileUser, setNotificationProfileUser] = useState(null);
   const [notificationProfileInfoTab, setNotificationProfileInfoTab] = useState("badges");
+  const [drawerProfileSummary, setDrawerProfileSummary] = useState({
+    rankLabel: "Unregistered",
+    ownedRank: "Unregistered",
+    staffRole: "",
+  });
   const [showChangelog, setShowChangelog] = useState(false);
   const [showConnectHelp, setShowConnectHelp] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [toasts, setToasts] = useState([]);
+  const [toastErrorDetail, setToastErrorDetail] = useState(null);
+  const [footerInView, setFooterInView] = useState(false);
   const [hoveredNav, setHoveredNav] = useState("");
   const [appHydrated, setAppHydrated] = useState(false);
   const [authTransitionLoading, setAuthTransitionLoading] = useState(false);
@@ -7900,10 +8237,13 @@ function Layout() {
   const shellRef = useRef(null);
   const topbarRef = useRef(null);
   const playRef = useRef(null);
+  const footerRef = useRef(null);
   const hideLogoRef = useRef(false);
   const scrollRafRef = useRef(0);
   const initialLoaderStartRef = useRef(Date.now());
   const previousSignedInRef = useRef(null);
+  const toastTimersRef = useRef(new Map());
+  const seenAchievementToastIdsRef = useRef(new Set());
   const cartCount = useMemo(() => cart.length, [cart]);
   const sortedNews = useMemo(() => {
     const copy = [...news];
@@ -8053,6 +8393,22 @@ function Layout() {
   }, [isMobile]);
 
   useEffect(() => {
+    const target = footerRef.current;
+    if (!target || typeof window === "undefined" || !("IntersectionObserver" in window)) {
+      return undefined;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        setFooterInView(Boolean(entry?.isIntersecting));
+      },
+      { root: null, threshold: 0.18 },
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     if (appHydrated) return undefined;
 
     // Keep initial loader up until auth, news bootstrap, and critical images are ready.
@@ -8124,6 +8480,62 @@ function Layout() {
       alive = false;
     };
   }, [isAuthLoaded, isSignedIn, userId, location.pathname, getToken]);
+
+  useEffect(() => {
+    let alive = true;
+    async function loadDrawerProfileSummary() {
+      if (!isSignedIn) {
+        if (alive) {
+          setDrawerProfileSummary({
+            rankLabel: "Unregistered",
+            ownedRank: "Unregistered",
+            staffRole: "",
+          });
+        }
+        return;
+      }
+      const metadataRank = String(
+        user?.publicMetadata?.selectedTitle ||
+          user?.publicMetadata?.rankLabel ||
+          user?.unsafeMetadata?.selectedTitle ||
+          "Unregistered",
+      );
+      const metadataOwnedRank = normalizeOwnedRankLabel(
+        user?.publicMetadata?.ownedRank ||
+          user?.unsafeMetadata?.ownedRank ||
+          metadataRank,
+      );
+      const metadataStaffRole = String(
+        user?.publicMetadata?.staffRole ||
+          user?.unsafeMetadata?.staffRole ||
+          "",
+      );
+      try {
+        const response = await apiFetchWithToken(getToken, true, "/api/profile/settings");
+        const data = response.ok ? await response.json().catch(() => ({})) : {};
+        if (!alive) return;
+        const selectedTitle = String(data?.selectedTitle || metadataRank || "Unregistered");
+        const ownedRank = normalizeOwnedRankLabel(data?.ownedRank || metadataOwnedRank || selectedTitle);
+        const staffRole = String(data?.staffRole || metadataStaffRole || "");
+        setDrawerProfileSummary({
+          rankLabel: selectedTitle,
+          ownedRank,
+          staffRole,
+        });
+      } catch {
+        if (!alive) return;
+        setDrawerProfileSummary({
+          rankLabel: metadataRank || "Unregistered",
+          ownedRank: metadataOwnedRank || "Unregistered",
+          staffRole: metadataStaffRole,
+        });
+      }
+    }
+    loadDrawerProfileSummary();
+    return () => {
+      alive = false;
+    };
+  }, [isSignedIn, user, getToken]);
 
   useEffect(() => {
     if (!isAuthLoaded || !isSignedIn || !userId || notificationsLoading) return;
@@ -8389,6 +8801,114 @@ function Layout() {
     navigate(url);
   }
 
+  function sanitizeToastText(input, fallback = "An unexpected error occurred.") {
+    const source = String(input || "").trim();
+    if (!source) return fallback;
+    const redacted = source
+      .replace(/(authorization\s*:\s*bearer\s+)[^\s]+/gi, "$1[REDACTED]")
+      .replace(/\b(sk|pk|rk|api|token|secret|key)[-_]?[a-z0-9]{8,}\b/gi, "[REDACTED]")
+      .replace(/\b(password|pass|secret|token|api[_-]?key)\s*[=:]\s*([^\s,;]+)/gi, "$1=[REDACTED]")
+      .replace(/\bhttps?:\/\/[^\s]+/gi, "[REDACTED_URL]")
+      .replace(/[A-Za-z]:\\[^\s]+/g, "[REDACTED_PATH]")
+      .replace(/\/(?:[\w.-]+\/)+[\w.-]*/g, "[REDACTED_PATH]");
+    const safeLines = redacted
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .filter(
+        (line) =>
+          !/^at\s.+\(.+\)$/.test(line) &&
+          !/mongodb|postgres|mysql|sqlite|redis|stack trace|exception/i.test(line),
+      );
+    const compact = safeLines.join("\n").trim();
+    if (!compact) return fallback;
+    return compact.slice(0, 500);
+  }
+
+  function dismissToast(id) {
+    const key = String(id || "").trim();
+    if (!key) return;
+    const timer = toastTimersRef.current.get(key);
+    if (timer) {
+      clearTimeout(timer);
+      toastTimersRef.current.delete(key);
+    }
+    setToasts((prev) => prev.filter((entry) => entry.id !== key));
+  }
+
+  function pushToast(payload) {
+    const input = payload || {};
+    const safeMessage = sanitizeToastText(
+      input.message || input.body,
+      input.kind === "error" ? "Request failed. Please try again." : "",
+    );
+    const safeFullMessage = sanitizeToastText(
+      input.fullMessage || safeMessage,
+      input.kind === "error" ? "Request failed. Please try again." : safeMessage,
+    );
+    const toast = createToastPayload({
+      ...input,
+      message: safeMessage,
+      fullMessage: safeFullMessage,
+    });
+    setToasts((prev) => {
+      const filtered = prev.filter((entry) => entry.id !== toast.id);
+      return [...filtered.slice(-4), toast];
+    });
+    const existing = toastTimersRef.current.get(toast.id);
+    if (existing) clearTimeout(existing);
+    const timer = window.setTimeout(() => dismissToast(toast.id), toast.duration);
+    toastTimersRef.current.set(toast.id, timer);
+    return toast.id;
+  }
+
+  function openToastDetails(toast) {
+    if (!toast || toast.kind !== "error") return;
+    setToastErrorDetail({
+      title: sanitizeToastText(toast.title || "System Error", "System Error"),
+      message: sanitizeToastText(
+        toast.fullMessage || toast.message,
+        "Request failed. Please try again.",
+      ),
+      createdAt: toast.createdAt || new Date().toISOString(),
+    });
+  }
+
+  useEffect(() => {
+    function onToast(event) {
+      const detail = event?.detail || {};
+      pushToast(detail);
+    }
+    window.addEventListener(APP_TOAST_EVENT, onToast);
+    return () => window.removeEventListener(APP_TOAST_EVENT, onToast);
+  }, []);
+
+  useEffect(() => {
+    if (!isSignedIn || !userId) return;
+    sortedNotifications.forEach((item) => {
+      const id = String(item?.id || "").trim();
+      if (!id || seenAchievementToastIdsRef.current.has(id)) return;
+      seenAchievementToastIdsRef.current.add(id);
+      const haystack = `${item?.title || ""} ${item?.message || ""}`.toLowerCase();
+      if (!/(achievement|badge unlocked|title unlocked|unlocked achievement)/i.test(haystack)) return;
+      pushToast({
+        id: `achv-${id}`,
+        kind: "success",
+        title: String(item?.title || "Achievement unlocked"),
+        message: String(item?.message || "").trim(),
+        duration: 7000,
+      });
+    });
+  }, [sortedNotifications, isSignedIn, userId]);
+
+  useEffect(
+    () => () => {
+      toastTimersRef.current.forEach((timer) => clearTimeout(timer));
+      toastTimersRef.current.clear();
+    },
+    [],
+  );
+
   async function loadLayoutProfileLinkStatus(targetUserId) {
     const safeUserId = String(targetUserId || "").trim();
     if (!safeUserId) return { linked: false, playerName: "N/A", playerUuid: "N/A" };
@@ -8444,6 +8964,7 @@ function Layout() {
       isStaffLabel(username) ||
       isStaffLabel(rankLabel);
     const authorUserId = String(item.authorUserId || "").trim();
+    const isOwn = Boolean(isSignedIn && userId && authorUserId && String(userId) === authorUserId);
     const [linkStatus, achievements, groups] = await Promise.all([
       loadLayoutProfileLinkStatus(authorUserId),
       loadLayoutProfileAchievements(authorUserId),
@@ -8464,6 +8985,7 @@ function Layout() {
       showStaffGradient: item?.authorShowStaffGradient !== false,
       useRankFont: item?.authorUseRankFont === true,
       showDonorGradient: item?.authorShowDonorGradient !== false,
+      isOwn,
       hytalePlayerName: linkStatus.playerName,
       hytalePlayerUuid: linkStatus.playerUuid,
       linkedAccount: linkStatus.linked,
@@ -8471,6 +8993,19 @@ function Layout() {
       groups,
     });
     setNotificationProfileOpen(true);
+  }
+
+  function openDrawerSelfProfileCard() {
+    if (!isSignedIn || !userId) return;
+    openNotificationProfile({
+      authorName: displayName,
+      authorUsername: user?.username || "",
+      authorImage: user?.imageUrl || "/assets/HardTale_H_GreyScale.png",
+      authorUserId: userId,
+      authorRank: drawerProfileSummary.rankLabel || "Unregistered",
+      authorOwnedRank: drawerProfileSummary.ownedRank || drawerProfileSummary.rankLabel || "Unregistered",
+      authorStaffRole: drawerProfileSummary.staffRole || "",
+    });
   }
 
   function removeItem(id) {
@@ -8609,6 +9144,8 @@ function Layout() {
         setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
         uiFlashEnabled=${uiFlashEnabled}
         setUiFlashEnabled=${setUiFlashEnabled}
+        toastShape=${toastShape}
+        setToastShape=${setToastShape}
         setSettingsOpen=${setSettingsOpen}
         isMobile=${isMobile}
         notificationCount=${notificationCount}
@@ -8750,12 +9287,15 @@ function Layout() {
           cart=${cart}
         />
 
-        <footer className="footer">
+        <footer ref=${footerRef} className=${`footer ${footerInView ? "fx-active" : "fx-paused"}`.trim()}>
           <div className="footer-top">
-            <button className="footer-link" type="button" onClick=${() => setShowChangelog(true)}>
+            <button className="footer-link footer-emphasis" type="button" onClick=${() => setShowChangelog(true)}>
               Version ${VERSION}
             </button>
-            <span>${`Â© ${year} Hardtale.net`}</span>
+            <span className="footer-copyright footer-emphasis">
+              <img src=${COPYRIGHT_ICON_SVG} alt="" aria-hidden="true" />
+              <span>${`${year} Hardtale.net`}</span>
+            </span>
           </div>
           <div className="footer-links">
             <${Link} className="footer-link" to="/">Home</${Link}>
@@ -8817,6 +9357,8 @@ function Layout() {
                   setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
                   uiFlashEnabled=${uiFlashEnabled}
                   setUiFlashEnabled=${setUiFlashEnabled}
+                  toastShape=${toastShape}
+                  setToastShape=${setToastShape}
                   onOpenChange=${setSettingsOpen}
                   isMobile=${isMobile}
                 />
@@ -8850,6 +9392,8 @@ function Layout() {
                         setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
                         uiFlashEnabled=${uiFlashEnabled}
                         setUiFlashEnabled=${setUiFlashEnabled}
+                        toastShape=${toastShape}
+                        setToastShape=${setToastShape}
                         onOpenChange=${setSettingsOpen}
                         isMobile=${isMobile}
                       />
@@ -8882,10 +9426,30 @@ function Layout() {
             <//>
             <${SignedIn}>
               <div className="drawer-user">
-                <span className="muted">${displayName}</span>
-                <div className="drawer-user-right">
-                  <${UserButton} />
-                </div>
+                <button
+                  type="button"
+                  className="store-profile-preview drawer-profile-preview"
+                  onClick=${openDrawerSelfProfileCard}
+                  title="Open profile card"
+                >
+                  <img
+                    className="store-profile-avatar"
+                    src=${user?.imageUrl || "/assets/HardTale_H_GreyScale.png"}
+                    alt=${displayName}
+                  />
+                  <div className="store-profile-meta">
+                    <div className="store-profile-name">${displayName}</div>
+                    ${user?.username
+                      ? html`<div className="store-profile-username">@${formatUsernameForDisplay(user?.username)}</div>`
+                      : html``}
+                    <div className="store-badge-preview-row">
+                      <${RankBadge}
+                        label=${drawerProfileSummary.rankLabel || "Unregistered"}
+                        className="store-owned-badge"
+                      />
+                    </div>
+                  </div>
+                </button>
               </div>
             <//>
           </div>
@@ -9036,6 +9600,17 @@ function Layout() {
               ${notificationProfileInfoTab === "groups"
                 ? html`${renderProfileGroupsCard(notificationProfileUser)}`
                 : html`${renderStaffBadge(notificationProfileUser)}${renderOwnedRankBadges(notificationProfileUser)}`}
+              ${notificationProfileUser.isOwn && openUserProfile
+                ? html`<div className="profile-card-actions">
+                    <button
+                      className="button ghost-btn profile-card-clerk-btn"
+                      type="button"
+                      onClick=${() => openUserProfile({})}
+                    >
+                      Clerk
+                    </button>
+                  </div>`
+                : html``}
             </div>`
           : html``}
       <//>
@@ -9078,6 +9653,50 @@ function Layout() {
       >
         <${ChangelogPanel} isAdmin=${isAdmin} />
       <//>
+      <${PopUp}
+        show=${Boolean(toastErrorDetail)}
+        onClose=${() => setToastErrorDetail(null)}
+        title="System Notification"
+      >
+        ${toastErrorDetail
+          ? html`<div className="notif-card toast-error-detail-card">
+              <div className="notif-title">${toastErrorDetail.title}</div>
+              <div className="notif-body">${toastErrorDetail.message}</div>
+              <div className="notif-author-row">
+                <div className="notif-author">
+                  <div className="notif-author-line">
+                    <span className="notif-author-prefix">Sent by</span>
+                    <span className="notif-author-name-static">System</span>
+                  </div>
+                  <${TimestampText} value=${toastErrorDetail.createdAt} formatTimestamp=${formatTimestamp} />
+                </div>
+              </div>
+              <div className="comment-actions right">
+                <button
+                  className="button ghost-btn"
+                  type="button"
+                  onClick=${() => {
+                    const errorId = addSupportErrorContext(toastErrorDetail);
+                    setToastErrorDetail(null);
+                    if (errorId) {
+                      navigate(`/support?attachError=${encodeURIComponent(errorId)}`);
+                    } else {
+                      navigate("/support");
+                    }
+                  }}
+                >
+                  Attach to Support Ticket
+                </button>
+              </div>
+            </div>`
+          : html``}
+      <//>
+      <${ToastSystem}
+        toasts=${toasts}
+        onDismiss=${dismissToast}
+        onOpenDetails=${openToastDetails}
+        shape=${toastShape}
+      />
     </div>
   `;
 }

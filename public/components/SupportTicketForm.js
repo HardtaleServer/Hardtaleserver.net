@@ -11,6 +11,9 @@ export default function SupportTicketForm({
   setNewCategory,
   newBody,
   setNewBody,
+  errorContextOptions = [],
+  selectedErrorContextId = "",
+  setSelectedErrorContextId,
   status,
 }) {
   return html`
@@ -37,6 +40,28 @@ export default function SupportTicketForm({
         onInput=${(event) => setNewBody(event.target.value)}
         required
       ></textarea>
+      ${Array.isArray(errorContextOptions) && errorContextOptions.length > 0
+        ? html`<label className="settings-row">
+            <span>Attach redacted error context</span>
+            <select
+              value=${selectedErrorContextId}
+              onChange=${(event) =>
+                setSelectedErrorContextId && setSelectedErrorContextId(event.target.value)}
+            >
+              <option value="">None</option>
+              ${errorContextOptions.map(
+                (entry) => html`<option key=${entry.id} value=${entry.id}>
+                  ${entry.title} - ${new Date(entry.createdAt).toLocaleString([], {
+                    month: "short",
+                    day: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </option>`,
+              )}
+            </select>
+          </label>`
+        : html``}
       <button className="button primary" type="submit">Create Ticket</button>
       ${status ? html`<div className="muted">${status}</div>` : html``}
     </form>

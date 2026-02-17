@@ -37,6 +37,8 @@ export default function DesktopAuthButtons({
   setDesktopStickyLogoStyle,
   uiFlashEnabled,
   setUiFlashEnabled,
+  toastShape,
+  setToastShape,
   setSettingsOpen,
   isMobile,
   notificationCount,
@@ -70,6 +72,8 @@ export default function DesktopAuthButtons({
         setDesktopStickyLogoStyle=${setDesktopStickyLogoStyle}
         uiFlashEnabled=${uiFlashEnabled}
         setUiFlashEnabled=${setUiFlashEnabled}
+        toastShape=${toastShape}
+        setToastShape=${setToastShape}
         onOpenChange=${setSettingsOpen}
         isMobile=${isMobile}
       />
