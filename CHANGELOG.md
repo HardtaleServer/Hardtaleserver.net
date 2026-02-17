@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-17 (v1.3.83)
+- Hardened frontend API auth helper by adding Clerk token fallback (`getToken()` when template token is unavailable) and default `credentials: include`.
+- Added explicit `/link` 401 handling with a clear session-expired message and sign-in prompt trigger.
+- Improved `/link` auth reliability during local/remote mode switches where session or token-template state can temporarily mismatch.
+
 ## 2026-02-17 (v1.3.82)
 - Added `info` toast support with default `Images/SVGs/toasts/Info.svg` icon and neutral light-blue visual treatment.
 - Added informational toast feedback for staff-forced forum edits so moderation actions can surface as neutral system events.

@@ -88,7 +88,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.82";
+const VERSION = "1.3.83";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -189,6 +189,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.83",
+    date: "2026-02-17",
+    items: [
+      "Hardened frontend API auth helper: added Clerk token fallback (`getToken()` when template token is unavailable) and defaulted requests to `credentials: include`.",
+      "Added explicit `/link` 401 handling with a clear session-expired message and sign-in prompt trigger.",
+      "Improved `/link` auth resilience for local/remote mode switches where token templates or session state can temporarily mismatch.",
+    ],
+  },
   {
     version: "1.3.82",
     date: "2026-02-17",
@@ -1691,12 +1700,28 @@ function renderNewsRichText(text) {
 async function apiFetchWithToken(getToken, isSignedIn, url, options = {}) {
   const headers = { ...(options.headers || {}) };
   if (isSignedIn && getToken) {
-    const token = await getToken({ template: COMMENTS_TOKEN_TEMPLATE });
+    let token = "";
+    try {
+      token = String((await getToken({ template: COMMENTS_TOKEN_TEMPLATE })) || "").trim();
+    } catch {
+      token = "";
+    }
+    if (!token) {
+      try {
+        token = String((await getToken()) || "").trim();
+      } catch {
+        token = "";
+      }
+    }
     if (token) {
       headers.Authorization = `Bearer ${token}`;
     }
   }
-  const response = await fetch(url, { ...options, headers });
+  const response = await fetch(url, {
+    ...options,
+    headers,
+    credentials: options.credentials || "include",
+  });
   return response;
 }
 
@@ -8911,6 +8936,14 @@ function LinkPage({ onClose = null }) {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
+        if (response.status === 401) {
+          const message = "Session expired or missing. Sign in again, then retry /link.";
+          setStatusType("error");
+          setStatusMessage(message);
+          notifyLinkResult("error", "Link failed", message);
+          if (openSignIn) openSignIn({});
+          return;
+        }
         const errorCode = String(data?.code || "").toUpperCase();
         if (
           errorCode === "INVALID_CODE" ||
