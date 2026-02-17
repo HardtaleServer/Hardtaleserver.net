@@ -6782,7 +6782,7 @@ html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar-thu
   position: fixed;
   top: 86px;
   right: 18px;
-  z-index: 160;
+  z-index: 30000;
   display: grid;
   gap: 10px;
   width: min(380px, calc(100vw - 24px));
