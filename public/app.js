@@ -1,6 +1,5 @@
 ﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
-import { createPortal } from "react-dom";
 import htm from "htm";
 import HardtaleLoader from "./components/HardtaleLoader.js";
 import AuthorName from "./components/AuthorName.js";
@@ -24,6 +23,7 @@ import DeferredForumEditor from "./components/DeferredForumEditor.js";
 import ForumRenderedMarkdown from "./components/ForumRenderedMarkdown.js";
 import ProfileInfoTabs from "./components/ProfileInfoTabs.js";
 import ProfileOptionsActions from "./components/ProfileOptionsActions.js";
+import PopUp from "./components/PopUp.js";
 import ToastSystem, { APP_TOAST_EVENT, createToastPayload, emitAppToast } from "./components/ToastSystem.js";
 import SeoManager from "./components/SeoManager.js";
 import { markdownExcerpt } from "./components/forumMarkdown.js";
@@ -81,7 +81,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.48";
+const VERSION = "1.3.49";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/Copyright.svg";
@@ -169,6 +169,14 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.49",
+    date: "2026-02-17",
+    items: [
+      "Extracted global modal implementation into reusable `PopUp` component module.",
+      "Kept all modal behavior the same while reducing `app.js` size and improving component reuse.",
+    ],
+  },
   {
     version: "1.3.48",
     date: "2026-02-17",
@@ -4329,23 +4337,6 @@ function NotificationsButton({ count, onClick, flashEnabled }) {
       ${count > 0 ? html`<span className="cart-badge notif-badge">${count}</span>` : html``}
     </button>
   `;
-}
-
-function PopUp({ show, onClose, title, children, className = "" }) {
-  if (!show) return null;
-  return createPortal(html`
-    <div className=${`popup-overlay ${className}`} onClick=${onClose}>
-      <div className="popup" onClick=${(event) => event.stopPropagation()}>
-        <div className="popup-header">
-          <div className="section-title">${title}</div>
-          <button className="popup-close" onClick=${onClose} aria-label="Close">
-            X
-          </button>
-        </div>
-        ${children}
-      </div>
-    </div>
-  `, document.body);
 }
 
 function LoadingScreen({ show, variant }) {
