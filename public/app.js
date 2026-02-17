@@ -73,7 +73,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.3.39";
+const VERSION = "1.3.40";
 const INK_PEN_ICON = "/Images/SVGs/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/Copyright.svg";
@@ -160,6 +160,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.3.40",
+    date: "2026-02-17",
+    items: [
+      "Added Stripe checkout integration with secure server-side session creation from current cart items.",
+      "Added Stripe return/finalize flow on /store to complete paid sessions and apply rank grants.",
+      "Kept existing local cart checkout endpoint as a fallback path when Stripe is not configured.",
+    ],
+  },
   {
     version: "1.3.39",
     date: "2026-02-17",
@@ -8253,6 +8262,7 @@ function Layout() {
   const previousSignedInRef = useRef(null);
   const toastTimersRef = useRef(new Map());
   const seenAchievementToastIdsRef = useRef(new Set());
+  const stripeFinalizeKeyRef = useRef("");
   const cartCount = useMemo(() => cart.length, [cart]);
   const sortedNews = useMemo(() => {
     const copy = [...news];
@@ -8604,6 +8614,70 @@ function Layout() {
     if (location.pathname === "/link") return;
     writeLastNonLinkRoute(`${location.pathname}${location.search || ""}`);
   }, [location.pathname, location.search]);
+
+  useEffect(() => {
+    if (location.pathname !== "/store") return;
+    const params = new URLSearchParams(location.search || "");
+    const stripeState = String(params.get("stripe") || "").trim().toLowerCase();
+    const sessionId = String(params.get("session_id") || "").trim();
+    if (!stripeState) return;
+
+    if (stripeState === "cancel") {
+      pushToast({
+        id: `stripe-cancel-${Date.now()}`,
+        kind: "warning",
+        title: "Checkout canceled",
+        message: "Your Stripe checkout was canceled. Your cart is still saved.",
+        duration: 4500,
+      });
+      navigate("/store", { replace: true });
+      return;
+    }
+
+    if (stripeState !== "success" || !sessionId || !isSignedIn || !userId) return;
+    const sessionKey = `${userId}:${sessionId}`;
+    if (stripeFinalizeKeyRef.current === sessionKey) return;
+    stripeFinalizeKeyRef.current = sessionKey;
+
+    setCartStatus("Finalizing Stripe payment...");
+    (async () => {
+      try {
+        const response = await apiFetchWithToken(getToken, true, "/api/payments/stripe/complete", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(String(data?.error || "Failed to finalize Stripe checkout."));
+        }
+        setCart(buildCartFromIds(data?.cart?.items || []));
+        const awardedRank = String(data?.awardedRank || "").trim();
+        pushToast({
+          id: `stripe-success-${sessionId}`,
+          kind: "success",
+          title: "Checkout complete",
+          message: awardedRank
+            ? `Stripe payment confirmed. Rank awarded: ${awardedRank}.`
+            : "Stripe payment confirmed successfully.",
+          duration: 7000,
+        });
+        setCartStatus("");
+        setShowCart(false);
+        navigate("/store", { replace: true });
+      } catch (error) {
+        setCartStatus("Stripe payment finalize failed.");
+        pushToast({
+          id: `stripe-error-${sessionId}`,
+          kind: "error",
+          title: "Stripe finalize failed",
+          message: String(error?.message || "Please contact support if you were charged."),
+          duration: 9000,
+        });
+        navigate("/store", { replace: true });
+      }
+    })();
+  }, [location.pathname, location.search, isSignedIn, userId, getToken, navigate]);
 
   useEffect(() => {
     if (notificationsLoading) return;
@@ -9053,8 +9127,25 @@ function Layout() {
 
   async function checkout() {
     if (!isSignedIn || cart.length === 0) return;
-    setCartStatus("Processing checkout...");
+    setCartStatus("Starting secure checkout...");
     try {
+      const stripeResponse = await apiFetchWithToken(
+        getToken,
+        true,
+        "/api/payments/stripe/create-checkout-session",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+      const stripeData = await stripeResponse.json().catch(() => ({}));
+      if (stripeResponse.ok && stripeData?.checkoutUrl) {
+        setCartStatus("Redirecting to Stripe...");
+        window.location.assign(String(stripeData.checkoutUrl));
+        return;
+      }
+
+      // Fallback path keeps existing behavior for environments without Stripe.
       const response = await apiFetchWithToken(getToken, true, "/api/cart/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

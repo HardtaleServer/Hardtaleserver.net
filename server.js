@@ -6,6 +6,7 @@ import crypto from "crypto";
 import fs from "fs/promises";
 import { clerkMiddleware, getAuth, clerkClient } from "@clerk/express";
 import { MongoClient, ServerApiVersion, ObjectId } from "mongodb";
+import Stripe from "stripe";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -153,6 +154,17 @@ const SMURFIS_TEST_LINK_EMAILS = new Set([
   "hardtaleserver@gmail.com",
   "hytaleserver@gmail.com",
 ]);
+const STRIPE_SECRET_KEY = String(process.env.STRIPE_SECRET_KEY || "").trim();
+const STRIPE_CURRENCY = String(process.env.STRIPE_CURRENCY || "usd")
+  .trim()
+  .toLowerCase();
+const STRIPE_CHECKOUT_BASE_URL = String(process.env.STRIPE_CHECKOUT_BASE_URL || "").trim();
+const STRIPE_ENABLED = Boolean(STRIPE_SECRET_KEY);
+const stripeClient = STRIPE_ENABLED
+  ? new Stripe(STRIPE_SECRET_KEY, {
+      apiVersion: "2024-06-20",
+    })
+  : null;
 
 app.use(express.json({ limit: "100kb" }));
 app.use("/api", clerkMiddleware());
@@ -612,6 +624,130 @@ function requireFulfillmentAuth(req, res) {
     return false;
   }
   return true;
+}
+
+function resolveRequestBaseUrl(req) {
+  if (STRIPE_CHECKOUT_BASE_URL) {
+    return STRIPE_CHECKOUT_BASE_URL.replace(/\/+$/, "");
+  }
+  const forwardedProto = normalizeText(req.headers?.["x-forwarded-proto"], 20).toLowerCase();
+  const protocol = forwardedProto || req.protocol || "https";
+  const host = normalizeText(req.headers?.["x-forwarded-host"] || req.get("host"), 255);
+  if (!host) return "";
+  return `${protocol}://${host}`.replace(/\/+$/, "");
+}
+
+function toStripeUnitAmount(value) {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < 0) return 0;
+  return Math.max(0, Math.round(amount * 100));
+}
+
+function createHttpError(status, message) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+async function processCartCheckout(userId, options = {}) {
+  const purchaseIdHint = normalizeText(options?.purchaseId, 128);
+  const purchaseProvider = normalizeText(options?.purchaseProvider, 40) || "LOCAL";
+  const paymentStatus = normalizeText(options?.paymentStatus, 40) || "PAID";
+  const stripeSessionId = normalizeText(options?.stripeSessionId, 160);
+  const linked = await linkedAccountsCollection.findOne(
+    { webUserId: userId },
+    { projection: { _id: 1, playerUuid: 1 } },
+  );
+  if (!linked) {
+    throw createHttpError(403, "Link your game account before checkout");
+  }
+
+  const cart = await cartsCollection.findOne({ userId });
+  const items = normalizeCartItems(cart?.items || []);
+  if (items.length === 0) {
+    throw createHttpError(400, "Cart is empty");
+  }
+
+  const total = items.reduce((sum, entry) => sum + (STORE_RANK_PRODUCTS[entry.id]?.price || 0), 0);
+  const purchasedHighestRank = getHighestRankFromItems(items);
+
+  let awardedRank = "";
+  if (purchasedHighestRank) {
+    const user = await clerkClient.users.getUser(userId);
+    const currentRank = String(user?.publicMetadata?.rank || "Unregistered");
+    awardedRank = maxRankLabel(currentRank, purchasedHighestRank);
+    if (awardedRank !== currentRank) {
+      const nextMetadata = {
+        ...user.publicMetadata,
+        rank: awardedRank,
+      };
+      const nextDisplayRank = resolveDisplayRankFromMetadata(
+        nextMetadata,
+        isAdminUser(user),
+        true,
+      ).displayRank;
+      await clerkClient.users.updateUserMetadata(userId, {
+        publicMetadata: nextMetadata,
+      });
+      await commentsCollection.updateMany(
+        { userId, isDeleted: false },
+        { $set: { authorRank: nextDisplayRank, updatedAt: new Date() } },
+      );
+    }
+  }
+
+  const purchaseId = purchaseIdHint || crypto.randomUUID();
+  const nowIso = new Date().toISOString();
+  try {
+    await purchasesCollection.insertOne({
+      id: purchaseId,
+      purchaseId,
+      userId,
+      uuid: normalizePlayerUuid(linked?.playerUuid),
+      grants: buildFulfillmentGrants(items),
+      status: paymentStatus,
+      fulfilled: false,
+      provider: purchaseProvider,
+      stripeSessionId: stripeSessionId || null,
+      items,
+      total,
+      awardedRank: awardedRank || null,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    });
+  } catch (error) {
+    if (error?.code === 11000 && purchaseIdHint) {
+      const existing = await purchasesCollection.findOne({ purchaseId: purchaseIdHint });
+      if (existing) {
+        return {
+          purchaseId: normalizeText(existing.purchaseId || existing.id, 128),
+          awardedRank: normalizeText(existing.awardedRank, 20) || null,
+          cartItems: normalizeCartItems([]),
+          alreadyProcessed: true,
+        };
+      }
+    }
+    throw error;
+  }
+
+  await cartsCollection.updateOne(
+    { userId },
+    {
+      $set: {
+        userId,
+        items: [],
+        updatedAt: new Date().toISOString(),
+      },
+    },
+    { upsert: true },
+  );
+
+  return {
+    purchaseId,
+    awardedRank: awardedRank || null,
+    cartItems: [],
+    alreadyProcessed: false,
+  };
 }
 
 function isValidEmoji(value) {
@@ -3514,6 +3650,38 @@ app.post("/api/cart/checkout", async (req, res) => {
     if (!auth?.userId) {
       return res.status(401).json({ error: "Not authenticated" });
     }
+    const result = await processCartCheckout(auth.userId, {
+      purchaseProvider: "LOCAL",
+      paymentStatus: "PAID",
+    });
+
+    return res.json({
+      success: true,
+      cart: { items: result.cartItems },
+      purchaseId: result.purchaseId,
+      awardedRank: result.awardedRank,
+      alreadyProcessed: result.alreadyProcessed,
+    });
+  } catch (error) {
+    if (error?.status) {
+      return res.status(error.status).json({ error: error.message || "Checkout failed" });
+    }
+    console.error("Failed to checkout cart", error);
+    return res.status(500).json({ error: "Failed to checkout cart" });
+  }
+});
+
+app.post("/api/payments/stripe/create-checkout-session", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    if (!stripeClient || !STRIPE_ENABLED) {
+      return res.status(503).json({ error: "Stripe checkout is not configured" });
+    }
+
     const linked = await linkedAccountsCollection.findOne(
       { webUserId: auth.userId },
       { projection: { _id: 1 } },
@@ -3528,71 +3696,104 @@ app.post("/api/cart/checkout", async (req, res) => {
       return res.status(400).json({ error: "Cart is empty" });
     }
 
-    const total = items.reduce((sum, entry) => sum + (STORE_RANK_PRODUCTS[entry.id]?.price || 0), 0);
-    const purchasedHighestRank = getHighestRankFromItems(items);
+    const lineItems = items
+      .map((entry) => STORE_RANK_PRODUCTS[entry?.id])
+      .filter(Boolean)
+      .map((product) => ({
+        quantity: 1,
+        price_data: {
+          currency: STRIPE_CURRENCY,
+          unit_amount: toStripeUnitAmount(product.price),
+          product_data: {
+            name: product.name,
+            metadata: {
+              storeItemId: product.id,
+              rank: product.rank,
+            },
+          },
+        },
+      }));
 
-    let awardedRank = "";
-    if (purchasedHighestRank) {
-      const user = await clerkClient.users.getUser(auth.userId);
-      const currentRank = String(user?.publicMetadata?.rank || "Unregistered");
-      awardedRank = maxRankLabel(currentRank, purchasedHighestRank);
-      if (awardedRank !== currentRank) {
-        const nextMetadata = {
-          ...user.publicMetadata,
-          rank: awardedRank,
-        };
-        const nextDisplayRank = resolveDisplayRankFromMetadata(
-          nextMetadata,
-          isAdminUser(user),
-          true,
-        ).displayRank;
-        await clerkClient.users.updateUserMetadata(auth.userId, {
-          publicMetadata: nextMetadata,
-        });
-        await commentsCollection.updateMany(
-          { userId: auth.userId, isDeleted: false },
-          { $set: { authorRank: nextDisplayRank, updatedAt: new Date() } },
-        );
-      }
+    if (lineItems.length === 0) {
+      return res.status(400).json({ error: "Cart is empty" });
     }
 
-    const purchaseId = crypto.randomUUID();
-    await purchasesCollection.insertOne({
-      id: purchaseId,
-      purchaseId,
-      userId: auth.userId,
-      uuid: normalizePlayerUuid(linked?.playerUuid),
-      grants: buildFulfillmentGrants(items),
-      status: "PAID",
-      fulfilled: false,
-      items,
-      total,
-      awardedRank: awardedRank || null,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
+    const baseUrl = resolveRequestBaseUrl(req);
+    if (!baseUrl) {
+      return res.status(500).json({ error: "Unable to resolve checkout base URL" });
+    }
 
-    await cartsCollection.updateOne(
-      { userId: auth.userId },
-      {
-        $set: {
-          userId: auth.userId,
-          items: [],
-          updatedAt: new Date().toISOString(),
-        },
+    const session = await stripeClient.checkout.sessions.create({
+      mode: "payment",
+      payment_method_types: ["card"],
+      line_items: lineItems,
+      client_reference_id: auth.userId,
+      success_url: `${baseUrl}/store?stripe=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${baseUrl}/store?stripe=cancel`,
+      metadata: {
+        userId: auth.userId,
+        cartItemIds: items.map((entry) => entry.id).join(","),
       },
-      { upsert: true },
-    );
+    });
 
     return res.json({
       success: true,
-      cart: { items: [] },
-      purchaseId,
-      awardedRank: awardedRank || null,
+      sessionId: session.id,
+      checkoutUrl: session.url || "",
     });
   } catch (error) {
-    console.error("Failed to checkout cart", error);
-    return res.status(500).json({ error: "Failed to checkout cart" });
+    console.error("Failed to create Stripe checkout session", error);
+    return res.status(500).json({ error: "Failed to start Stripe checkout" });
+  }
+});
+
+app.post("/api/payments/stripe/complete", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    if (!stripeClient || !STRIPE_ENABLED) {
+      return res.status(503).json({ error: "Stripe checkout is not configured" });
+    }
+
+    const sessionId = normalizeText(req.body?.sessionId, 160);
+    if (!sessionId) {
+      return res.status(400).json({ error: "sessionId is required" });
+    }
+
+    const session = await stripeClient.checkout.sessions.retrieve(sessionId);
+    if (!session || session.mode !== "payment") {
+      return res.status(400).json({ error: "Invalid checkout session" });
+    }
+    if (String(session.client_reference_id || "") !== String(auth.userId)) {
+      return res.status(403).json({ error: "Checkout session does not belong to this user" });
+    }
+    if (String(session.payment_status || "").toLowerCase() !== "paid") {
+      return res.status(400).json({ error: "Payment has not completed yet" });
+    }
+
+    const result = await processCartCheckout(auth.userId, {
+      purchaseId: session.id,
+      purchaseProvider: "STRIPE",
+      paymentStatus: "PAID",
+      stripeSessionId: session.id,
+    });
+
+    return res.json({
+      success: true,
+      cart: { items: result.cartItems },
+      purchaseId: result.purchaseId,
+      awardedRank: result.awardedRank,
+      alreadyProcessed: result.alreadyProcessed,
+    });
+  } catch (error) {
+    if (error?.status) {
+      return res.status(error.status).json({ error: error.message || "Checkout failed" });
+    }
+    console.error("Failed to finalize Stripe checkout", error);
+    return res.status(500).json({ error: "Failed to finalize Stripe checkout" });
   }
 });
 
