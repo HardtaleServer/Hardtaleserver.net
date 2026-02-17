@@ -5969,7 +5969,7 @@ function ForumPage({ isAdmin = false }) {
                           showTemplatePicker=${false}
                           placeholder="Update your post..."
                         />
-                        <div className="comment-actions right">
+                        <div className="comment-actions right submit-panel row">
                           <button className="button primary" type="submit">Save</button>
                           <button className="button ghost-btn" type="button" onClick=${cancelEditPost}>
                             Cancel
@@ -6279,7 +6279,7 @@ function ForumPage({ isAdmin = false }) {
                             showTemplatePicker=${false}
                             placeholder="Update your post..."
                           />
-                          <div className="comment-actions right">
+                          <div className="comment-actions right submit-panel row">
                             <button className="button primary" type="submit">Save</button>
                             <button className="button ghost-btn" type="button" onClick=${cancelEditPost}>
                               Cancel
@@ -6366,7 +6366,7 @@ function ForumPage({ isAdmin = false }) {
               showTemplatePicker=${true}
               placeholder="Write your post..."
             />
-            <div className="comment-actions right">
+            <div className="comment-actions right submit-panel row">
               <span className="muted">Posting as ${getUserDisplayName(user)}</span>
               <button className="button primary" type="submit">Post</button>
             </div>
