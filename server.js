@@ -118,18 +118,6 @@ const ACHIEVEMENT_DEFS = [
     icon: "W",
   },
   {
-    key: "unlinked_state",
-    title: "Unlinked",
-    description: "Account is currently unlinked",
-    icon: "🔓",
-  },
-  {
-    key: "linked_state",
-    title: "Linked",
-    description: "Account is currently linked",
-    icon: "🔗",
-  },
-  {
     key: "linking_up",
     title: "Linking up",
     description: "Use /link successfully",
@@ -2385,21 +2373,15 @@ async function getEffectiveLinkedAccountForUserId(userId) {
   };
 }
 
-function buildAchievementCatalogWithState(unlockedRows = [], options = {}) {
+function buildAchievementCatalogWithState(unlockedRows = []) {
   const unlockedMap = new Map();
   for (const row of unlockedRows) {
     const key = normalizeText(row?.key, 80);
     if (!key) continue;
     unlockedMap.set(key, String(row?.unlockedAt || ""));
   }
-  const linkedState = options?.linked === true ? "linked" : options?.linked === false ? "unlinked" : "";
   return ACHIEVEMENT_DEFS.map((item) => {
-    let unlockedAt = unlockedMap.get(item.key) || "";
-    if (item.key === "linked_state") {
-      unlockedAt = linkedState === "linked" ? "state-active" : "";
-    } else if (item.key === "unlinked_state") {
-      unlockedAt = linkedState === "unlinked" ? "state-active" : "";
-    }
+    const unlockedAt = unlockedMap.get(item.key) || "";
     return {
       key: item.key,
       title: item.title,
@@ -2441,12 +2423,11 @@ async function getUserAchievements(userId) {
       },
     },
   ).catch(() => {});
-  const linked = await isLinkedUserId(safeUserId);
   const rows = await userAchievementsCollection
     .find({ userId: safeUserId })
     .project({ key: 1, unlockedAt: 1 })
     .toArray();
-  return buildAchievementCatalogWithState(rows, { linked });
+  return buildAchievementCatalogWithState(rows);
 }
 
 async function notifyAchievementUnlocked(userId, achievement) {
@@ -6362,3 +6343,4 @@ app.listen(PORT, HOST, () => {
     );
   }
 });
+

@@ -15,6 +15,7 @@ function ProfileCardLayout({
   metaRows = [],
   onMetaRowClick = null,
   rankNode = null,
+  badgeNode = null,
   children,
 }) {
   const safeRows = Array.isArray(metaRows) ? metaRows : [];
@@ -50,6 +51,7 @@ function ProfileCardLayout({
       )}
       <img className=${avatarClassName} src=${avatarSrc} alt=${avatarAlt || name || "User"} />
       <div className=${nameClassName}>${name}</div>
+      ${badgeNode || html``}
       ${username ? html`<div className="profile-card-username">@${username}</div>` : html``}
       ${rankNode || html``}
       ${children}

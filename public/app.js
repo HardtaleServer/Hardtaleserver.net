@@ -92,7 +92,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.01";
+const VERSION = "1.4.02";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -193,6 +193,17 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.4.02",
+    date: "2026-02-18",
+    items: [
+      "Improved Home dark-mode readability for News/Forum preview cards and added short preview text snippets.",
+      "Added a Home linked-status pill above Join now that opens `/link` modal and reflects linked/unlinked state.",
+      "Refactored profile card tabs to `Badges`, `Ranks`, `Groups`, `Achievements` and moved staff-group selection into `Groups`.",
+      "Removed linked/unlinked state achievements so `Welcome!` -> `Linking up` remains the first two core account achievements.",
+      "Added side-aware custom mobile drawer scrollbar styling and sticky footer behavior to avoid settings-cog overlap/conflicts.",
+    ],
+  },
   {
     version: "1.4.01",
     date: "2026-02-17",
@@ -3835,6 +3846,7 @@ function CommentThread({
               >
                 ${profileUser.name}
               </div>
+              ${renderStaffBadge(profileUser)}
               ${profileUser.username
                 ? html`<div className="profile-card-username">@${profileUser.username}</div>`
                 : html``}
@@ -3866,6 +3878,21 @@ function CommentThread({
                   <span>${badgeLabel}</span>
                 </div>`;
               })()}
+              <${ProfileInfoTabs}
+                activeTab=${profileInfoTab}
+                onTabChange=${setProfileInfoTab}
+                renderBadges=${() => html`${renderOwnedRankBadges(profileUser)}`}
+                renderRanks=${() => html`${renderProfileRanksCard(profileUser)}`}
+                renderGroups=${() =>
+                  html`${renderProfileGroupsCard(profileUser, {
+                    isSaving: profileTitleSaving,
+                    onStaffRoleChange: updateOwnStaffRolePreview,
+                  })}`}
+                renderAchievements=${() =>
+                  html`<${ProfileAchievementsPanel}
+                    achievements=${profileUser?.achievements || []}
+                  />`}
+              />
               ${profileUser.isOwn
                 ? html`<label className="profile-card-title-picker">
                     <span className="muted">Display title</span>
@@ -3878,23 +3905,6 @@ function CommentThread({
                         ? profileUser.availableTitles
                         : ["Unregistered"]
                       ).map((title) => html`<option value=${title}>${getRankDisplayLabel(title)}</option>`)}
-                    </select>
-                  </label>`
-                : html``}
-              ${profileUser.isOwn &&
-              profileUser.canPreviewStaffRole &&
-              Array.isArray(profileUser.staffRolePreviewOptions) &&
-              profileUser.staffRolePreviewOptions.length > 0
-                ? html`<label className="profile-card-title-picker">
-                    <span className="muted">Group badge preview</span>
-                    <select
-                      value=${profileUser.staffRolePreview || profileUser.staffRole || ""}
-                      disabled=${profileTitleSaving}
-                      onChange=${(event) => updateOwnStaffRolePreview(event.target.value)}
-                    >
-                      ${profileUser.staffRolePreviewOptions.map((role) => html`<option value=${role}>
-                        ${toStaffPillTitle(role) || role}
-                      </option>`)}
                     </select>
                   </label>`
                 : html``}
@@ -4017,16 +4027,6 @@ function CommentThread({
               ${profileTitleStatus && profileUser.isOwn
                 ? html`<div className="muted profile-card-title-status">${profileTitleStatus}</div>`
                 : html``}
-              <${ProfileInfoTabs}
-                activeTab=${profileInfoTab}
-                onTabChange=${setProfileInfoTab}
-                renderGroups=${() => html`${renderProfileGroupsCard(profileUser)}`}
-                renderBadges=${() => html`${renderStaffBadge(profileUser)}${renderOwnedRankBadges(profileUser)}`}
-                renderAchievements=${() =>
-                  html`<${ProfileAchievementsPanel}
-                    achievements=${profileUser?.achievements || []}
-                  />`}
-              />
             </div>`
           : html``}
       <//>
@@ -6575,6 +6575,59 @@ function ForumPage({ isAdmin = false }) {
     }
   }
 
+  async function updateOwnForumStaffRolePreview(nextRole) {
+    if (!forumProfileUser?.isOwn || !forumProfileUser?.canPreviewStaffRole || !nextRole) return;
+    const current = String(forumProfileUser.staffRolePreview || forumProfileUser.staffRole || "");
+    if (nextRole === current) return;
+    setForumProfileTitleSaving(true);
+    setForumProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/staff-role-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ staffRolePreview: nextRole }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save group badge preview.");
+      }
+      const data = await response.json();
+      const staffRole = String(data?.staffRole || nextRole);
+      const options = Array.isArray(data?.staffRolePreviewOptions) ? data.staffRolePreviewOptions : [];
+      setForumProfileUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              staffRole,
+              staffRolePreview: String(data?.staffRolePreview || staffRole),
+              staffRolePreviewOptions: options.length > 0 ? options : prev.staffRolePreviewOptions,
+            }
+          : prev,
+      );
+      setPosts((prev) =>
+        prev.map((post) => {
+          const postAuthorUserId = String(post?.authorUserId || post?.createdBy || "");
+          return postAuthorUserId === String(userId || "")
+            ? { ...post, authorStaffRole: staffRole }
+            : post;
+        }),
+      );
+      setSelectedPost((prev) => {
+        if (!prev) return prev;
+        const postAuthorUserId = String(prev?.authorUserId || prev?.createdBy || "");
+        return postAuthorUserId === String(userId || "")
+          ? { ...prev, authorStaffRole: staffRole }
+          : prev;
+      });
+      setForumProfileTitleStatus("Saved.");
+      setTimeout(() => setForumProfileTitleStatus(""), 1200);
+    } catch (error) {
+      setForumProfileTitleStatus(error?.message || "Failed to save group badge preview.");
+    } finally {
+      setForumProfileTitleSaving(false);
+    }
+  }
+
   async function updateOwnForumStaffGradientVisibility(nextVisible) {
     if (!forumProfileUser?.isOwn || !forumProfileUser?.canToggleStaffGradient || forumProfileStaffGradientSaving) return;
     setForumProfileStaffGradientSaving(true);
@@ -6905,6 +6958,7 @@ function ForumPage({ isAdmin = false }) {
       >
         ${forumProfileUser.name}
       </div>
+      ${renderStaffBadge(forumProfileUser)}
       ${forumProfileUser.username
         ? html`<div className="profile-card-username">@${forumProfileUser.username}</div>`
         : html``}
@@ -6931,6 +6985,21 @@ function ForumPage({ isAdmin = false }) {
           <span>${badgeLabel}</span>
         </div>`;
       })()}
+      <${ProfileInfoTabs}
+        activeTab=${forumProfileInfoTab}
+        onTabChange=${setForumProfileInfoTab}
+        renderBadges=${() => html`${renderOwnedRankBadges(forumProfileUser)}`}
+        renderRanks=${() => html`${renderProfileRanksCard(forumProfileUser)}`}
+        renderGroups=${() =>
+          html`${renderProfileGroupsCard(forumProfileUser, {
+            isSaving: forumProfileTitleSaving,
+            onStaffRoleChange: updateOwnForumStaffRolePreview,
+          })}`}
+        renderAchievements=${() =>
+          html`<${ProfileAchievementsPanel}
+            achievements=${forumProfileUser?.achievements || []}
+          />`}
+      />
       ${forumProfileUser.isOwn
         ? html`<label className="profile-card-title-picker">
             <span className="muted">Display title</span>
@@ -6943,23 +7012,6 @@ function ForumPage({ isAdmin = false }) {
                 ? forumProfileUser.availableTitles
                 : ["Unregistered"]
               ).map((title) => html`<option value=${title}>${getRankDisplayLabel(title)}</option>`)}
-            </select>
-          </label>`
-        : html``}
-      ${forumProfileUser.isOwn &&
-      forumProfileUser.canPreviewStaffRole &&
-      Array.isArray(forumProfileUser.staffRolePreviewOptions) &&
-      forumProfileUser.staffRolePreviewOptions.length > 0
-        ? html`<label className="profile-card-title-picker">
-            <span className="muted">Group badge preview</span>
-            <select
-              value=${forumProfileUser.staffRolePreview || forumProfileUser.staffRole || ""}
-              disabled=${forumProfileTitleSaving}
-              onChange=${(event) => updateOwnForumStaffRolePreview(event.target.value)}
-            >
-              ${forumProfileUser.staffRolePreviewOptions.map((role) => html`<option value=${role}>
-                ${toStaffPillTitle(role) || role}
-              </option>`)}
             </select>
           </label>`
         : html``}
@@ -7045,16 +7097,6 @@ function ForumPage({ isAdmin = false }) {
       ${forumProfileTitleStatus && forumProfileUser.isOwn
         ? html`<div className="muted profile-card-title-status">${forumProfileTitleStatus}</div>`
         : html``}
-      <${ProfileInfoTabs}
-        activeTab=${forumProfileInfoTab}
-        onTabChange=${setForumProfileInfoTab}
-        renderGroups=${() => html`${renderProfileGroupsCard(forumProfileUser)}`}
-        renderBadges=${() => html`${renderStaffBadge(forumProfileUser)}${renderOwnedRankBadges(forumProfileUser)}`}
-        renderAchievements=${() =>
-          html`<${ProfileAchievementsPanel}
-            achievements=${forumProfileUser?.achievements || []}
-          />`}
-      />
     </div>`;
   }
 
@@ -8379,59 +8421,6 @@ function renderLinkedStatusIcon(linked = false) {
   if (linked) {
     return html`<span className="link-state-icon link-state-icon-verified" aria-hidden="true">✓</span>`;
   }
-
-  async function updateOwnForumStaffRolePreview(nextRole) {
-    if (!forumProfileUser?.isOwn || !forumProfileUser?.canPreviewStaffRole || !nextRole) return;
-    const current = String(forumProfileUser.staffRolePreview || forumProfileUser.staffRole || "");
-    if (nextRole === current) return;
-    setForumProfileTitleSaving(true);
-    setForumProfileTitleStatus("Saving...");
-    try {
-      const response = await apiFetchWithToken(getToken, true, "/api/profile/staff-role-preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ staffRolePreview: nextRole }),
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw new Error(data?.error || "Failed to save group badge preview.");
-      }
-      const data = await response.json();
-      const staffRole = String(data?.staffRole || nextRole);
-      const options = Array.isArray(data?.staffRolePreviewOptions) ? data.staffRolePreviewOptions : [];
-      setForumProfileUser((prev) =>
-        prev
-          ? {
-              ...prev,
-              staffRole,
-              staffRolePreview: String(data?.staffRolePreview || staffRole),
-              staffRolePreviewOptions: options.length > 0 ? options : prev.staffRolePreviewOptions,
-            }
-          : prev,
-      );
-      setPosts((prev) =>
-        prev.map((post) => {
-          const postAuthorUserId = String(post?.authorUserId || post?.createdBy || "");
-          return postAuthorUserId === String(userId || "")
-            ? { ...post, authorStaffRole: staffRole }
-            : post;
-        }),
-      );
-      setSelectedPost((prev) => {
-        if (!prev) return prev;
-        const postAuthorUserId = String(prev?.authorUserId || prev?.createdBy || "");
-        return postAuthorUserId === String(userId || "")
-          ? { ...prev, authorStaffRole: staffRole }
-          : prev;
-      });
-      setForumProfileTitleStatus("Saved.");
-      setTimeout(() => setForumProfileTitleStatus(""), 1200);
-    } catch (error) {
-      setForumProfileTitleStatus(error?.message || "Failed to save group badge preview.");
-    } finally {
-      setForumProfileTitleSaving(false);
-    }
-  }
   return html`<img
     className="link-state-icon link-state-icon-warning"
     src=${WARNING_STATUS_ICON_SVG}
@@ -8449,23 +8438,11 @@ function renderOwnedRankBadges(entry) {
   });
   const linkedResolved = Boolean(entry.linkedAccount);
   const linkedBadgeLabel = linkedResolved ? "Linked" : "Unlinked";
-  const showStaffBadgeChip = isStaffUser && entry.showStaffBadge !== false;
-  const showStaffBadgeIcon = entry.showStaffBadgeIcon !== false;
-  const roleClass = resolveStaffRoleClass(entry);
-  const staffBadgeChipClass = `profile-owned-badge staff-owned-badge ${roleClass} ${
-    entry.showStaffGradient === false ? "staff-static" : ""
-  }`.trim();
   return html`<div className="profile-card-badges-stack">
     <div className="profile-card-badges-block">
       <div className="profile-card-badges-title">Badges</div>
       ${badges.length > 0
         ? html`<div className="profile-card-badges-row">
-            ${showStaffBadgeChip
-              ? html`<span className=${staffBadgeChipClass}>
-                  ${showStaffBadgeIcon ? html`<img className="staff-badge-icon" src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" />` : html``}
-                  <span>STAFF</span>
-                </span>`
-              : html``}
             <span className=${`profile-owned-badge rank-${linkedBadgeLabel.toLowerCase()}`.trim()}>
               ${renderLinkedStatusIcon(linkedResolved)}
               <span>${linkedBadgeLabel}</span>
@@ -8485,15 +8462,47 @@ function renderOwnedRankBadges(entry) {
   </div>`;
 }
 
-function renderProfileGroupsCard(entry) {
+function renderProfileRanksCard(entry) {
   const groups = deriveProfileGroups(entry);
   return html`<div className="profile-card-badges-block">
-    <div className="profile-card-badges-title">Groups</div>
+    <div className="profile-card-badges-title">Ranks</div>
     ${groups.length > 0
       ? html`<div className="profile-card-badges-row profile-groups-row">
           ${groups.map((group) => html`<span className="profile-group-pill">${group}</span>`)}
         </div>`
-      : html`<div className="muted profile-card-badges-empty">No groups assigned.</div>`}
+      : html`<div className="muted profile-card-badges-empty">No ranks assigned.</div>`}
+  </div>`;
+}
+
+function renderProfileGroupsCard(entry, options = {}) {
+  const canManageStaffGroup =
+    Boolean(entry?.isOwn) &&
+    Boolean(entry?.canPreviewStaffRole) &&
+    Array.isArray(entry?.staffRolePreviewOptions) &&
+    entry.staffRolePreviewOptions.length > 0 &&
+    typeof options?.onStaffRoleChange === "function";
+  const activeGroup = toStaffPillTitle(entry?.staffRolePreview || entry?.staffRole || entry?.authorStaffRole || "");
+  return html`<div className="profile-card-badges-block">
+    <div className="profile-card-badges-title">Groups</div>
+    ${activeGroup
+      ? html`<div className="profile-card-badges-row profile-groups-row">
+          <span className="profile-group-pill">${activeGroup}</span>
+        </div>`
+      : html`<div className="muted profile-card-badges-empty">No staff groups assigned.</div>`}
+    ${canManageStaffGroup
+      ? html`<label className="profile-card-title-picker profile-groups-picker">
+          <span className="muted">Staff group</span>
+          <select
+            value=${entry?.staffRolePreview || entry?.staffRole || ""}
+            disabled=${options?.isSaving === true}
+            onChange=${(event) => options.onStaffRoleChange(event.target.value)}
+          >
+            ${entry.staffRolePreviewOptions.map((role) => html`<option value=${role}>
+              ${toStaffPillTitle(role) || role}
+            </option>`)}
+          </select>
+        </label>`
+      : html``}
   </div>`;
 }
 
@@ -8505,6 +8514,8 @@ function HomePage({
   onPlayClick,
   onNewsClick,
   onHowClick,
+  onLinkClick,
+  isLinkedAccount,
 }) {
   const navigate = useNavigate();
   const [forumPreview, setForumPreview] = useState([]);
@@ -8599,6 +8610,14 @@ function HomePage({
       ? `Active Players: ${serverRuntime.maxPlayers ? `${serverRuntime.playerCount}/${serverRuntime.maxPlayers}` : serverRuntime.playerCount}`
       : "Active Players: Online"
     : "Active Players: Offline";
+  const linkedLabel = isLinkedAccount ? "Linked" : "Unlinked";
+  const linkedClass = isLinkedAccount ? "linked" : "unlinked";
+  const previewText = (value) =>
+    String(value || "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 120);
 
   return html`
     <section className="home-stack">
@@ -8623,6 +8642,13 @@ function HomePage({
         <div ref=${playRef} className="hero-card plain">
           <div className="join-row">
             <strong>Join now</strong>
+            <button
+              className=${`button ghost-btn link-state-pill ${linkedClass}`.trim()}
+              type="button"
+              onClick=${() => onLinkClick && onLinkClick()}
+            >
+              ${linkedLabel}
+            </button>
             <button
               className="button ghost-btn how-btn"
               type="button"
@@ -8687,10 +8713,15 @@ function HomePage({
                     <div className="news-mini-meta">
                       By ${item.author} · ${formatTimestamp(item.createdAt)}
                     </div>
+                    ${previewText(item.body || item.content || item.summary)
+                      ? html`<div className="news-mini-preview">
+                          ${previewText(item.body || item.content || item.summary)}
+                        </div>`
+                      : html``}
                   </div>`,
                 )}
               </div>`}
-          <button className="button ghost-btn" onClick=${onNewsClick}>
+          <button className="button ghost-btn home-preview-footer-btn" onClick=${onNewsClick}>
             View all news
           </button>
         </div>
@@ -8722,10 +8753,15 @@ function HomePage({
                     <div className="news-mini-meta">
                       By ${post.authorName || "User"} · ${formatTimestamp(post.createdAt)}
                     </div>
+                    ${previewText(post.body || post.excerpt || post.summary)
+                      ? html`<div className="news-mini-preview">
+                          ${previewText(post.body || post.excerpt || post.summary)}
+                        </div>`
+                      : html``}
                   </div>`,
                 )}
               </div>`}
-          <button className="button ghost-btn" type="button" onClick=${() => navigate("/forum")}>
+          <button className="button ghost-btn home-preview-footer-btn" type="button" onClick=${() => navigate("/forum")}>
             View forum
           </button>
           <${SkillLeaderboardCard} iconSrc=${LEADERBOARD_ICON_SVG} />
@@ -10644,6 +10680,19 @@ function Layout() {
       isStaffLabel(rankLabel);
     const authorUserId = String(item.authorUserId || "").trim();
     const isOwn = Boolean(isSignedIn && userId && authorUserId && String(userId) === authorUserId);
+    let canPreviewStaffRole = false;
+    let staffRolePreview = "";
+    let staffRolePreviewOptions = [];
+    if (isOwn && isSignedIn) {
+      const settings = await loadOwnProfileTitleSettings();
+      if (settings) {
+        canPreviewStaffRole = Boolean(settings.canPreviewStaffRole);
+        staffRolePreview = String(settings.staffRolePreview || "");
+        staffRolePreviewOptions = Array.isArray(settings.staffRolePreviewOptions)
+          ? settings.staffRolePreviewOptions
+          : [];
+      }
+    }
     const [linkStatus, achievements, groups] = await Promise.all([
       loadLayoutProfileLinkStatus(authorUserId),
       loadLayoutProfileAchievements(authorUserId),
@@ -10665,6 +10714,9 @@ function Layout() {
       useRankFont: item?.authorUseRankFont === true,
       showDonorGradient: item?.authorShowDonorGradient !== false,
       isOwn,
+      canPreviewStaffRole,
+      staffRolePreview,
+      staffRolePreviewOptions,
       hytalePlayerName: linkStatus.playerName,
       hytalePlayerUuid: linkStatus.playerUuid,
       linkedAccount: linkStatus.linked,
@@ -10674,6 +10726,55 @@ function Layout() {
     setNotificationProfileOpen(true);
     } finally {
       setNotificationProfileLoading(false);
+    }
+  }
+
+  async function updateOwnNotificationStaffRolePreview(nextRole) {
+    if (!notificationProfileUser?.isOwn || !notificationProfileUser?.canPreviewStaffRole || !nextRole) return;
+    const current = String(
+      notificationProfileUser.staffRolePreview || notificationProfileUser.staffRole || "",
+    );
+    if (nextRole === current) return;
+    setProfileTitleSaving(true);
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/staff-role-preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ staffRolePreview: nextRole }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save staff group.");
+      }
+      const data = await response.json();
+      const staffRole = String(data?.staffRole || nextRole);
+      const options = Array.isArray(data?.staffRolePreviewOptions) ? data.staffRolePreviewOptions : [];
+      setNotificationProfileUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              staffRole,
+              staffRolePreview: String(data?.staffRolePreview || staffRole),
+              staffRolePreviewOptions: options.length > 0 ? options : prev.staffRolePreviewOptions,
+            }
+          : prev,
+      );
+      setNotifications((prev) =>
+        prev.map((row) => {
+          const rowUserId = String(row?.authorUserId || "");
+          return rowUserId && rowUserId === String(userId || "")
+            ? { ...row, authorStaffRole: staffRole }
+            : row;
+        }),
+      );
+    } catch (error) {
+      emitAppToast({
+        kind: "error",
+        title: "Group Save Failed",
+        message: error?.message || "Unable to update staff group.",
+      });
+    } finally {
+      setProfileTitleSaving(false);
     }
   }
 
@@ -11074,6 +11175,7 @@ function Layout() {
           removeFromCart=${removeItem}
           isLinkedAccount=${isLinkedAccount}
           cart=${cart}
+          onLinkClick=${openLinkModal}
         />
 
         <${SiteFooter}
@@ -11269,6 +11371,7 @@ function Layout() {
                 .toLowerCase()
                 .replace(/[^a-z0-9]+/g, "-")}`.trim()}
               name=${notificationProfileUser.name}
+              badgeNode=${renderStaffBadge(notificationProfileUser)}
               username=${notificationProfileUser.username}
               metaRows=${[
                 {
@@ -11323,10 +11426,15 @@ function Layout() {
               <${ProfileInfoTabs}
                 activeTab=${notificationProfileInfoTab}
                 onTabChange=${setNotificationProfileInfoTab}
-                renderGroups=${() =>
-                  html`${renderProfileGroupsCard(notificationProfileUser)}`}
                 renderBadges=${() =>
-                  html`${renderStaffBadge(notificationProfileUser)}${renderOwnedRankBadges(notificationProfileUser)}`}
+                  html`${renderOwnedRankBadges(notificationProfileUser)}`}
+                renderRanks=${() =>
+                  html`${renderProfileRanksCard(notificationProfileUser)}`}
+                renderGroups=${() =>
+                  html`${renderProfileGroupsCard(notificationProfileUser, {
+                    isSaving: profileTitleSaving,
+                    onStaffRoleChange: updateOwnNotificationStaffRolePreview,
+                  })}`}
                 renderAchievements=${() =>
                   html`<${ProfileAchievementsPanel}
                     achievements=${notificationProfileUser?.achievements || []}

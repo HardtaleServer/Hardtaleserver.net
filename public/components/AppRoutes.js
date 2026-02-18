@@ -30,6 +30,7 @@ export default function AppRoutes({
   removeFromCart,
   isLinkedAccount,
   cart,
+  onLinkClick,
 }) {
   return html`
     <${Routes} location=${routesLocation}>
@@ -43,6 +44,8 @@ export default function AppRoutes({
           onPlayClick=${openHowModal}
           onNewsClick=${() => navigate("/news")}
           onHowClick=${() => openHowModal()}
+          onLinkClick=${onLinkClick}
+          isLinkedAccount=${isLinkedAccount}
         />`}
       />
       <${Route}
@@ -55,6 +58,8 @@ export default function AppRoutes({
           onPlayClick=${openHowModal}
           onNewsClick=${() => navigate("/news")}
           onHowClick=${() => openHowModal()}
+          onLinkClick=${onLinkClick}
+          isLinkedAccount=${isLinkedAccount}
         />`}
       />
       <${Route}
@@ -117,6 +122,8 @@ export default function AppRoutes({
           onPlayClick=${openHowModal}
           onNewsClick=${() => navigate("/news")}
           onHowClick=${() => openHowModal()}
+          onLinkClick=${onLinkClick}
+          isLinkedAccount=${isLinkedAccount}
         />`}
       />
       <${Route}
@@ -129,6 +136,8 @@ export default function AppRoutes({
           onPlayClick=${openHowModal}
           onNewsClick=${() => navigate("/news")}
           onHowClick=${() => openHowModal()}
+          onLinkClick=${onLinkClick}
+          isLinkedAccount=${isLinkedAccount}
         />`}
       />
       <${Route}

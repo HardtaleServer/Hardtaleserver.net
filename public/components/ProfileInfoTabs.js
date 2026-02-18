@@ -7,10 +7,14 @@ function ProfileInfoTabs({
   activeTab = "badges",
   onTabChange,
   renderBadges,
+  renderRanks,
   renderGroups,
   renderAchievements,
 }) {
   let content = typeof renderBadges === "function" ? renderBadges() : null;
+  if (activeTab === "ranks") {
+    content = typeof renderRanks === "function" ? renderRanks() : null;
+  }
   if (activeTab === "groups") {
     content = typeof renderGroups === "function" ? renderGroups() : null;
   }
@@ -25,6 +29,13 @@ function ProfileInfoTabs({
         onClick=${() => onTabChange && onTabChange("badges")}
       >
         Badges
+      </button>
+      <button
+        type="button"
+        className=${`profile-card-subtab ${activeTab === "ranks" ? "active" : ""}`.trim()}
+        onClick=${() => onTabChange && onTabChange("ranks")}
+      >
+        Ranks
       </button>
       <button
         type="button"

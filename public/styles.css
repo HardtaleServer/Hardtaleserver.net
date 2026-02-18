@@ -2029,6 +2029,7 @@ body[data-theme="light"] .button.primary {
 
 .news-mini-title {
   font-weight: 600;
+  color: var(--text);
 }
 
 .mini-view-btn {
@@ -2041,6 +2042,46 @@ body[data-theme="light"] .button.primary {
 .news-mini-meta {
   color: var(--muted);
   font-size: 13px;
+}
+
+.news-mini-preview {
+  color: color-mix(in srgb, var(--text) 85%, var(--muted));
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+body[data-theme="dark"] .news-mini-row {
+  background: color-mix(in srgb, var(--bg-soft) 82%, #111827);
+}
+
+body[data-theme="dark"] .news-mini-preview {
+  color: color-mix(in srgb, var(--text) 88%, var(--muted));
+}
+
+.home-preview-footer-btn {
+  width: 50%;
+  min-width: 150px;
+  justify-self: center;
+  text-align: center;
+}
+
+.link-state-pill {
+  min-width: 108px;
+  padding: 6px 12px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.link-state-pill.linked {
+  border-color: color-mix(in srgb, var(--rank-registered) 55%, var(--stroke));
+  color: var(--rank-registered);
+  background: color-mix(in srgb, var(--rank-registered) 12%, transparent);
+}
+
+.link-state-pill.unlinked {
+  border-color: color-mix(in srgb, #ffbc6d 55%, var(--stroke));
+  color: #ffbc6d;
+  background: color-mix(in srgb, #ffbc6d 14%, transparent);
 }
 
 .home-leaderstats-note {
@@ -3877,9 +3918,11 @@ emoji-picker.reaction-picker-panel {
 }
 
 .profile-card-subtabs {
-  display: inline-flex;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
-  align-self: center;
+  align-self: stretch;
   margin-top: 6px;
 }
 
@@ -3894,6 +3937,7 @@ emoji-picker.reaction-picker-panel {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   cursor: pointer;
+  text-align: center;
 }
 
 .profile-card-subtab.active {
@@ -3907,6 +3951,10 @@ emoji-picker.reaction-picker-panel {
   flex-wrap: wrap;
   gap: 6px;
   justify-content: center;
+}
+
+.profile-groups-picker {
+  margin-top: 4px;
 }
 
 .profile-owned-badge {
@@ -7001,6 +7049,23 @@ html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar-thu
   transition: transform 0.3s ease;
   box-shadow: -20px 0 60px rgba(0, 0, 0, 0.35);
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--accent) 60%, var(--accent-2)) color-mix(in srgb, var(--bg-soft) 70%, transparent);
+}
+
+.mobile-drawer-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.mobile-drawer-panel::-webkit-scrollbar-track {
+  background: color-mix(in srgb, var(--bg-soft) 80%, transparent);
+  border-radius: 999px;
+}
+
+.mobile-drawer-panel::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--bg-soft) 85%, transparent);
 }
 
 .mobile-drawer.drawer-left .mobile-drawer-panel {
@@ -7010,6 +7075,11 @@ html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar-thu
   border-right: 1px solid var(--stroke);
   transform: translateX(-100%);
   box-shadow: 20px 0 60px rgba(0, 0, 0, 0.35);
+  direction: rtl;
+}
+
+.mobile-drawer.drawer-left .mobile-drawer-panel > * {
+  direction: ltr;
 }
 
 .mobile-drawer.drawer-left.open .mobile-drawer-panel {
@@ -7183,6 +7253,11 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   margin-top: auto;
   border-top: 1px solid var(--stroke);
   padding-top: 16px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  position: sticky;
+  bottom: 0;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--card) 0%, transparent), var(--card) 26%);
+  z-index: 3;
   display: grid;
   gap: 12px;
 }
