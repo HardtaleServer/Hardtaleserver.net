@@ -2177,9 +2177,9 @@ body[data-theme="light"] .button.primary {
   margin-right: 6px;
 }
 
-.news-star-icon {
-  width: 100%;
-  height: 100%;
+.news-badge-icon {
+  width: 92%;
+  height: 92%;
   display: block;
   object-fit: contain;
   filter: drop-shadow(0 0 5px rgba(0, 0, 0, 0.35));
@@ -6771,6 +6771,10 @@ html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar-thu
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  text-align: right;
 }
 
 .notif-card .author-name.staff {
@@ -7066,6 +7070,7 @@ html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar-thu
 .drawer-header-actions.left {
   grid-column: 1;
   justify-self: start;
+  transform: translateX(8px);
 }
 
 .drawer-header-actions.right {
@@ -7095,7 +7100,7 @@ html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar-thu
 }
 
 .mobile-drawer.drawer-left .drawer-header-actions .settings-menu {
-  left: -55px;
+  left: 0;
   right: auto;
 }
 
@@ -7154,12 +7159,19 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 .drawer-link.active:hover {
   border-color: color-mix(in srgb, var(--accent) 35%, var(--stroke));
   background: color-mix(in srgb, var(--bg-soft) 88%, transparent);
-  color: transparent;
+  color: var(--accent);
   background-image: linear-gradient(270deg, var(--accent-2), var(--accent));
   background-clip: text;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.2);
+}
+
+.drawer-link.active::after,
+.drawer-link.active:hover::after {
+  opacity: 1;
+  background: linear-gradient(180deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 42%, transparent);
 }
 
 .drawer-link:active {
@@ -7183,13 +7195,13 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 .drawer-user {
   display: block;
   width: 100%;
-  margin-bottom: 40px;
-  transform: translateY(-16px);
+  margin-bottom: 26px;
+  transform: translateY(-12px);
 }
 
 .drawer-settings-row {
   display: flex;
-  margin-top: -28px;
+  margin-top: -24px;
 }
 
 .drawer-settings-row.right {
@@ -7198,6 +7210,7 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 
 .drawer-settings-row.left {
   justify-content: flex-start;
+  transform: translateX(8px);
 }
 
 .drawer-user-right {
@@ -7206,6 +7219,18 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 
 .drawer-profile-preview {
   width: 100%;
+  transform: translateY(-2px);
+}
+
+.mobile-drawer .settings-button {
+  display: grid;
+  opacity: 1;
+  visibility: visible;
+  z-index: 6;
+}
+
+.mobile-drawer .settings-icon-mask {
+  background: var(--text);
 }
 
 .admin-tools {
@@ -7507,7 +7532,7 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   }
 
   .mobile-nav-bar.nav-transparent.nav-left {
-    left: -15px;
+    left: 0;
   }
 
 
@@ -7627,7 +7652,7 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   }
 
   .mobile-top-actions.menu-left {
-    margin-left: 15px;
+    margin-left: 0;
     margin-right: auto;
   }
 
@@ -7698,6 +7723,8 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   .notif-author-line {
     justify-content: flex-start;
     width: 100%;
+    padding-right: 110px;
+    min-height: 22px;
   }
 
   .toast-stack {

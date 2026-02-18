@@ -8321,7 +8321,7 @@ function renderStoreIcon(type) {
 
 function renderFeaturedBadge(mini = false) {
   return html`<span className=${`news-star ${mini ? "mini" : ""}`.trim()} title="Featured" aria-label="Featured">
-    <img className="news-star-icon" src=${FEATURED_BADGE_ICON_SVG} alt="" aria-hidden="true" />
+    <img className="news-badge-icon" src=${FEATURED_BADGE_ICON_SVG} alt="" aria-hidden="true" />
   </span>`;
 }
 

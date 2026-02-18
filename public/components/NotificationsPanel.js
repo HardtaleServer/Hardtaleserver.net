@@ -38,7 +38,7 @@ export default function NotificationsPanel({
           <div className="notif-title">
             ${item.featured
               ? html`<span className="news-star mini" title="Featured" aria-label="Featured">
-                  <img className="news-star-icon" src=${featuredIconSrc} alt="" aria-hidden="true" />
+                  <img className="news-badge-icon" src=${featuredIconSrc} alt="" aria-hidden="true" />
                 </span>`
               : html``}
             ${item.title}
@@ -94,4 +94,3 @@ export default function NotificationsPanel({
     </div>
   `;
 }
-
