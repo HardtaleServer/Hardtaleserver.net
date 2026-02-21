@@ -1,0 +1,38 @@
+PLANNED - Achievement Expansion Roadmap
+Date: 2026-02-17
+
+Purpose
+- Track future achievement mechanics that depend on live server telemetry and gameplay activity.
+
+Planned (later)
+1. Playtime-gated achievements
+- Unlock milestones based on in-game active playtime (example: 1h, 10h, 50h, 100h).
+- Only count active session time (exclude idle/AFK when possible).
+
+2. Hybrid web + server progression
+- Some achievements require both web actions and in-game completion.
+- Example: linked account + X minutes on server + first forum post.
+
+3. Streak hardening with server participation
+- Keep web login streaks, but add optional server participation requirements.
+- Example: login streak counts only if player joined server that day.
+
+4. Seasonal/event achievements
+- Time-boxed achievements tied to events/seasons.
+- Include event metadata and expiration handling.
+
+5. Anti-abuse and integrity controls
+- Validate server-reported activity with signed/authenticated payloads.
+- Add duplicate protection and cooldown windows for repeatable actions.
+
+6. Achievement metadata upgrades
+- Add rarity tiers, points, and progress bars.
+- Support hidden achievements with reveal-on-unlock behavior.
+
+7. Notification and UX improvements
+- Queue/priority rules for achievement toasts.
+- Optional grouped toasts when multiple unlocks happen at once.
+
+Current scope reminder
+- Current implementation remains lightweight and does not require new endpoints/env vars.
+- Existing linking behavior must remain unchanged.

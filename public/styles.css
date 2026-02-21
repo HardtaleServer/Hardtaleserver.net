@@ -7203,7 +7203,6 @@ body[data-theme="dark"] .page.nav-solid .drawer-link {
 }
 
 body[data-theme="dark"] .page.nav-transparent .drawer-link {
-  background: transparent;
   border-color: transparent;
 }
 
