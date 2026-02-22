@@ -5616,7 +5616,7 @@ body[data-theme="dark"] .store-cta {
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
-  touch-action: pan-x;
+  touch-action: auto;
   background: color-mix(in srgb, var(--bg-soft) 90%, transparent);
 }
 
@@ -5800,6 +5800,46 @@ body[data-theme="dark"] .store-cta {
   font-weight: 700;
 }
 
+.store-comparison-prefix {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  display: inline-block;
+}
+
+.store-comparison-prefix.rank-hero {
+  background-image: linear-gradient(110deg, var(--rank-hero) 0%, var(--rank-hero) 65%, var(--rank-hero-end) 100%);
+  background-size: 190% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: donorRankFlow 4s ease-in-out infinite;
+}
+
+.store-comparison-prefix.rank-legend {
+  background-image: linear-gradient(110deg, var(--rank-legend) 0%, var(--rank-legend) 65%, var(--rank-legend-end) 100%);
+  background-size: 190% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: donorRankFlow 4s ease-in-out infinite;
+}
+
+.store-comparison-prefix.rank-mythic {
+  background-image: linear-gradient(110deg, var(--rank-mythic) 0%, var(--rank-mythic) 65%, var(--rank-mythic-end) 100%);
+  background-size: 190% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  animation: donorRankFlow 4s ease-in-out infinite;
+}
+
+.store-comparison-scroll-hint {
+  display: none;
+}
+
 .store-comparison-status-icon {
   width: 18px;
   height: 18px;
@@ -5934,6 +5974,17 @@ body[data-theme="dark"] .store-cta {
 }
 
 @media (max-width: 860px) {
+  .store-comparison-scroll-hint {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 4px;
+    margin-bottom: 2px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    color: color-mix(in srgb, var(--muted) 88%, var(--text));
+  }
+
   .store-ranks-section {
     overflow-x: hidden;
   }

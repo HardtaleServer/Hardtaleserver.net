@@ -5289,6 +5289,10 @@ function StorePage({
   }
 
   function renderComparisonCell(value, rowLabel = "", item = null) {
+    if (rowLabel === "Chat Prefix" && item) {
+      const rankSlug = getStoreRankSlug(item);
+      return html`<span className=${`store-comparison-prefix rank-${rankSlug}`.trim()}>${String(value || "-")}</span>`;
+    }
     if (rowLabel === "In-game Name Color" && item) {
       const rankSlug = getStoreRankSlug(item);
       const comparisonName = storePreviewUsername ? `@${storePreviewUsername}` : storePreviewName;
@@ -5494,6 +5498,7 @@ function StorePage({
           </div>
           <div className="store-comparison-shell">
             <div className="section-title">Rank Comparison</div>
+            <div className="store-comparison-scroll-hint">Scroll right for more -></div>
             <div className="store-comparison-wrap">
               <table className="store-comparison-table" role="table" aria-label="Rank feature comparison">
                 <thead>
