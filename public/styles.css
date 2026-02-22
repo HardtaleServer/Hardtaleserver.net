@@ -5899,6 +5899,127 @@ body[data-theme="dark"] .store-cta {
   margin-top: 10px;
 }
 
+@media (max-width: 860px) {
+  .store-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .store-card {
+    grid-template-rows: none;
+    grid-auto-rows: auto;
+    gap: 8px;
+    padding: 14px;
+  }
+
+  .store-rank-title {
+    min-height: 0;
+    font-size: 14px;
+  }
+
+  .store-rank-card-art {
+    height: clamp(116px, 42vw, 154px);
+  }
+
+  .store-profile-preview {
+    min-height: 0;
+    grid-template-columns: auto 1fr;
+    padding: 9px;
+  }
+
+  .store-profile-avatar {
+    width: 48px;
+    height: 48px;
+  }
+
+  .store-profile-name {
+    font-size: 13px;
+  }
+
+  .store-profile-username {
+    font-size: 11px;
+  }
+
+  .store-profile-rank {
+    min-height: 0;
+    font-size: 13px;
+  }
+
+  .store-tag-preview-line {
+    min-height: 0;
+    gap: 6px;
+  }
+
+  .store-preview-note {
+    min-height: 0;
+    font-size: 11px;
+  }
+
+  .store-desc {
+    min-height: 0;
+    font-size: 13px;
+  }
+
+  .store-price {
+    font-size: 13px;
+  }
+
+  .store-cta {
+    width: 100%;
+    min-height: 36px;
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+
+  .store-comparison-shell {
+    padding: 10px;
+  }
+
+  .store-comparison-header {
+    font-size: 13px;
+  }
+
+  .store-comparison-wrap {
+    margin-top: 8px;
+  }
+
+  .store-comparison-table {
+    min-width: 680px;
+  }
+
+  .store-comparison-table th,
+  .store-comparison-table td {
+    min-width: 140px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .store-rank-head {
+    gap: 6px;
+  }
+
+  .store-rank-head-art {
+    max-width: 108px;
+    height: 58px;
+  }
+
+  .store-rank-head-name {
+    font-size: 11px;
+  }
+
+  .store-rank-head-username {
+    font-size: 10px;
+  }
+
+  .store-rank-head-info {
+    font-size: 10px;
+  }
+
+  .store-comparison-price {
+    font-size: 11px;
+  }
+}
+
 .store-support-rank {
   font-weight: 700;
 }
@@ -8401,7 +8522,198 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
     display: inline-flex;
   }
 
-  .comment-thread.forum-thread .comment-meta.comment-meta-desktop .comment-op-badge {
+.comment-thread.forum-thread .comment-meta.comment-meta-desktop .comment-op-badge {
     display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .store-gateway {
+    gap: 10px;
+  }
+
+  .store-section-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .store-section-tab {
+    min-width: 0;
+    padding: 8px 10px;
+    font-size: 12px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .store-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .store-card {
+    grid-template-rows: none;
+    grid-auto-rows: auto;
+    min-width: 0;
+    padding: 12px;
+    gap: 9px;
+    border-radius: 14px;
+  }
+
+  .store-rank-card-art-wrap {
+    margin-bottom: 0;
+  }
+
+  .store-rank-card-art {
+    height: clamp(112px, 38vw, 146px);
+  }
+
+  .store-profile-preview {
+    min-height: 0;
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .store-profile-avatar {
+    width: 46px;
+    height: 46px;
+  }
+
+  .store-profile-name {
+    font-size: 13px;
+  }
+
+  .store-profile-username {
+    font-size: 11px;
+  }
+
+  .store-profile-rank {
+    min-height: 0;
+    font-size: 13px;
+  }
+
+  .store-rank-title {
+    min-height: 0;
+    font-size: 14px;
+  }
+
+  .store-tag-preview-line {
+    min-height: 0;
+    flex-wrap: wrap;
+    gap: 5px 8px;
+  }
+
+  .store-preview-note {
+    min-height: 0;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .store-desc {
+    min-height: 0;
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .inline-dropdown-toggle {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .store-perks-panel.open {
+    max-height: 420px;
+  }
+
+  .store-price {
+    font-size: 13px;
+  }
+
+  .store-cta {
+    width: 100%;
+    min-height: 38px;
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+
+  .store-comparison-shell {
+    padding: 10px;
+  }
+
+  .store-comparison-wrap {
+    margin-top: 8px;
+    border-radius: 10px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .store-comparison-table {
+    min-width: 620px;
+    border-spacing: 4px 0;
+  }
+
+  .store-comparison-table th,
+  .store-comparison-table td {
+    min-width: 132px;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .store-feature-col,
+  .store-feature-label {
+    min-width: 148px !important;
+  }
+
+  .store-rank-head {
+    gap: 4px;
+  }
+
+  .store-rank-head-profile {
+    gap: 6px;
+  }
+
+  .store-rank-head-avatar {
+    width: 28px;
+    height: 28px;
+  }
+
+  .store-rank-head-art {
+    max-width: 90px;
+    height: 52px;
+  }
+
+  .store-rank-head-name {
+    font-size: 11px;
+  }
+
+  .store-rank-head-username,
+  .store-rank-head-info,
+  .store-comparison-price {
+    font-size: 10px;
+  }
+
+  .store-comparison-toggle {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 560px) {
+  .store-comparison-table {
+    min-width: 560px;
+  }
+
+  .store-comparison-table th,
+  .store-comparison-table td {
+    min-width: 118px;
+    padding: 7px 8px;
+    font-size: 11px;
+  }
+
+  .store-feature-col,
+  .store-feature-label {
+    min-width: 138px !important;
   }
 }
