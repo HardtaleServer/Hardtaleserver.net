@@ -33,6 +33,7 @@ export default function AppRoutes({
   cart,
   onLinkClick,
   onAdminFakePurchase,
+  isSignedIn,
 }) {
   return html`
     <${Routes} location=${routesLocation}>
@@ -48,6 +49,7 @@ export default function AppRoutes({
           onHowClick=${() => openHowModal()}
           onLinkClick=${onLinkClick}
           isLinkedAccount=${isLinkedAccount}
+          isSignedIn=${isSignedIn}
         />`}
       />
       <${Route}
@@ -62,6 +64,7 @@ export default function AppRoutes({
           onHowClick=${() => openHowModal()}
           onLinkClick=${onLinkClick}
           isLinkedAccount=${isLinkedAccount}
+          isSignedIn=${isSignedIn}
         />`}
       />
       <${Route}
@@ -135,6 +138,7 @@ export default function AppRoutes({
           onHowClick=${() => openHowModal()}
           onLinkClick=${onLinkClick}
           isLinkedAccount=${isLinkedAccount}
+          isSignedIn=${isSignedIn}
         />`}
       />
       <${Route}
@@ -149,6 +153,7 @@ export default function AppRoutes({
           onHowClick=${() => openHowModal()}
           onLinkClick=${onLinkClick}
           isLinkedAccount=${isLinkedAccount}
+          isSignedIn=${isSignedIn}
         />`}
       />
       <${Route}

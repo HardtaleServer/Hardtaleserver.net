@@ -94,7 +94,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.02";
+const VERSION = "1.4.03";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -8662,6 +8662,7 @@ function HomePage({
   onHowClick,
   onLinkClick,
   isLinkedAccount,
+  isSignedIn,
 }) {
   const navigate = useNavigate();
   const [forumPreview, setForumPreview] = useState([]);
@@ -8788,13 +8789,17 @@ function HomePage({
         <div ref=${playRef} className="hero-card plain">
           <div className="join-row">
             <strong>Join now</strong>
-            <button
-              className=${`button ghost-btn link-state-pill ${linkedClass}`.trim()}
-              type="button"
-              onClick=${() => onLinkClick && onLinkClick()}
-            >
-              ${linkedLabel}
-            </button>
+            ${!isSignedIn
+              ? html`<${SignUpButton} mode="modal">
+                  <button className="button ghost-btn link-state-pill unlinked" type="button">Sign Up</button>
+                <//>`
+              : html`<button
+                  className=${`button ghost-btn link-state-pill ${linkedClass}`.trim()}
+                  type="button"
+                  onClick=${() => onLinkClick && onLinkClick()}
+                >
+                  ${linkedLabel}
+                </button>`}
             <button
               className="button ghost-btn how-btn"
               type="button"
@@ -11563,6 +11568,7 @@ function Layout() {
           cart=${cart}
           onLinkClick=${openLinkModal}
           onAdminFakePurchase=${runAdminFakePurchase}
+          isSignedIn=${isSignedIn}
         />
 
         <${SiteFooter}

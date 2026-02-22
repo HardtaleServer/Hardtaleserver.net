@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-22 (v1.4.03)
+- Updated Home hero join-state behavior for signed-out visitors: the previous `Unlinked` pill now renders as a `Sign Up` button.
+- Kept signed-in behavior unchanged so linked users still see `Linked` and signed-in unlinked users still see `Unlinked` with the existing link flow.
+
 ## 2026-02-17 (v1.4.01)
 - Awarded `Linked Up` achievement automatically for already-linked users on next login/status bootstrap.
 - Preserved existing achievement notification flow so the unlock toast appears once without duplicate spam.
