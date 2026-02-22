@@ -1,0 +1,252 @@
+Hardtale Server App Architecture + Infrastructure Report
+Generated: 2026-02-22
+Scope: Repository scan of D:\hytale-server-app
+
+============================================================
+1) Executive Summary
+============================================================
+
+Current shape:
+- Single Node.js process (`server.js`) serving both API and frontend SPA.
+- Frontend is React (no build step) loaded from `public/index.html` + `public/app.js` via importmap CDNs.
+- Auth is Clerk-based; API auth is mostly Bearer token with expected audience `hardtale-api-comments`.
+- Persistent state is MongoDB; some legacy/static data still stored in JSON files under `data/`.
+- Store supports local checkout and Stripe checkout/payment-intent flows.
+- Linking is now hosted code flow in Mongo (plugin handshake endpoints exist).
+- Fulfillment has TWO active lanes:
+  - Purchases lane (`purchases` + `/api/fulfillment/*`)
+  - Grants lane (`grants` + `/api/server/pending-fulfillments`)
+
+High-level readiness:
+- Good functional base for beta/private rollout.
+- Not yet "fully production-safe" without hardening and architecture consolidation.
+- Biggest technical risk: fulfillment split + rank shown in web metadata before confirmed in-game grant.
+
+============================================================
+2) Runtime Architecture
+============================================================
+
+Primary runtime file:
+- `server.js`
+
+Server role:
+- Serves API routes under `/api/*`
+- Serves static assets (`/Images`, `/` from `public`)
+- SPA fallback: `GET *` -> `public/index.html`
+- Health endpoint: `GET /health`
+
+Frontend:
+- `public/index.html` loads:
+  - `/env.js` for runtime keys
+  - `public/app.js`
+  - React/Router/Clerk from `esm.sh`
+  - Stripe.js from `https://js.stripe.com/v3/`
+
+Important implication:
+- No frontend build pipeline, so runtime is simple but depends on CDN availability/latency for core JS libs.
+
+============================================================
+3) Data & Storage Model
+============================================================
+
+Mongo collections initialized in `server.js`:
+- `comments`, `comment_revisions`
+- `forum_posts`, `forum_post_revisions`
+- `reactions`
+- `news`
+- `notifications`, `notification_reads`
+- `carts`
+- `purchases`
+- `support_tickets`
+- `linked_accounts`
+- `user_achievements`
+- `link_codes`
+- `fulfillment_jobs` (mostly auxiliary)
+- `grants`
+
+Indexes are present (including unique and TTL where needed), including:
+- `link_codes.expiresAt` TTL index
+- unique indexes on link/account mappings
+- idempotency index for `grants.idempotencyKey`
+
+File-backed data still used:
+- `data/community.json`
+- `data/polls.json`
+- `data/permissions.json`
+- `data/rank-prefixes.json` (prefix metadata, not actual LP execution)
+
+============================================================
+4) Request/Auth Boundaries
+============================================================
+
+Web user auth:
+- Clerk middleware on `/api` (except `/api/server/*` and `/api/internal/*` bypass middleware wrapper).
+- Most user-mutating routes require `getAuth(req).userId`.
+- Sensitive user routes often use `requireCommentAuth(...)` and enforce `aud=hardtale-api-comments`.
+- Frontend sends `Authorization: Bearer <Clerk token>` via `apiFetchWithToken(...)`.
+
+Plugin/server auth:
+- `requireServerSecret(...)` accepts bearer or `X-Server-Secret`/`X-Service-Auth`.
+- `requireFulfillmentAuth(...)` accepts any token in `PLUGIN_API_TOKENS` set.
+
+Admin auth:
+- Resolved from Clerk user using userId/email/username sets + metadata-based staff role.
+
+============================================================
+5) How Requests Flow (End-to-End)
+============================================================
+
+A) Standard web app requests
+1. Browser loads `public/index.html`
+2. Browser fetches `/env.js` and gets runtime keys.
+3. React app uses same-origin `/api/*` fetch calls.
+4. Signed-in calls include Clerk bearer token.
+5. API reads/writes Mongo and returns JSON.
+
+B) Linking flow (hosted code model)
+In-game/plugin side:
+- Create code: `POST /api/link/create` or `POST /api/server/register-code`
+- Poll claims: `GET /api/server/pending-links`
+- Ack apply/fail: `POST /api/server/ack-link`
+
+Web side:
+- User submits code: `POST /api/link/redeem` / `POST /api/link/claim`
+- Claim stored in `link_codes` as claimed-by-user
+- Final linkage becomes durable in `linked_accounts` after ack-link success (or direct claim path helper)
+
+C) Store + checkout flow
+- Cart APIs: `/api/cart`, `/api/cart/checkout`
+- Stripe APIs:
+  - `/api/payments/stripe/create-payment-intent`
+  - `/api/payments/stripe/finalize-intent`
+  - `/api/payments/stripe/create-checkout-session`
+  - `/api/payments/stripe/complete`
+  - webhook `/api/payments/stripe/webhook` (+ alias `/api/stripe/webhook`)
+
+Linking gate:
+- Store write/checkout paths require linked account (`linked_accounts`).
+
+D) Fulfillment flows (currently split)
+Legacy purchase-action lane:
+- Plugin pulls `/api/fulfillment/pending`
+- Plugin acknowledges `/api/fulfillment/ack`
+- Source data: `purchases.grants`
+
+New grants-job lane:
+- Plugin pulls `/api/server/pending-fulfillments` (or `/api/internal/fulfillment/pending`)
+- Plugin acknowledges `/api/server/ack-fulfillment` (or internal ack)
+- Source data: `grants`
+
+============================================================
+6) Store Setup Guidance (Recommended)
+============================================================
+
+To make your store reliably talk to the server:
+
+Required foundation:
+- `MONGO_URI`, `MONGO_DB` configured
+- Clerk configured (`CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`)
+- Linking enabled + secrets aligned between app and plugin
+- Stripe keys configured if card checkout needed
+
+Critical app/plugin contract:
+- Pick ONE fulfillment lane as canonical (recommended: `grants` lane).
+- If plugin polls only purchases lane, webhook-only queued grants may be missed.
+
+Recommended canonical lane:
+- Plugin uses `/api/server/pending-fulfillments`
+- Plugin posts `/api/server/ack-fulfillment`
+- Checkout/webhook both enqueue `grants` entries consistently
+
+============================================================
+7) Live Safety Assessment
+============================================================
+
+Status: PARTIALLY READY (beta), not fully hardened for broad public launch yet.
+
+Strengths already present:
+- Authenticated API with Clerk
+- Secret-gated server/plugin endpoints
+- Mongo unique indexes + idempotency patterns
+- Stripe webhook signature verification
+- Link-code TTL and duplicate-link protections
+
+Gaps requiring change before confident public scale:
+1. No rate limiting on auth/store/link endpoints.
+2. No Helmet/security headers hardening.
+3. No explicit CSRF strategy for cookie-backed authenticated mutations.
+4. Admin trust via username/email fallback can be fragile; userId-only admin allowlist is safer.
+5. Fulfillment split between `purchases` and `grants` risks drift.
+6. Rank metadata is updated during checkout before in-game LP grant confirmation.
+7. Very limited automated tests for payments/linking/fulfillment contracts.
+8. `keys.txt` is tracked in git; any key material in tracked files should be treated as leaked and rotated.
+
+============================================================
+8) Clerk + Domain Purchase Changes
+============================================================
+
+After domain purchase (and before traffic switch):
+- Update Clerk allowed origins and redirect URLs to your final domain(s).
+- Ensure Clerk session/JWT template still issues audience `hardtale-api-comments`.
+- Update Stripe webhook endpoint URL to new domain.
+- Set `STRIPE_CHECKOUT_BASE_URL` to canonical HTTPS domain.
+- Verify same-origin API calls still resolve cleanly behind proxy/load balancer.
+- Confirm `X-Forwarded-*` headers are correct so checkout success/cancel URLs are valid.
+
+No major Clerk code rewrite appears required, but config alignment is mandatory.
+
+============================================================
+9) Direct Rank Rewards to Users (Your LP Concern)
+============================================================
+
+Important current reality:
+- This app DOES NOT directly execute LuckPerms commands itself.
+- It queues grant/purchase data and expects your game/plugin service to apply LP changes.
+- If LP plugin/bridge is missing or broken, web-side rank states can diverge from real in-game rank.
+
+Recommended robust flow:
+1. Ensure user is linked in `linked_accounts`.
+2. Enqueue rank grant (`grants` collection preferred lane).
+3. Plugin polls pending grants endpoint.
+4. Plugin applies LP command (example concept: set parent group by UUID).
+5. Plugin ACKs success/failure.
+6. Only after ACK success should web rank metadata be finalized (recommended change).
+
+For your current issue ("LP perms wasn’t installed"):
+- That would exactly prevent in-game rank application even if checkout/web shows success.
+- You need plugin-side LP integration validated first, then run end-to-end tests with ACK confirmation.
+
+============================================================
+10) Concrete Change Plan (Priority Order)
+============================================================
+
+P0 (before wider launch):
+- Unify fulfillment to one canonical queue (`grants` preferred).
+- Move final rank metadata promotion to post-ACK success (or mark as pending until ACK).
+- Add API rate limiting for auth-sensitive and payment/link routes.
+- Add Helmet and basic security headers.
+- Restrict admin elevation to immutable Clerk user IDs.
+- Rotate any keys if `keys.txt` ever held sensitive values.
+
+P1:
+- Add integration tests:
+  - link create -> claim -> pending-links -> ack-link
+  - checkout -> queue grant -> plugin ack -> rank finalize
+  - idempotency and duplicate ACK behavior
+- Add observability logs/counters for queue lag and failed ACKs.
+
+P2:
+- Optional worker/cron for retries, dead-letter behavior, and cleanup metrics.
+
+============================================================
+11) Notes for Other AI Agents
+============================================================
+
+Current architecture should be interpreted as:
+- Monolithic Express + React SPA
+- Clerk auth for web users
+- Mongo-backed linking/store/community/forum
+- Plugin-driven fulfillment (NOT direct LP execution in this app)
+- Transitional state with both purchases-based and grants-based fulfillment APIs
+
+If another agent edits this system, first decide and document the single source of truth for fulfillment and rank finalization timing.

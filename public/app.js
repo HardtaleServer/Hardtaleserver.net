@@ -5085,7 +5085,16 @@ function StoreGatewayPage() {
   `;
 }
 
-function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart = [], section = "ranks" }) {
+function StorePage({
+  onAdd,
+  onRemove = () => {},
+  isLinkedAccount = false,
+  isAdmin = false,
+  isStaff = false,
+  cart = [],
+  section = "ranks",
+  onAdminFakePurchase = null,
+}) {
   const [showTicket, setShowTicket] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
   const [previewItemId, setPreviewItemId] = useState("");
@@ -5098,6 +5107,8 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
   const location = useLocation();
   const { user } = useUser();
   const { isSignedIn } = useAuth();
+  const [adminPurchaseLoading, setAdminPurchaseLoading] = useState(false);
+  const [adminPurchaseStatus, setAdminPurchaseStatus] = useState("");
   const email = getUserEmail(user);
   const storePreviewName = isSignedIn ? getUserDisplayName(user) : "Guest";
   const storePreviewImage = String(
@@ -5106,6 +5117,7 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
   const storePreviewUsername = isSignedIn ? formatUsernameForDisplay(user?.username) : "";
   const previewItem = SAMPLE_STORE.find((item) => item.id === previewItemId) || null;
   const rankDetailItem = SAMPLE_STORE.find((item) => item.id === rankDetailItemId) || null;
+  const canUseFakePurchase = Boolean(isAdmin || isStaff);
   const canPurchase = Boolean(isSignedIn && isLinkedAccount);
   const normalizedSection = String(section || "ranks").trim().toLowerCase();
   const isRanksSection = normalizedSection === "ranks";
@@ -5227,6 +5239,30 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
     return cartItems.some((entry) => String(entry?.id || "") === id);
   }
 
+  async function runAdminFakePurchase() {
+    if (!canUseFakePurchase || typeof onAdminFakePurchase !== "function") return;
+    setAdminPurchaseStatus("");
+    setAdminPurchaseLoading(true);
+    try {
+      const result = await onAdminFakePurchase();
+      if (!result?.ok) {
+        setAdminPurchaseStatus(String(result?.error || "Fake purchase failed."));
+        return;
+      }
+      const awardedRank = String(result?.awardedRank || "").trim();
+      const purchaseId = String(result?.purchaseId || "").trim();
+      setAdminPurchaseStatus(
+        awardedRank
+          ? `Fake purchase queued. Rank awarded: ${awardedRank}${purchaseId ? ` (id: ${purchaseId})` : ""}`
+          : `Fake purchase queued${purchaseId ? ` (id: ${purchaseId})` : ""}.`,
+      );
+    } catch (error) {
+      setAdminPurchaseStatus(String(error?.message || "Fake purchase failed."));
+    } finally {
+      setAdminPurchaseLoading(false);
+    }
+  }
+
   function getStoreAddMeta(item) {
     const alreadyInCart = isAlreadyInCart(item);
     const tierLocked = isTierLockedInCart(item);
@@ -5334,8 +5370,22 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
   }
 
   return html`
-    <section className="card fade-in">
+    <section className="card fade-in store-ranks-section">
       <div className="section-title">Hardtale Store</div>
+      ${canUseFakePurchase
+        ? html`<div className="store-admin-tools">
+            <button
+              type="button"
+              className="button ghost-btn"
+              onClick=${runAdminFakePurchase}
+              disabled=${adminPurchaseLoading}
+              title="Create a paid test purchase from your current cart (staff only)"
+            >
+              ${adminPurchaseLoading ? "Running fake purchase..." : "Fake Purchase (Staff)"}
+            </button>
+            ${adminPurchaseStatus ? html`<div className="muted store-admin-status">${adminPurchaseStatus}</div>` : html``}
+          </div>`
+        : html``}
       ${isSignedIn && !isLinkedAccount
         ? html`<p className="muted store-link-required">
             Your account is currently Unlinked. Use <${Link} className="ranks-link" to="/link">/link</${Link}> to unlock store purchases.
@@ -5443,7 +5493,7 @@ function StorePage({ onAdd, onRemove = () => {}, isLinkedAccount = false, cart =
             )}
           </div>
           <div className="store-comparison-shell">
-            <div className="store-comparison-header gradient-text">Rank Comparison</div>
+            <div className="section-title">Rank Comparison</div>
             <div className="store-comparison-wrap">
               <table className="store-comparison-table" role="table" aria-label="Rank feature comparison">
                 <thead>
@@ -9736,6 +9786,7 @@ function Layout() {
   const { getToken, isSignedIn, userId, isLoaded: isAuthLoaded } = useAuth();
   const { openSignIn, signOut } = useClerk();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isStaff, setIsStaff] = useState(false);
   const [unread, setUnread] = useState(0);
   const [showCart, setShowCart] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -9860,7 +9911,10 @@ function Layout() {
     async function loadRole() {
       if (!isAuthLoaded) return;
       if (!isSignedIn) {
-        if (alive) setIsAdmin(false);
+        if (alive) {
+          setIsAdmin(false);
+          setIsStaff(false);
+        }
         return;
       }
       try {
@@ -9871,13 +9925,16 @@ function Layout() {
         if (!alive) return;
         if (!response.ok) {
           setIsAdmin(false);
+          setIsStaff(false);
           return;
         }
         const data = await response.json();
         setIsAdmin(Boolean(data?.isAdmin));
+        setIsStaff(Boolean(data?.isStaff));
       } catch {
         if (!alive) return;
         setIsAdmin(false);
+        setIsStaff(false);
       }
     }
     loadRole();
@@ -11203,6 +11260,31 @@ function Layout() {
     setHoveredNav(id);
   }
 
+  async function runAdminFakePurchase(itemId = "") {
+    if (!isSignedIn || !(isAdmin || isStaff)) {
+      return { ok: false, error: "Staff sign-in required." };
+    }
+    const forcedItemId = String(itemId || "").trim();
+    if (!forcedItemId && cart.length === 0) {
+      return { ok: false, error: "Cart is empty." };
+    }
+    const response = await apiFetchWithToken(getToken, true, "/api/admin/store/fake-purchase", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(forcedItemId ? { itemId: forcedItemId } : {}),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { ok: false, error: String(data?.error || "Fake purchase failed.") };
+    }
+    setCart(buildCartFromIds(data?.cart?.items || []));
+    return {
+      ok: true,
+      purchaseId: String(data?.purchaseId || ""),
+      awardedRank: String(data?.awardedRank || ""),
+    };
+  }
+
   function DesktopNavShell() {
     const navItems = [
       { id: "home", label: "Home", onClick: () => navigate("/") },
@@ -11374,7 +11456,6 @@ function Layout() {
               <div className=${`mobile-top-actions ${menuSide === "left" ? "menu-left" : "menu-right"}`}>
                 ${menuSide === "left"
                   ? html`
-                      <${CartButton} onClick=${openCart} count=${cartCount} />
                       <button
                         className="settings-button mobile-menu"
                         title="Menu"
@@ -11386,6 +11467,7 @@ function Layout() {
                           style=${{ "--menu-icon": `url(${DRAWER_MENU_ICON_SVG})` }}
                         ></span>
                       </button>
+                      <${CartButton} onClick=${openCart} count=${cartCount} />
                     `
                   : html`
                       <${CartButton} onClick=${openCart} count=${cartCount} />
@@ -11455,6 +11537,7 @@ function Layout() {
           openHowModal=${openHowModal}
           navigate=${navigate}
           isAdmin=${isAdmin}
+          isStaff=${isStaff}
           sortedNotifications=${sortedNotifications}
           setNews=${setNews}
           setNotifications=${setNotifications}
@@ -11463,6 +11546,7 @@ function Layout() {
           isLinkedAccount=${isLinkedAccount}
           cart=${cart}
           onLinkClick=${openLinkModal}
+          onAdminFakePurchase=${runAdminFakePurchase}
         />
 
         <${SiteFooter}
@@ -11612,6 +11696,52 @@ function Layout() {
             </div>`
           : html``}
         ${cartStatus ? html`<div className="muted">${cartStatus}</div>` : html``}
+        ${isSignedIn && (isAdmin || isStaff)
+          ? html`<div className="cart-admin-fake-row">
+              <button
+                type="button"
+                className="button ghost-btn"
+                onClick=${async () => {
+                  const result = await runAdminFakePurchase("rank-hero");
+                  setCartStatus(
+                    result?.ok
+                      ? `Fake Hero purchase queued${result?.purchaseId ? ` (${result.purchaseId})` : ""}.`
+                      : String(result?.error || "Fake Hero purchase failed."),
+                  );
+                }}
+              >
+                Fake Hero
+              </button>
+              <button
+                type="button"
+                className="button ghost-btn"
+                onClick=${async () => {
+                  const result = await runAdminFakePurchase("rank-legend");
+                  setCartStatus(
+                    result?.ok
+                      ? `Fake Legend purchase queued${result?.purchaseId ? ` (${result.purchaseId})` : ""}.`
+                      : String(result?.error || "Fake Legend purchase failed."),
+                  );
+                }}
+              >
+                Fake Legend
+              </button>
+              <button
+                type="button"
+                className="button ghost-btn"
+                onClick=${async () => {
+                  const result = await runAdminFakePurchase("rank-mythic");
+                  setCartStatus(
+                    result?.ok
+                      ? `Fake Mythic purchase queued${result?.purchaseId ? ` (${result.purchaseId})` : ""}.`
+                      : String(result?.error || "Fake Mythic purchase failed."),
+                  );
+                }}
+              >
+                Fake Mythic
+              </button>
+            </div>`
+          : html``}
         <button
           className="button primary"
           onClick=${checkout}

@@ -23,6 +23,7 @@ export default function AppRoutes({
   openHowModal,
   navigate,
   isAdmin,
+  isStaff,
   sortedNotifications,
   setNews,
   setNotifications,
@@ -31,6 +32,7 @@ export default function AppRoutes({
   isLinkedAccount,
   cart,
   onLinkClick,
+  onAdminFakePurchase,
 }) {
   return html`
     <${Routes} location=${routesLocation}>
@@ -85,7 +87,10 @@ export default function AppRoutes({
           onAdd=${addToCart}
           onRemove=${removeFromCart}
           isLinkedAccount=${isLinkedAccount}
+          isAdmin=${isAdmin}
+          isStaff=${isStaff}
           cart=${cart}
+          onAdminFakePurchase=${onAdminFakePurchase}
           section="ranks"
         />`}
       />
@@ -95,7 +100,10 @@ export default function AppRoutes({
           onAdd=${addToCart}
           onRemove=${removeFromCart}
           isLinkedAccount=${isLinkedAccount}
+          isAdmin=${isAdmin}
+          isStaff=${isStaff}
           cart=${cart}
+          onAdminFakePurchase=${onAdminFakePurchase}
           section="gold"
         />`}
       />
@@ -105,7 +113,10 @@ export default function AppRoutes({
           onAdd=${addToCart}
           onRemove=${removeFromCart}
           isLinkedAccount=${isLinkedAccount}
+          isAdmin=${isAdmin}
+          isStaff=${isStaff}
           cart=${cart}
+          onAdminFakePurchase=${onAdminFakePurchase}
           section="currency"
         />`}
       />

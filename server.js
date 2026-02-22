@@ -3341,6 +3341,60 @@ app.post("/api/admin/users/:userId/role", async (req, res) => {
   }
 });
 
+app.post("/api/admin/store/fake-purchase", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const user = await clerkClient.users.getUser(auth.userId);
+    if (!isStaffUser(user)) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    const forcedItemId = normalizeText(req.body?.itemId, 60);
+    if (forcedItemId) {
+      if (!STORE_PRODUCT_IDS.has(forcedItemId)) {
+        return res.status(400).json({ error: "Invalid itemId for fake purchase" });
+      }
+      await cartsCollection.updateOne(
+        { userId: auth.userId },
+        {
+          $set: {
+            userId: auth.userId,
+            items: [{ id: forcedItemId }],
+            updatedAt: new Date().toISOString(),
+          },
+        },
+        { upsert: true },
+      );
+    }
+
+    const result = await processCartCheckout(auth.userId, {
+      purchaseProvider: "ADMIN_FAKE",
+      paymentStatus: "PAID",
+    });
+
+    return res.json({
+      success: true,
+      fake: true,
+      cart: { items: result.cartItems },
+      pricing: result.pricing,
+      purchaseId: result.purchaseId,
+      awardedRank: result.awardedRank,
+      alreadyProcessed: result.alreadyProcessed,
+      fakeItemId: forcedItemId || null,
+    });
+  } catch (error) {
+    if (error?.status) {
+      return res.status(error.status).json({ error: error.message || "Fake purchase failed" });
+    }
+    console.error("Failed to run admin fake purchase", error);
+    return res.status(500).json({ error: "Failed to run admin fake purchase" });
+  }
+});
+
 app.get("/api/profile/achievements/:userId", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
