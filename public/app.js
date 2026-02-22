@@ -9885,6 +9885,17 @@ function Layout() {
       : location;
   const visualPathname = routesLocation.pathname;
   const normalizedDrawerRank = String(drawerProfileSummary.rankLabel || "Unregistered");
+  const normalizedDrawerOwnedRank = normalizeOwnedRankLabel(
+    drawerProfileSummary.ownedRank || drawerProfileSummary.rankLabel || "Unregistered",
+  );
+  const drawerRankBadgeLabel =
+    normalizedDrawerRank && !["Unregistered", "Unlinked"].includes(normalizedDrawerRank)
+      ? normalizedDrawerRank
+      : normalizedDrawerOwnedRank !== "Unregistered"
+      ? normalizedDrawerOwnedRank
+      : isLinkedAccount
+      ? "Linked"
+      : "Unlinked";
   const isStaffAccount =
     isStaffLabel(normalizedDrawerRank) || isStaffLabel(String(drawerProfileSummary.staffRole || ""));
   const isDonorRankAccount =
@@ -11129,8 +11140,8 @@ function Layout() {
       authorUsername: user?.username || "",
       authorImage: resolvedOwnAvatar,
       authorUserId: userId,
-      authorRank: drawerProfileSummary.rankLabel || "Unregistered",
-      authorOwnedRank: drawerProfileSummary.ownedRank || drawerProfileSummary.rankLabel || "Unregistered",
+      authorRank: drawerRankBadgeLabel,
+      authorOwnedRank: normalizedDrawerOwnedRank,
       authorStaffRole: drawerProfileSummary.staffRole || "",
     });
   }
@@ -11633,7 +11644,7 @@ function Layout() {
                   username=${formatUsernameForDisplay(user?.username)}
                 >
                   <${RankBadge}
-                    label=${drawerProfileSummary.rankLabel || "Unregistered"}
+                    label=${drawerRankBadgeLabel}
                     className="store-owned-badge"
                   />
                 <//>
