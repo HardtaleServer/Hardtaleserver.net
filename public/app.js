@@ -8830,7 +8830,7 @@ function HomePage({
         <div className="card news-sidebar updates-combined-card">
           <div className="section-title">Updates & News</div>
           <div className="combined-updates-grid">
-            <div className="combined-updates-col">
+            <div className="combined-updates-col updates-news-col">
               <div className="combined-updates-title">News</div>
               ${loading
                 ? html`<p className="muted">Loading latest news...</p>`
@@ -8869,7 +8869,7 @@ function HomePage({
                 View all news
               </button>
             </div>
-            <div className="combined-updates-col">
+            <div className="combined-updates-col forum-highlights-col">
               <div className="combined-updates-title">Forum Highlights</div>
               ${forumLoading
                 ? html`<p className="muted">Loading forum highlights...</p>`

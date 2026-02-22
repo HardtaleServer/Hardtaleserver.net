@@ -2211,29 +2211,41 @@ body[data-theme="dark"] .news-mini-preview {
 }
 
 .home-preview-footer-btn {
-  width: 50%;
+  width: 44%;
   min-width: 150px;
   justify-self: center;
   text-align: center;
-  min-height: 32px;
-  padding: 6px 12px;
+  min-height: 28px;
+  padding: 4px 10px;
   font-size: 12px;
 }
 
 .combined-updates-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: 1fr;
+  gap: 10px;
 }
 
 .combined-updates-col {
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .combined-updates-title {
   font-size: 14px;
   font-weight: 700;
+}
+
+.updates-combined-card {
+  gap: 8px;
+}
+
+.updates-combined-card .section-title {
+  margin-bottom: 2px;
+}
+
+.forum-highlights-col .news-mini-row {
+  min-height: 96px;
 }
 
 .link-state-pill {
