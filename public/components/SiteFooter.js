@@ -15,9 +15,6 @@ export default function SiteFooter({
   return html`<footer ref=${footerRef} className=${`footer ${footerInView ? "fx-active" : "fx-paused"}`.trim()}>
     <div className="footer-top">
       <div className="footer-top-left">
-        <button className="footer-link footer-version-trigger" type="button" onClick=${onOpenChangelog}>
-          Version ${version}
-        </button>
         <div className="footer-links">
           <${Link} className="footer-link" to="/">Home</${Link}>
           <${Link} className="footer-link" to="/about-us">About Us</${Link}>
@@ -28,11 +25,15 @@ export default function SiteFooter({
           <${Link} className="footer-link" to="/subscriptions">Subscriptions</${Link}>
         </div>
       </div>
-      <span className="footer-copyright footer-emphasis">
-        <img src=${copyrightIconSrc} alt="" aria-hidden="true" />
-        <span>${`${year} Hardtale.net`}</span>
+      <span className="footer-copy-stack">
+        <span className="footer-copyright footer-emphasis">
+          <img src=${copyrightIconSrc} alt="" aria-hidden="true" />
+          <span>${`${year} Hardtale.net`}</span>
+        </span>
+        <button className="footer-link footer-version-trigger" type="button" onClick=${onOpenChangelog}>
+          Version ${version}
+        </button>
       </span>
     </div>
   </footer>`;
 }
-

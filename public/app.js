@@ -6108,6 +6108,7 @@ function ForumPage({ isAdmin = false }) {
   const [newPostBody, setNewPostBody] = useState("");
   const [selectedPost, setSelectedPost] = useState(null);
   const [selectedPostLoading, setSelectedPostLoading] = useState(false);
+  const [forumMemberMentions, setForumMemberMentions] = useState([]);
   const [forumProfileOpen, setForumProfileOpen] = useState(false);
   const [forumProfileUser, setForumProfileUser] = useState(null);
   const [forumProfileInfoTab, setForumProfileInfoTab] = useState("badges");
@@ -6135,6 +6136,42 @@ function ForumPage({ isAdmin = false }) {
     () => getForumTemplateOptions(selectedSectionId),
     [selectedSectionId],
   );
+  const mentionSuggestions = useMemo(() => {
+    const fromPosts = posts
+      .map((entry) => String(entry?.authorUsername || "").trim().replace(/^@+/, ""))
+      .filter(Boolean);
+    const fromSelected = selectedPost?.authorUsername
+      ? [String(selectedPost.authorUsername).trim().replace(/^@+/, "")]
+      : [];
+    const fromMembers = forumMemberMentions
+      .map((entry) => String(entry?.username || "").trim().replace(/^@+/, ""))
+      .filter(Boolean);
+    return Array.from(new Set([...fromMembers, ...fromPosts, ...fromSelected]));
+  }, [forumMemberMentions, posts, selectedPost]);
+  const mentionProfileDirectory = useMemo(() => {
+    const directory = new Map();
+    const register = (entry) => {
+      const username = String(entry?.authorUsername || entry?.username || "").trim().replace(/^@+/, "");
+      const userId = String(entry?.authorUserId || entry?.createdBy || entry?.userId || "").trim();
+      if (!username || !userId) return;
+      const key = username.toLowerCase();
+      if (directory.has(key)) return;
+      directory.set(key, {
+        authorUsername: username,
+        authorUserId: userId,
+        authorName: String(entry?.authorName || entry?.name || username),
+        authorImage: String(entry?.authorImage || entry?.image || "/assets/HardTale_H_GreyScale.png"),
+        authorRank: String(entry?.authorRank || "Unregistered"),
+        authorOwnedRank: String(entry?.authorOwnedRank || entry?.authorRank || "Unregistered"),
+        authorStaffRole: String(entry?.authorStaffRole || ""),
+        authorIsStaff: Boolean(entry?.authorIsStaff),
+      });
+    };
+    posts.forEach(register);
+    if (selectedPost) register(selectedPost);
+    forumMemberMentions.forEach(register);
+    return directory;
+  }, [forumMemberMentions, posts, selectedPost]);
 
   function getForumPreviewText(body, limit = 220) {
     return markdownExcerpt(body, limit);
@@ -6196,6 +6233,21 @@ function ForumPage({ isAdmin = false }) {
 
   function openForumProfileEntry(entry) {
     if (!entry) return;
+    openForumProfileCard(entry);
+  }
+
+  function openForumMentionProfile(username) {
+    const key = String(username || "").trim().replace(/^@+/, "").toLowerCase();
+    if (!key) return;
+    const entry = mentionProfileDirectory.get(key);
+    if (!entry) {
+      emitAppToast({
+        kind: "warning",
+        title: "Mention not found",
+        message: `No profile card found for @${String(username || "").replace(/^@+/, "")}.`,
+      });
+      return;
+    }
     openForumProfileCard(entry);
   }
 
@@ -6269,6 +6321,11 @@ function ForumPage({ isAdmin = false }) {
             />
             <div>
               <div className="comment-author">${entry.editorName || "Editor"}</div>
+              ${entry?.forcedEdit
+                ? html`<div className="forum-post-edited-note forced">
+                    STAFF forced edit by ${entry.editorName || "Staff"}
+                  </div>`
+                : html``}
               <div className="forum-history-time">
                 <span className="muted">Edited</span>
                 <${TimestampText} value=${entry.createdAt} formatTimestamp=${formatTimestamp} />
@@ -7135,6 +7192,25 @@ function ForumPage({ isAdmin = false }) {
   }, [selectedSectionId]);
 
   useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const response = await fetch("/api/forum/members?limit=180");
+        if (!response.ok) throw new Error("Failed");
+        const data = await response.json().catch(() => ({}));
+        if (!alive) return;
+        setForumMemberMentions(Array.isArray(data?.members) ? data.members : []);
+      } catch {
+        if (!alive) return;
+        setForumMemberMentions([]);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!selectedSectionId || !selectedPostId) {
       setSelectedPost(null);
       setSelectedPostLoading(false);
@@ -7419,6 +7495,7 @@ function ForumPage({ isAdmin = false }) {
                         <${DeferredForumEditor}
                           value=${editingPostBody}
                           onChange=${setEditingPostBody}
+                          mentionSuggestions=${mentionSuggestions}
                           maxLength=${4000}
                           minLength=${FORUM_BODY_MIN_LENGTH}
                           draftScope=${`edit:${String(selectedPost.id || "")}`}
@@ -7435,6 +7512,7 @@ function ForumPage({ isAdmin = false }) {
                       </form>`
                     : html`<${ForumRenderedMarkdown}
                         value=${selectedPost.body}
+                        onMentionClick=${openForumMentionProfile}
                         className=${`news-body-paragraph ${isForumPostForcedEdit(selectedPost) ? "forum-post-forced-body" : ""}`.trim()}
                       />`}
                     <div className="forum-post-status-row">
@@ -7446,7 +7524,7 @@ function ForumPage({ isAdmin = false }) {
                           onClick=${() => openForumPostHistory(selectedPost)}
                           title="View past edits"
                         >
-                          STAFF FORCED EDIT
+                          STAFF FORCED EDIT${selectedPost?.staffForcedEditBy ? ` • ${selectedPost.staffForcedEditBy}` : ""}
                         </button>`
                       : html``}
                     ${(selectedPost.editCount || 0) > 0 && isForumPostForcedEdit(selectedPost)
@@ -7638,7 +7716,7 @@ function ForumPage({ isAdmin = false }) {
                             onClick=${() => openForumPostHistory(post)}
                             title="View past edits"
                           >
-                            STAFF FORCED EDIT
+                            STAFF FORCED EDIT${post?.staffForcedEditBy ? ` • ${post.staffForcedEditBy}` : ""}
                           </button>`
                         : html``}
                       ${(post.editCount || 0) > 0 && isForumPostForcedEdit(post)
@@ -7705,6 +7783,7 @@ function ForumPage({ isAdmin = false }) {
                           <${DeferredForumEditor}
                             value=${editingPostBody}
                             onChange=${setEditingPostBody}
+                            mentionSuggestions=${mentionSuggestions}
                             maxLength=${4000}
                             minLength=${FORUM_BODY_MIN_LENGTH}
                             draftScope=${`edit:${String(post.id || "")}`}
@@ -7761,6 +7840,7 @@ function ForumPage({ isAdmin = false }) {
             <${DeferredForumEditor}
               value=${newPostBody}
               onChange=${setNewPostBody}
+              mentionSuggestions=${mentionSuggestions}
               maxLength=${4000}
               minLength=${FORUM_BODY_MIN_LENGTH}
               draftScope=${`create:${selectedSectionId}`}
@@ -7821,6 +7901,7 @@ function ForumPage({ isAdmin = false }) {
             <div className="news-body">
               <${ForumRenderedMarkdown}
                 value=${newPostBody.trim() || "Write content in the editor to preview your post body."}
+                onMentionClick=${openForumMentionProfile}
               />
             </div>
           </article>
@@ -8696,84 +8777,92 @@ function HomePage({
       </div>
 
       <section className="home-split fade-in">
-        <div className="card news-sidebar">
-          <div className="section-title">News & Updates</div>
-          ${loading
-            ? html`<p className="muted">Loading latest news...</p>`
-            : error
-            ? html`<p className="muted">${error}</p>`
-            : news.length === 0
-            ? html`<p className="muted">No news yet. Check back soon.</p>`
-            : html`<div className="news-mini">
-                ${news.slice(0, 3).map(
-                  (item) => html`<div key=${item.id} className="news-mini-row">
-                    <div className="mini-row-head">
-                      <div className="news-mini-title">
-                        ${item.featured ? renderFeaturedBadge(true) : html``}
-                        ${item.title}
-                      </div>
-                      <button
-                        className="button ghost-btn mini-view-btn"
-                        type="button"
-                        onClick=${() => navigate(`/news?newsId=${encodeURIComponent(item.id)}`)}
-                      >
-                        View
-                      </button>
-                    </div>
-                    <div className="news-mini-meta">
-                      By ${item.author} · ${formatTimestamp(item.createdAt)}
-                    </div>
-                    ${previewText(item.body || item.content || item.summary)
-                      ? html`<div className="news-mini-preview">
-                          ${previewText(item.body || item.content || item.summary)}
-                        </div>`
-                      : html``}
-                  </div>`,
-                )}
-              </div>`}
-          <button className="button ghost-btn home-preview-footer-btn" onClick=${onNewsClick}>
-            View all news
-          </button>
+        <div className="card news-sidebar updates-combined-card">
+          <div className="section-title">Updates & News</div>
+          <div className="combined-updates-grid">
+            <div className="combined-updates-col">
+              <div className="combined-updates-title">News</div>
+              ${loading
+                ? html`<p className="muted">Loading latest news...</p>`
+                : error
+                ? html`<p className="muted">${error}</p>`
+                : news.length === 0
+                ? html`<p className="muted">No news yet. Check back soon.</p>`
+                : html`<div className="news-mini compact">
+                    ${news.slice(0, 3).map(
+                      (item) => html`<div key=${item.id} className="news-mini-row">
+                        <div className="mini-row-head">
+                          <div className="news-mini-title">
+                            ${item.featured ? renderFeaturedBadge(true) : html``}
+                            ${item.title}
+                          </div>
+                          <button
+                            className="button ghost-btn mini-view-btn"
+                            type="button"
+                            onClick=${() => navigate(`/news?newsId=${encodeURIComponent(item.id)}`)}
+                          >
+                            View
+                          </button>
+                        </div>
+                        <div className="news-mini-meta">
+                          By ${item.author} · ${formatTimestamp(item.createdAt)}
+                        </div>
+                        ${previewText(item.body || item.content || item.summary)
+                          ? html`<div className="news-mini-preview">
+                              ${previewText(item.body || item.content || item.summary)}
+                            </div>`
+                          : html``}
+                      </div>`,
+                    )}
+                  </div>`}
+              <button className="button ghost-btn home-preview-footer-btn" onClick=${onNewsClick}>
+                View all news
+              </button>
+            </div>
+            <div className="combined-updates-col">
+              <div className="combined-updates-title">Forum Highlights</div>
+              ${forumLoading
+                ? html`<p className="muted">Loading forum highlights...</p>`
+                : forumPreview.length === 0
+                ? html`<p className="muted">No forum posts yet. Be the first to post.</p>`
+                : html`<div className="news-mini compact">
+                    ${forumPreview.map(
+                      (post) => html`<div key=${post.id} className="news-mini-row">
+                        <div className="mini-row-head">
+                          <div className="news-mini-title">${post.title}</div>
+                          <button
+                            className="button ghost-btn mini-view-btn"
+                            type="button"
+                            onClick=${() =>
+                              navigate(
+                                `/forum?section=${encodeURIComponent(
+                                  String(post.section || ""),
+                                )}&post=${encodeURIComponent(post.id)}`,
+                              )}
+                          >
+                            View
+                          </button>
+                        </div>
+                        <div className="news-mini-meta">
+                          By ${post.authorName || "User"} · ${formatTimestamp(post.createdAt)}
+                        </div>
+                        ${previewText(post.body || post.excerpt || post.summary)
+                          ? html`<div className="news-mini-preview">
+                              ${previewText(post.body || post.excerpt || post.summary)}
+                            </div>`
+                          : html``}
+                      </div>`,
+                    )}
+                  </div>`}
+              <button className="button ghost-btn home-preview-footer-btn" type="button" onClick=${() => navigate("/forum")}>
+                View forum
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="card news-sidebar">
-          <div className="section-title">Forum Highlights</div>
-          ${forumLoading
-            ? html`<p className="muted">Loading forum highlights...</p>`
-            : forumPreview.length === 0
-            ? html`<p className="muted">No forum posts yet. Be the first to post.</p>`
-            : html`<div className="news-mini">
-                ${forumPreview.map(
-                  (post) => html`<div key=${post.id} className="news-mini-row">
-                    <div className="mini-row-head">
-                      <div className="news-mini-title">${post.title}</div>
-                      <button
-                        className="button ghost-btn mini-view-btn"
-                        type="button"
-                        onClick=${() =>
-                          navigate(
-                            `/forum?section=${encodeURIComponent(
-                              String(post.section || ""),
-                            )}&post=${encodeURIComponent(post.id)}`,
-                          )}
-                      >
-                        View
-                      </button>
-                    </div>
-                    <div className="news-mini-meta">
-                      By ${post.authorName || "User"} · ${formatTimestamp(post.createdAt)}
-                    </div>
-                    ${previewText(post.body || post.excerpt || post.summary)
-                      ? html`<div className="news-mini-preview">
-                          ${previewText(post.body || post.excerpt || post.summary)}
-                        </div>`
-                      : html``}
-                  </div>`,
-                )}
-              </div>`}
-          <button className="button ghost-btn home-preview-footer-btn" type="button" onClick=${() => navigate("/forum")}>
-            View forum
-          </button>
+        <div className="card news-sidebar home-right-leaderboard">
+          <div className="section-title">Leaderboard</div>
           <${SkillLeaderboardCard} iconSrc=${LEADERBOARD_ICON_SVG} />
         </div>
       </section>
@@ -9328,12 +9417,14 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
   }, [isAuthLoaded, isSignedIn, getToken]);
 
   function setDigitAt(index, value) {
+    if (linkedInfo.linked) return;
     const next = [...digits];
     next[index] = value;
     setDigits(next);
   }
 
   function onInput(index, event) {
+    if (linkedInfo.linked) return;
     const raw = String(event.target.value || "");
     const value = normalizeCode(raw).slice(-1);
     setDigitAt(index, value);
@@ -9360,6 +9451,7 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
   }
 
   function onPaste(event) {
+    if (linkedInfo.linked) return;
     const text = String(event.clipboardData?.getData("text") || "");
     const pastedDigits = normalizeCode(text).slice(0, LINK_CODE_LENGTH).split("");
     if (pastedDigits.length === 0) return;
@@ -9525,6 +9617,8 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
               pattern="[A-Za-z0-9]*"
               maxLength="1"
               value=${digit}
+              disabled=${linkedInfo.linked}
+              readOnly=${linkedInfo.linked}
               aria-label=${`Link code character ${index + 1}`}
               onInput=${(event) => onInput(index, event)}
               onKeyDown=${(event) => onKeyDown(index, event)}
@@ -9541,7 +9635,7 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
           <button
             className="button primary"
             type="button"
-            disabled=${!isComplete || isSubmitting || isCooldownActive}
+            disabled=${linkedInfo.linked || !isComplete || isSubmitting || isCooldownActive}
             onClick=${onVerifyClick}
             title=${isCooldownActive ? "Link currently on cooldown" : "Verify link code"}
           >
@@ -10764,6 +10858,23 @@ function Layout() {
     }
   }
 
+  async function loadOwnProfileTitleSettings() {
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/title");
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json().catch(() => ({}));
+      return {
+        canPreviewStaffRole: Boolean(data?.canPreviewStaffRole),
+        staffRolePreview: String(data?.staffRolePreview || ""),
+        staffRolePreviewOptions: Array.isArray(data?.staffRolePreviewOptions)
+          ? data.staffRolePreviewOptions
+          : [],
+      };
+    } catch {
+      return null;
+    }
+  }
+
   async function openNotificationProfile(item) {
     if (!item) return;
     setNotificationProfileLoading(true);
@@ -11671,7 +11782,7 @@ function Layout() {
                 ? html`<div className="profile-account-footer">
                     <${AccountActionButton}
                       className="account-panel-logout-link"
-                      label="Logout"
+                      label="Sign-Out"
                       textOnly=${true}
                       onClick=${handleAccountLogout}
                     />

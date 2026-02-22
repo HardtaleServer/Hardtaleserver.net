@@ -45,6 +45,11 @@ function applyInlineMarkdown(input) {
   value = value.replace(/_([^_\n]+)_/g, "<em>$1</em>");
   value = value.replace(/~~([^~]+)~~/g, "<s>$1</s>");
   value = value.replace(/\+\+([^+]+)\+\+/g, "<u>$1</u>");
+  value = value.replace(
+    /(^|[\s(>])@([a-zA-Z0-9][a-zA-Z0-9._-]{1,31})/g,
+    (_, prefix, username) =>
+      `${prefix}<button type="button" class="forum-mention-link" data-mention="${escapeHtml(username)}">@${escapeHtml(username)}</button>`,
+  );
 
   codeSpans.forEach((snippet, index) => {
     value = value.replace(`__CODE_SPAN_${index}__`, snippet);

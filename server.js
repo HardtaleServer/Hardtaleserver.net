@@ -2723,6 +2723,142 @@ function normalizeForumBodyFormat(value) {
   return format === "markdown" ? "markdown" : "plain";
 }
 
+function extractForumMentionHandles(value, limit = 32) {
+  const text = String(value || "");
+  const found = new Set();
+  const pattern = /(^|[\s(])@([a-zA-Z0-9][a-zA-Z0-9._-]{1,31})/g;
+  let match = pattern.exec(text);
+  while (match) {
+    const handle = normalizeText(match[2], 32).toLowerCase();
+    if (handle) {
+      found.add(handle);
+      if (found.size >= limit) break;
+    }
+    match = pattern.exec(text);
+  }
+  return Array.from(found);
+}
+
+async function resolveForumMentionTargets(handles = []) {
+  if (!forumPostsCollection || !commentsCollection) return [];
+  const normalizedHandles = Array.from(
+    new Set(
+      (Array.isArray(handles) ? handles : [])
+        .map((entry) => normalizeText(entry, 32).toLowerCase())
+        .filter(Boolean),
+    ),
+  );
+  if (normalizedHandles.length === 0) return [];
+  const byUserId = new Map();
+  const registerCandidate = (entry) => {
+    const userId = normalizeText(entry?.authorUserId || entry?.userId, 128);
+    const username = formatUsernameForDisplay(entry?.authorUsername || entry?.username, 80);
+    const usernameKey = normalizeText(username, 80).toLowerCase();
+    if (!userId || !usernameKey || !normalizedHandles.includes(usernameKey)) return;
+    if (!byUserId.has(userId)) {
+      byUserId.set(userId, {
+        userId,
+        username,
+      });
+    }
+  };
+
+  try {
+    const forumCandidates = await forumPostsCollection
+      .find(
+        {
+          isDeleted: false,
+          authorUserId: { $exists: true },
+          authorUsername: { $exists: true },
+        },
+        { projection: { authorUserId: 1, authorUsername: 1 } },
+      )
+      .limit(4000)
+      .toArray();
+    forumCandidates.forEach(registerCandidate);
+  } catch {}
+
+  try {
+    const commentCandidates = await commentsCollection
+      .find(
+        {
+          isDeleted: false,
+          newsId: /^forum:/,
+          userId: { $exists: true },
+          authorUsername: { $exists: true },
+        },
+        { projection: { userId: 1, authorUsername: 1 } },
+      )
+      .limit(6000)
+      .toArray();
+    commentCandidates.forEach(registerCandidate);
+  } catch {}
+
+  return Array.from(byUserId.values());
+}
+
+async function notifyForumMentions({
+  actorUserId = "",
+  actorUser = null,
+  authorUsername = "",
+  authorRank = "Unregistered",
+  authorOwnedRank = "Unregistered",
+  authorIsStaff = false,
+  authorStaffRole = "",
+  authorShowStaffBadge = true,
+  authorShowStaffBadgeIcon = true,
+  authorShowStaffGradient = true,
+  authorUseRankFont = false,
+  authorShowDonorGradient = true,
+  section = "",
+  postId = "",
+  postTitle = "",
+  mentions = [],
+}) {
+  if (!notificationsCollection) return;
+  const mentionTargets = await resolveForumMentionTargets(mentions);
+  if (mentionTargets.length === 0) return;
+  const safeActorUserId = normalizeText(actorUserId, 128);
+  const link = `/forum?section=${encodeURIComponent(String(section || ""))}&post=${encodeURIComponent(String(postId || ""))}`;
+  const actorLabel =
+    formatUsernameForDisplay(actorUser?.username, 80) || normalizeText(getUserDisplayName(actorUser), 80) || "User";
+  const safeTitle = normalizeText(postTitle, 120) || "Forum Post";
+  const now = new Date().toISOString();
+
+  const notifications = mentionTargets
+    .filter((target) => normalizeText(target?.userId, 128) && normalizeText(target?.userId, 128) !== safeActorUserId)
+    .map((target) => ({
+      id: crypto.randomUUID(),
+      title: "You were mentioned in a forum post",
+      message: `${actorLabel} mentioned @${target.username} in "${safeTitle}".`,
+      author: actorLabel,
+      authorName: actorLabel,
+      authorUserId: safeActorUserId,
+      authorUsername,
+      authorImage: actorUser?.imageUrl || "",
+      authorRank,
+      authorOwnedRank,
+      authorIsStaff: Boolean(authorIsStaff),
+      authorStaffRole,
+      authorShowStaffBadge: Boolean(authorShowStaffBadge),
+      authorShowStaffBadgeIcon: Boolean(authorShowStaffBadgeIcon),
+      authorShowStaffGradient: Boolean(authorShowStaffGradient),
+      authorUseRankFont: Boolean(authorUseRankFont),
+      authorShowDonorGradient: Boolean(authorShowDonorGradient),
+      featured: false,
+      type: "forum_mention",
+      targetUserId: normalizeText(target.userId, 128),
+      readMoreUrl: link,
+      isDeleted: false,
+      createdAt: now,
+      updatedAt: now,
+    }));
+
+  if (notifications.length === 0) return;
+  await notificationsCollection.insertMany(notifications, { ordered: false });
+  await pruneCollection(notificationsCollection, 120);
+}
+
 function normalizeForumPost(doc) {
   if (!doc) return null;
   const stripped = stripMongoId(doc);
@@ -5827,6 +5963,25 @@ app.post("/api/forum/posts", async (req, res) => {
     };
 
     await forumPostsCollection.insertOne(post);
+    const mentionHandles = extractForumMentionHandles(body);
+    await notifyForumMentions({
+      actorUserId: auth.userId,
+      actorUser: user,
+      authorUsername: formatUsernameForDisplay(user?.username, 80),
+      authorRank,
+      authorOwnedRank: rankInfo.ownedRank,
+      authorIsStaff,
+      authorStaffRole: staffRole,
+      authorShowStaffBadge: showStaffBadge,
+      authorShowStaffBadgeIcon: showStaffBadgeIcon,
+      authorShowStaffGradient: showStaffGradient,
+      authorUseRankFont: useRankFont,
+      authorShowDonorGradient: showDonorGradient,
+      section,
+      postId: post.id,
+      postTitle: title,
+      mentions: mentionHandles,
+    }).catch(() => {});
     const created = await forumPostsCollection.findOne({ id: post.id, isDeleted: false });
     return res.json({ post: normalizeForumPost(created) });
   } catch (error) {
@@ -5875,6 +6030,9 @@ app.patch("/api/forum/posts/:id", async (req, res) => {
     const previousBody = String(doc.body || "");
     const nextTitleValue = String(nextTitle || "");
     const nextBodyValue = String(nextBody || "");
+    const previousMentions = new Set(extractForumMentionHandles(previousBody));
+    const nextMentions = extractForumMentionHandles(nextBodyValue);
+    const newMentions = nextMentions.filter((handle) => !previousMentions.has(handle));
     if (previousTitle !== nextTitleValue || previousBody !== nextBodyValue) {
       await forumPostRevisionsCollection.insertOne({
         postId,
@@ -5939,6 +6097,33 @@ app.patch("/api/forum/posts/:id", async (req, res) => {
       });
       await pruneCollection(notificationsCollection, 120);
     }
+
+    await notifyForumMentions({
+      actorUserId: auth.userId,
+      actorUser: user,
+      authorUsername: formatUsernameForDisplay(user?.username, 80),
+      authorRank: resolveDisplayRankFromMetadata(
+        user?.publicMetadata || {},
+        isStaff,
+        actorLinked,
+      ).displayRank,
+      authorOwnedRank: resolveDisplayRankFromMetadata(
+        user?.publicMetadata || {},
+        isStaff,
+        actorLinked,
+      ).ownedRank,
+      authorIsStaff: isStaff,
+      authorStaffRole: resolveStaffRoleForUser(user),
+      authorShowStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
+      authorShowStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
+      authorShowStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
+      authorUseRankFont: resolveRankFontVisible(user?.publicMetadata || {}),
+      authorShowDonorGradient: resolveDonorGradientVisible(user?.publicMetadata || {}),
+      section: String(doc.section || ""),
+      postId,
+      postTitle: nextTitleValue || previousTitle,
+      mentions: newMentions,
+    }).catch(() => {});
 
     const updatedRaw = await forumPostsCollection.findOne({ id: postId, isDeleted: false });
     if (!updatedRaw) {
@@ -6250,6 +6435,62 @@ app.get("/env.js", (req, res) => {
   res.send(
     `window.__CLERK_PUBLISHABLE_KEY__ = ${JSON.stringify(CLERK_PUBLISHABLE_KEY)};\nwindow.__STRIPE_PUBLISHABLE_KEY__ = ${JSON.stringify(STRIPE_PUBLISHABLE_KEY)};\nwindow.__LOCAL_DEV_MODE__ = ${JSON.stringify(LOCAL_DEV_MODE)};`,
   );
+});
+
+app.get("/api/forum/members", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const query = normalizeText(req.query?.q, 80).toLowerCase();
+    const limitRaw = Number(req.query?.limit);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 300) : 120;
+    const membersByUserId = new Map();
+    const register = (entry) => {
+      const userId = normalizeText(entry?.authorUserId || entry?.userId, 128);
+      const username = formatUsernameForDisplay(entry?.authorUsername || entry?.username, 80);
+      const name = normalizeText(entry?.authorName || entry?.name, 80) || username;
+      if (!userId || !username) return;
+      const haystack = `${username} ${name}`.toLowerCase();
+      if (query && !haystack.includes(query)) return;
+      if (membersByUserId.has(userId)) return;
+      membersByUserId.set(userId, {
+        userId,
+        username,
+        name,
+        image: String(entry?.authorImage || entry?.image || ""),
+      });
+    };
+
+    const forumRows = await forumPostsCollection
+      .find(
+        { isDeleted: false, authorUserId: { $exists: true }, authorUsername: { $exists: true } },
+        { projection: { authorUserId: 1, authorUsername: 1, authorName: 1, authorImage: 1 } },
+      )
+      .limit(5000)
+      .toArray();
+    forumRows.forEach(register);
+
+    const commentRows = await commentsCollection
+      .find(
+        {
+          isDeleted: false,
+          newsId: /^forum:/,
+          userId: { $exists: true },
+          authorUsername: { $exists: true },
+        },
+        { projection: { userId: 1, authorUsername: 1, authorName: 1, authorImage: 1 } },
+      )
+      .limit(7000)
+      .toArray();
+    commentRows.forEach(register);
+
+    const members = Array.from(membersByUserId.values())
+      .sort((a, b) => String(a.username || "").localeCompare(String(b.username || "")))
+      .slice(0, limit);
+    return res.json({ members });
+  } catch (error) {
+    console.error("Failed to load forum member directory", error);
+    return res.status(500).json({ error: "Failed to load forum member directory" });
+  }
 });
 
 app.get("/health", (req, res) => {

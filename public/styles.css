@@ -502,6 +502,10 @@ body[data-theme="dark"] {
   .home-split {
     grid-template-columns: 1fr;
   }
+
+  .combined-updates-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 860px) {
@@ -775,6 +779,12 @@ body[data-theme="dark"] {
 .desktop-account-menu-item {
   border-color: transparent;
   background: transparent;
+  justify-content: center;
+  text-align: center;
+}
+
+.desktop-account-menu-item.text-only {
+  justify-content: center;
 }
 
 .user-button-trigger {
@@ -1158,6 +1168,35 @@ body[data-theme="dark"] {
   min-height: 160px;
 }
 
+.forum-editor-mentions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.forum-editor-mention-item {
+  border: 1px solid var(--stroke);
+  border-radius: 999px;
+  background: var(--bg-soft);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.forum-editor-mention-item.active,
+.forum-editor-mention-item:hover,
+.forum-editor-mention-item:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--stroke));
+  background: color-mix(in srgb, var(--bg-soft) 85%, transparent);
+  color: transparent;
+  background-image: linear-gradient(270deg, var(--accent-2), var(--accent));
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
 .forum-editor-footer {
   display: flex;
   justify-content: space-between;
@@ -1196,6 +1235,20 @@ body[data-theme="dark"] {
 
 .forum-markdown-render p:last-child {
   margin-bottom: 0;
+}
+
+.forum-markdown-render .forum-mention-link {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0;
+}
+
+.forum-markdown-render .forum-mention-link:hover,
+.forum-markdown-render .forum-mention-link:focus-visible {
+  text-decoration: underline;
 }
 
 .forum-markdown-render h1,
@@ -2095,6 +2148,11 @@ body[data-theme="light"] .button.primary {
   margin-bottom: 12px;
 }
 
+.news-mini.compact {
+  gap: 9px;
+  margin-bottom: 10px;
+}
+
 .news-mini-row {
   padding: 10px 12px;
   border-radius: 14px;
@@ -2102,6 +2160,11 @@ body[data-theme="light"] .button.primary {
   background: var(--bg-soft);
   display: grid;
   gap: 4px;
+}
+
+.news-mini.compact .news-mini-row {
+  padding: 8px 10px;
+  border-radius: 12px;
 }
 
 .mini-row-head {
@@ -2121,6 +2184,11 @@ body[data-theme="light"] .button.primary {
   padding: 4px 10px;
   line-height: 1.2;
   white-space: nowrap;
+}
+
+.news-mini.compact .mini-view-btn {
+  font-size: 11px;
+  padding: 3px 8px;
 }
 
 .news-mini-meta {
@@ -2147,6 +2215,25 @@ body[data-theme="dark"] .news-mini-preview {
   min-width: 150px;
   justify-self: center;
   text-align: center;
+  min-height: 32px;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.combined-updates-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.combined-updates-col {
+  display: grid;
+  gap: 8px;
+}
+
+.combined-updates-title {
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .link-state-pill {
@@ -2177,9 +2264,9 @@ body[data-theme="dark"] .news-mini-preview {
 }
 
 .home-leaderboard-preview {
-  margin-top: 8px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--stroke);
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
   display: grid;
   gap: 8px;
 }
@@ -4618,6 +4705,12 @@ emoji-picker.reaction-picker-panel {
   transform: translateY(-1px);
 }
 
+.link-code-input:disabled {
+  opacity: 0.58;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .link-actions {
   display: grid;
   gap: 8px;
@@ -6047,6 +6140,10 @@ body[data-theme="dark"] .store-cta {
 
   .footer-top-left {
     width: 100%;
+    align-items: flex-start;
+  }
+
+  .footer-copy-stack {
     align-items: flex-start;
   }
 
@@ -7564,6 +7661,13 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   gap: 6px;
 }
 
+.footer-copy-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
 .footer-copyright img {
   width: 14px;
   height: 14px;
@@ -7612,6 +7716,7 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 
 .footer-version-trigger {
   color: var(--muted);
+  font-size: 12px;
 }
 
 .footer-link:hover {

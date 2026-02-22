@@ -159,7 +159,7 @@ export default function DesktopAuthButtons({
                   <${AccountActionButton}
                     className="desktop-account-menu-item logout"
                     role="menuitem"
-                    label=${hoveredItem === "logout" ? "Sign Out Now" : "Logout"}
+                    label=${hoveredItem === "logout" ? "Sign-Out Now" : "Sign-Out"}
                     iconSrc=${logoutIconSrc}
                     onMouseEnter=${() => setHoveredItem("logout")}
                     onMouseLeave=${() => setHoveredItem("")}

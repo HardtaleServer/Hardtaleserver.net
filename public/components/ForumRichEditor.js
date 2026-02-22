@@ -47,9 +47,21 @@ function ToolIcon({ name }) {
   return html``;
 }
 
-function ForumRenderedMarkdown({ value = "", className = "" }) {
+function ForumRenderedMarkdown({ value = "", className = "", onMentionClick = null }) {
   const htmlValue = useMemo(() => markdownToSafeHtml(value), [value]);
-  return html`<div className=${`forum-markdown-render ${className}`.trim()} dangerouslySetInnerHTML=${{ __html: htmlValue }} />`;
+  return html`<div
+    className=${`forum-markdown-render ${className}`.trim()}
+    onClick=${(event) => {
+      if (typeof onMentionClick !== "function") return;
+      const trigger = event?.target?.closest?.("[data-mention]");
+      if (!trigger) return;
+      event.preventDefault();
+      const mention = String(trigger.getAttribute("data-mention") || "").trim();
+      if (!mention) return;
+      onMentionClick(mention);
+    }}
+    dangerouslySetInnerHTML=${{ __html: htmlValue }}
+  />`;
 }
 
 export default function ForumRichEditor({
@@ -64,6 +76,7 @@ export default function ForumRichEditor({
   templateOptions = null,
   initialMode = "edit",
   showModeTabs = true,
+  mentionSuggestions = [],
 }) {
   const textareaRef = useRef(null);
   const emojiPickerRef = useRef(null);
@@ -76,8 +89,11 @@ export default function ForumRichEditor({
   const [showEmoji, setShowEmoji] = useState(false);
   const [pickerLoaded, setPickerLoaded] = useState(false);
   const [pickerFailed, setPickerFailed] = useState(false);
-  const [toolbarExpanded, setToolbarExpanded] = useState(false);
+  const [toolbarExpanded, setToolbarExpanded] = useState(true);
   const [historyTick, setHistoryTick] = useState(0);
+  const [mentionMenuOpen, setMentionMenuOpen] = useState(false);
+  const [mentionMenuItems, setMentionMenuItems] = useState([]);
+  const [mentionIndex, setMentionIndex] = useState(0);
   const draftKey = useMemo(() => buildDraftStorageKey("forum-editor-draft", draftScope), [draftScope]);
   const count = String(value || "").length;
   const tooShort = count > 0 && count < minLength;
@@ -254,6 +270,25 @@ export default function ForumRichEditor({
   }
 
   function onKeyDown(event) {
+    if (
+      mentionMenuOpen &&
+      mentionMenuItems.length > 0 &&
+      (event.key === "Tab" || event.key === "Enter" || event.key === "ArrowDown" || event.key === "ArrowUp")
+    ) {
+      event.preventDefault();
+      if (event.key === "ArrowDown") {
+        setMentionIndex((prev) => (prev + 1) % mentionMenuItems.length);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        setMentionIndex((prev) => (prev - 1 + mentionMenuItems.length) % mentionMenuItems.length);
+        return;
+      }
+      const selected = String(mentionMenuItems[mentionIndex] || mentionMenuItems[0] || "");
+      if (selected) applyMentionSelection(selected);
+      return;
+    }
+
     if (!(event.ctrlKey || event.metaKey)) return;
     const key = String(event.key || "").toLowerCase();
     if (key === "b") {
@@ -281,6 +316,64 @@ export default function ForumRichEditor({
       event.preventDefault();
       redo();
     }
+  }
+
+  function resolveMentionContext(textValue, caretIndex) {
+    const caret = Math.max(0, Number(caretIndex || 0));
+    const prefix = String(textValue || "").slice(0, caret);
+    const match = prefix.match(/(^|\s)@([a-zA-Z0-9._-]{1,31})$/);
+    if (!match) return null;
+    return {
+      query: String(match[2] || "").toLowerCase(),
+      start: caret - String(match[2] || "").length - 1,
+      end: caret,
+    };
+  }
+
+  function updateMentionMenu(textValue, caretIndex) {
+    const context = resolveMentionContext(textValue, caretIndex);
+    if (!context) {
+      setMentionMenuOpen(false);
+      setMentionMenuItems([]);
+      setMentionIndex(0);
+      return;
+    }
+    const normalized = Array.from(
+      new Set(
+        (Array.isArray(mentionSuggestions) ? mentionSuggestions : [])
+          .map((entry) => String(entry || "").trim().replace(/^@+/, ""))
+          .filter(Boolean),
+      ),
+    );
+    const nextItems = normalized
+      .filter((entry) => entry.toLowerCase().startsWith(context.query))
+      .slice(0, 8);
+    if (nextItems.length === 0) {
+      setMentionMenuOpen(false);
+      setMentionMenuItems([]);
+      setMentionIndex(0);
+      return;
+    }
+    setMentionMenuOpen(true);
+    setMentionMenuItems(nextItems);
+    setMentionIndex((prev) => Math.min(prev, Math.max(nextItems.length - 1, 0)));
+  }
+
+  function applyMentionSelection(username) {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const textValue = String(value || "");
+    const context = resolveMentionContext(textValue, textarea.selectionStart || 0);
+    if (!context) return;
+    const replacement = `@${String(username || "").replace(/^@+/, "")} `;
+    const nextValue = `${textValue.slice(0, context.start)}${replacement}${textValue.slice(context.end)}`;
+    const nextCursor = context.start + replacement.length;
+    applyEditorValue(nextValue, {
+      selection: { start: nextCursor, end: nextCursor },
+    });
+    setMentionMenuOpen(false);
+    setMentionMenuItems([]);
+    setMentionIndex(0);
   }
 
   function applyTemplate(valueKey) {
@@ -383,13 +476,36 @@ export default function ForumRichEditor({
               value=${value}
               maxLength=${maxLength}
               onKeyDown=${onKeyDown}
-              onInput=${(event) => applyEditorValue(event.target.value)}
+              onInput=${(event) => {
+                const nextValue = event.target.value;
+                const nextCaret = event.target.selectionStart || 0;
+                applyEditorValue(nextValue);
+                updateMentionMenu(nextValue, nextCaret);
+              }}
             ></textarea>`
           : html``}
         ${(activeMode === "preview" || activeMode === "split")
           ? html`<div className="forum-editor-preview"><${ForumRenderedMarkdown} value=${value} /></div>`
           : html``}
       </div>
+      ${mentionMenuOpen && mentionMenuItems.length > 0
+        ? html`<div className="forum-editor-mentions">
+            ${mentionMenuItems.map(
+              (item, index) => html`<button
+                key=${`mention-${item}-${index}`}
+                type="button"
+                className=${`forum-editor-mention-item ${mentionIndex === index ? "active" : ""}`.trim()}
+                onMouseEnter=${() => setMentionIndex(index)}
+                onMouseDown=${(event) => {
+                  event.preventDefault();
+                  applyMentionSelection(item);
+                }}
+              >
+                @${item}
+              </button>`,
+            )}
+          </div>`
+        : html``}
       <div className="forum-editor-footer">
         <div className="forum-editor-history-row">
           <button type="button" className="ghost-btn forum-editor-icon-btn" onClick=${undo} disabled=${!canUndo} title="Undo (Ctrl+Z)"><${ToolIcon} name="undo" /></button>
