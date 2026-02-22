@@ -1,0 +1,194 @@
+Hardtale Store Delivery Runbook (Production-Safe)
+Date: 2026-02-22
+Target: Java plugin on Hytale server (LuckPerms rank updates + gold grants)
+
+1) Goal
+Use store rank buttons and gold buttons on the website to deliver in-game rewards safely.
+Delivery must be queue-based, polled by the Java plugin, idempotent, auditable, and resilient.
+
+2) High-Level Architecture
+1. Web store creates paid purchases and writes fulfillment jobs in backend storage.
+2. Java plugin polls backend for pending jobs assigned to its serverId.
+3. Plugin applies rewards in-game:
+   - Rank grants via LuckPerms (or your rank adapter)
+   - Gold grants via economy adapter
+4. Plugin ACKs each job result back to backend:
+   - APPLIED on success
+   - FAILED on permanent failure
+5. Backend marks final state and never re-delivers finalized jobs.
+
+This is an at-least-once delivery system, so idempotency is mandatory in plugin and backend.
+
+3) Existing API Endpoints You Already Have
+Server-auth (shared secret / bearer token):
+- GET /api/server/pending-fulfillments
+- POST /api/server/ack-fulfillment
+
+Also present:
+- GET /api/internal/fulfillment/pending
+- POST /api/internal/fulfillment/ack
+
+Use the /api/server/* endpoints for plugin delivery.
+
+4) Security Requirements (Non-Negotiable)
+1. Use HTTPS only. Never call API over plain HTTP in production.
+2. Keep SERVER_SECRET only in server/plugin environment vars, never in client/frontend code.
+3. Send Authorization: Bearer <SERVER_SECRET> on every plugin request.
+4. Rotate secrets on schedule (for example every 60-90 days) with overlap window:
+   - accept old+new briefly
+   - switch plugin
+   - remove old key
+5. Restrict inbound API access at network layer when possible (WAF/IP allowlist).
+6. Log auth failures with route labels and source address; alert on spikes.
+7. Do not include full secrets, JWTs, or payment data in logs.
+
+5) Data Contract (Recommended Job Shape)
+Your jobs should contain enough data for deterministic application and audit:
+- grantId: unique immutable id (primary idempotency key)
+- purchaseId: source purchase correlation id
+- playerUuid: target player UUID
+- grants[]:
+  - type: "RANK" or "GOLD"
+  - value: e.g. "HERO" for rank, integer amount for gold
+  - metadata: optional (duration, reason, source)
+- createdAt, source, serverId
+
+ACK payload should include:
+- grantId
+- status: APPLIED or FAILED
+- errorCode (if FAILED)
+- errorMessage (sanitized, short)
+- appliedAt timestamp
+
+6) Idempotency and Exactly-Once Effects
+You cannot guarantee exactly-once delivery over network; you can guarantee exactly-once effects.
+Implement both layers:
+
+Backend:
+1. Each grant has stable grantId.
+2. ACK endpoint only mutates jobs in PENDING state.
+3. Re-ACK of already-finalized grant returns existing final status without side effects.
+
+Plugin:
+1. Keep local durable table/map: processed_grants(grantId, finalStatus, updatedAt).
+2. Before applying any job, check if grantId already APPLIED; if yes, skip apply and ACK APPLIED again.
+3. Write processed state before/with apply completion transaction when possible.
+4. Never apply the same grant twice, even after restart/crash.
+
+7) Queue and Polling Strategy
+1. Poll interval: 2-5 seconds (start with 3s).
+2. Request a bounded batch each poll (for example 25-100 grants).
+3. Process sequentially per playerUuid to avoid race conditions.
+4. Process concurrently across different players with a safe worker limit.
+5. Backoff with jitter on API failure:
+   - 1s, 2s, 4s, 8s, max 30s + random jitter
+6. If backend unavailable, keep retrying; do not drop jobs.
+7. On plugin startup, immediately poll once, then continue interval.
+
+8) Rank Delivery (LuckPerms / "luckerpermissions")
+Use LuckPerms as the authority for donor rank groups.
+
+Recommended mapping:
+- HERO   -> group.hardtale.hero
+- LEGEND -> group.hardtale.legend
+- MYTHIC -> group.hardtale.mythic
+
+Rules:
+1. Normalize rank to uppercase before mapping.
+2. Apply highest tier only; remove lower donor groups if needed.
+3. Make operation idempotent:
+   - if user already has target highest rank, no-op and ACK APPLIED.
+4. Validate player UUID exists and is resolvable offline/online.
+5. If LP storage temporarily fails, do not mark FAILED immediately; retry first.
+
+Permanent failure examples:
+- Unknown rank value (bad payload)
+- Missing mapping configuration
+
+Transient failure examples:
+- LuckPerms API timeout
+- Database temporarily unavailable
+
+9) Gold Delivery
+Gold should be separate grant type, not mixed into rank semantics.
+
+Rules:
+1. Accept only integer positive amounts within configured bounds.
+2. Make idempotent by grantId:
+   - apply currency only once per grantId
+3. Use economy transaction reason:
+   - "Store purchase <purchaseId>/<grantId>"
+4. Validate overflow bounds before applying.
+5. On transient economy failure, retry with backoff.
+
+10) Failure Classification and Retry Policy
+1. Retry transient failures automatically (network timeout, DB unavailable, API 5xx).
+2. Mark FAILED only for permanent validation/business failures.
+3. Include structured errorCode:
+   - INVALID_GRANT
+   - UNKNOWN_RANK
+   - PLAYER_NOT_FOUND
+   - ECONOMY_DISABLED
+   - DEPENDENCY_UNAVAILABLE
+4. Keep dead-letter visibility:
+   - backend/admin endpoint or dashboard for FAILED grants
+   - manual replay tool for corrected failures
+
+11) Operational Safeguards
+1. Health checks:
+   - plugin reports queue lag, last poll time, last ack time
+2. Metrics to track:
+   - pending count
+   - apply success rate
+   - retry count
+   - ack latency p50/p95
+   - failed grants by errorCode
+3. Alerts:
+   - no successful poll > 2 minutes
+   - pending queue growth sustained > threshold
+   - failed grants spike
+4. Audit logs:
+   - purchaseId, grantId, playerUuid, action, result
+5. Time sync:
+   - keep NTP healthy on API and game servers
+
+12) Deployment Checklist (Production)
+1. Confirm HTTPS certs valid and renewed automatically.
+2. Set SERVER_SECRET in backend and plugin env.
+3. Verify plugin can call /api/server/pending-fulfillments with 200 response.
+4. Run dry-run mode in staging with test grants:
+   - rank upgrade
+   - gold grant
+   - duplicate delivery simulation
+   - plugin restart mid-processing
+5. Validate idempotency:
+   - same grant polled multiple times still produces one in-game effect.
+6. Enable production with limited batch size, then scale.
+7. Create runbook for secret rotation and incident recovery.
+
+13) Suggested Plugin Processing Loop (Pseudo)
+1. poll pending batch
+2. for each grant:
+   - if already processed(grantId): ack APPLIED; continue
+   - validate payload
+   - apply rank/gold transaction
+   - persist processed state
+   - ack APPLIED
+   - on error:
+     - transient: keep unacked (will retry)
+     - permanent: ack FAILED with errorCode
+
+14) Important Note on "Entirely Safe"
+No distributed system is 100% risk-free.
+Production safety comes from defense-in-depth:
+- authenticated endpoints
+- idempotent processing
+- retries + backoff
+- clear final-state ACKs
+- monitoring + alerting
+- tested recovery procedures
+
+If you want, next step is I can generate:
+1) a concrete Java interface for rank/economy adapters,
+2) a minimal polling worker skeleton,
+3) a grant-state persistence schema for your plugin.

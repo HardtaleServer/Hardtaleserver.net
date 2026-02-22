@@ -8665,6 +8665,7 @@ function HomePage({
   isSignedIn,
 }) {
   const navigate = useNavigate();
+  const { openSignIn } = useClerk();
   const [forumPreview, setForumPreview] = useState([]);
   const [forumLoading, setForumLoading] = useState(true);
   const [serverRuntime, setServerRuntime] = useState({
@@ -8790,9 +8791,18 @@ function HomePage({
           <div className="join-row">
             <strong>Join now</strong>
             ${!isSignedIn
-              ? html`<${SignUpButton} mode="modal">
-                  <button className="button ghost-btn link-state-pill unlinked" type="button">Sign Up</button>
-                <//>`
+              ? html`<button
+                  className="button ghost-btn link-state-pill unlinked"
+                  type="button"
+                  onClick=${() =>
+                    openSignIn &&
+                    openSignIn({
+                      fallbackRedirectUrl: "/",
+                      forceRedirectUrl: "/",
+                    })}
+                >
+                  Sign up / Sign In
+                </button>`
               : html`<button
                   className=${`button ghost-btn link-state-pill ${linkedClass}`.trim()}
                   type="button"
