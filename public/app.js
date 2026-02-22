@@ -11,6 +11,7 @@ import MobileDrawerLinks from "./components/MobileDrawerLinks.js";
 import DesktopNavLinkButton from "./components/DesktopNavLinkButton.js";
 import TicketInboxList from "./components/TicketInboxList.js";
 import DesktopAuthButtons from "./components/DesktopAuthButtons.js";
+import AccountActionButton from "./components/AccountActionButton.js";
 import PageHero from "./components/PageHero.js";
 import SupportTicketForm from "./components/SupportTicketForm.js";
 import SupportTicketThread from "./components/SupportTicketThread.js";
@@ -83,6 +84,7 @@ const SUPPORT_ERROR_MARKER_START = "[ATTACHED_ERROR_CONTEXT]";
 const SUPPORT_ERROR_MARKER_END = "[/ATTACHED_ERROR_CONTEXT]";
 const TICKET_COOLDOWN_KEY = "hardtale-ticket-cooldown";
 const TICKET_COOLDOWN_MS = 60 * 60 * 1000;
+const AVATAR_PREF_KEY_PREFIX = "hardtale-avatar-pref";
 const LOGO_SIDE_KEY = "hardtale-logo-side";
 const MOBILE_LOGO_STYLE_KEY = "hardtale-mobile-logo-style";
 const MOBILE_ISLAND_KEY = "hardtale-mobile-island";
@@ -101,6 +103,7 @@ const DELETE_ICON_SVG = "/Images/SVGs/ui/Delete.svg";
 const NOTIFICATIONS_ICON_SVG = "/Images/SVGs/ui/Notifications.svg";
 const BASKET_ICON_SVG = "/Images/SVGs/ui/Basket.svg";
 const DRAWER_MENU_ICON_SVG = "/Images/SVGs/ui/DrawerMenu.svg";
+const LOGOUT_ICON_SVG = "/Images/SVGs/Logout.svg";
 const WARNING_STATUS_ICON_SVG = "/Images/SVGs/toasts/Warning.svg";
 const SUCCESS_STATUS_ICON_SVG = "/Images/SVGs/toasts/Success.svg";
 const ERROR_STATUS_ICON_SVG = "/Images/SVGs/toasts/Error.svg";
@@ -4625,10 +4628,12 @@ function SettingsMenu({
   setUiFlashEnabled,
   toastShape,
   setToastShape,
+  openState,
+  setOpenState,
   onOpenChange,
   isMobile,
 }) {
-  const [open, setOpen] = useState(false);
+  const [openInternal, setOpenInternal] = useState(false);
   const [spinning, setSpinning] = useState(false);
   const [showLogoPicker, setShowLogoPicker] = useState(false);
   const [showDesktopLogoPicker, setShowDesktopLogoPicker] = useState(false);
@@ -4636,6 +4641,8 @@ function SettingsMenu({
     typeof window !== "undefined"
       ? isMobile || window.matchMedia("(max-width: 860px)").matches
       : isMobile;
+  const open = typeof openState === "boolean" ? openState : openInternal;
+  const setOpen = typeof setOpenState === "function" ? setOpenState : setOpenInternal;
 
   function handleClick(event) {
     const buttonEl = event?.currentTarget;
@@ -4782,6 +4789,7 @@ function SettingsMenu({
                       <span>${uiFlashEnabled ? "On" : "Off"}</span>
                       <button
                         className=${`switch ${uiFlashEnabled ? "on" : ""}`}
+                        type="button"
                         onClick=${() => setUiFlashEnabled(!uiFlashEnabled)}
                         title="Toggle click flash"
                       ></button>
@@ -4908,6 +4916,7 @@ function SettingsMenu({
                 <span>${theme === "light" ? "Light" : "Dark"}</span>
                 <button
                   className=${`switch ${theme === "dark" ? "on" : ""}`}
+                  type="button"
                   onClick=${toggleLightDark}
                   title="Toggle light/dark"
                 ></button>
@@ -4920,6 +4929,7 @@ function SettingsMenu({
                     <span>${showMobileIsland ? "Show" : "Hide"}</span>
                     <button
                       className=${`switch ${showMobileIsland ? "on" : ""}`}
+                      type="button"
                       onClick=${() => setShowMobileIsland(!showMobileIsland)}
                       title="Toggle floating island"
                     ></button>
@@ -9630,7 +9640,7 @@ function Layout() {
   const [showMobileNav, setShowMobileNav] = useState(false);
   const { user } = useUser();
   const { getToken, isSignedIn, userId, isLoaded: isAuthLoaded } = useAuth();
-  const { openSignIn } = useClerk();
+  const { openSignIn, signOut } = useClerk();
   const [isAdmin, setIsAdmin] = useState(false);
   const [unread, setUnread] = useState(0);
   const [showCart, setShowCart] = useState(false);
@@ -9639,6 +9649,7 @@ function Layout() {
   const [notificationProfileUser, setNotificationProfileUser] = useState(null);
   const [notificationProfileInfoTab, setNotificationProfileInfoTab] = useState("badges");
   const [notificationProfileLoading, setNotificationProfileLoading] = useState(false);
+  const [profileTitleSaving, setProfileTitleSaving] = useState(false);
   const [drawerProfileSummary, setDrawerProfileSummary] = useState({
     rankLabel: "Unregistered",
     ownedRank: "Unregistered",
@@ -9662,6 +9673,13 @@ function Layout() {
   const [pendingItem, setPendingItem] = useState(null);
   const [isMobile, setIsMobile] = useState(false);
   const [isLinkedAccount, setIsLinkedAccount] = useState(false);
+  const [linkedPlayerUuid, setLinkedPlayerUuid] = useState("");
+  const [avatarSource, setAvatarSource] = useState("clerk");
+  const [customAvatarDataUrl, setCustomAvatarDataUrl] = useState("");
+  const [hytaleAvatarUrl, setHytaleAvatarUrl] = useState("");
+  const [avatarPanelOpen, setAvatarPanelOpen] = useState(false);
+  const [avatarPanelStatus, setAvatarPanelStatus] = useState("");
+  const avatarFileInputRef = useRef(null);
   const shellRef = useRef(null);
   const topbarRef = useRef(null);
   const playRef = useRef(null);
@@ -9716,6 +9734,20 @@ function Layout() {
         }
       : location;
   const visualPathname = routesLocation.pathname;
+  const normalizedDrawerRank = String(drawerProfileSummary.rankLabel || "Unregistered");
+  const isStaffAccount =
+    isStaffLabel(normalizedDrawerRank) || isStaffLabel(String(drawerProfileSummary.staffRole || ""));
+  const isDonorRankAccount =
+    normalizedDrawerRank === "Hero" ||
+    normalizedDrawerRank === "Legend" ||
+    normalizedDrawerRank === "Mythic";
+  const canUploadOwnAvatar = Boolean(isStaffAccount || isDonorRankAccount);
+  const resolvedOwnAvatar = useMemo(() => {
+    const clerkAvatar = String(user?.imageUrl || "/assets/HardTale_H_GreyScale.png");
+    if (avatarSource === "hytale" && hytaleAvatarUrl) return hytaleAvatarUrl;
+    if (avatarSource === "upload" && canUploadOwnAvatar && customAvatarDataUrl) return customAvatarDataUrl;
+    return clerkAvatar;
+  }, [avatarSource, hytaleAvatarUrl, canUploadOwnAvatar, customAvatarDataUrl, user]);
 
   useEffect(() => {
     let alive = true;
@@ -9897,12 +9929,64 @@ function Layout() {
     return () => media.removeEventListener("change", onChange);
   }, []);
 
+  async function fetchHytaleAvatarUrlById(playerId) {
+    const safeId = String(playerId || "").trim();
+    if (!safeId) return "";
+    try {
+      const response = await fetch(`https://playerdb.co/api/player/hytale/${encodeURIComponent(safeId)}`);
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json().catch(() => ({}));
+      return String(data?.avatar || data?.data?.player?.avatar || "").trim();
+    } catch {
+      return "";
+    }
+  }
+
+  useEffect(() => {
+    if (!isSignedIn || !userId) {
+      setAvatarSource("clerk");
+      setCustomAvatarDataUrl("");
+      setHytaleAvatarUrl("");
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(`${AVATAR_PREF_KEY_PREFIX}:${userId}`);
+      const parsed = raw ? JSON.parse(raw) : {};
+      setAvatarSource(
+        parsed?.source === "hytale" || parsed?.source === "upload" || parsed?.source === "clerk"
+          ? parsed.source
+          : "clerk",
+      );
+      setCustomAvatarDataUrl(String(parsed?.customAvatarDataUrl || ""));
+      setHytaleAvatarUrl(String(parsed?.hytaleAvatarUrl || ""));
+    } catch {
+      setAvatarSource("clerk");
+      setCustomAvatarDataUrl("");
+      setHytaleAvatarUrl("");
+    }
+  }, [isSignedIn, userId]);
+
+  useEffect(() => {
+    if (!isSignedIn || !userId) return;
+    try {
+      localStorage.setItem(
+        `${AVATAR_PREF_KEY_PREFIX}:${userId}`,
+        JSON.stringify({
+          source: avatarSource,
+          customAvatarDataUrl,
+          hytaleAvatarUrl,
+        }),
+      );
+    } catch {}
+  }, [isSignedIn, userId, avatarSource, customAvatarDataUrl, hytaleAvatarUrl]);
+
   useEffect(() => {
     let alive = true;
     async function loadLinkedState() {
       if (!isAuthLoaded || !isSignedIn) {
         if (!alive) return;
         setIsLinkedAccount(false);
+        setLinkedPlayerUuid("");
         return;
       }
       const onStoreRanksRoute = location.pathname === "/store/ranks";
@@ -9915,9 +9999,11 @@ function Layout() {
         const data = await response.json().catch(() => ({}));
         if (!alive || !response.ok) return;
         setIsLinkedAccount(Boolean(data?.linked));
+        setLinkedPlayerUuid(String(data?.playerUuid || "").trim());
       } catch {
         if (!alive) return;
         setIsLinkedAccount(false);
+        setLinkedPlayerUuid("");
       }
     }
     loadLinkedState();
@@ -9925,6 +10011,19 @@ function Layout() {
       alive = false;
     };
   }, [isAuthLoaded, isSignedIn, userId, location.pathname, getToken, isLinkedAccount]);
+
+  useEffect(() => {
+    let alive = true;
+    if (!isSignedIn || !linkedPlayerUuid || avatarSource !== "hytale" || hytaleAvatarUrl) return undefined;
+    (async () => {
+      const nextAvatar = await fetchHytaleAvatarUrlById(linkedPlayerUuid);
+      if (!alive || !nextAvatar) return;
+      setHytaleAvatarUrl(nextAvatar);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [isSignedIn, linkedPlayerUuid, avatarSource, hytaleAvatarUrl]);
 
   useEffect(() => {
     let alive = true;
@@ -10702,7 +10801,9 @@ function Layout() {
     setNotificationProfileUser({
       name,
       username,
-      image: String(item.authorImage || "/assets/HardTale_H_GreyScale.png"),
+      image: isOwn
+        ? resolvedOwnAvatar
+        : String(item.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel,
       ownedRank: normalizeOwnedRankLabel(item.authorOwnedRank || rankLabel),
       staff,
@@ -10778,12 +10879,82 @@ function Layout() {
     }
   }
 
+  useEffect(() => {
+    if (notificationProfileOpen) return;
+    setAvatarPanelOpen(false);
+    setAvatarPanelStatus("");
+  }, [notificationProfileOpen]);
+
+  async function handleAccountLogout() {
+    try {
+      await signOut();
+    } catch {
+      emitAppToast({
+        kind: "error",
+        title: "Logout Failed",
+        message: "Unable to sign out right now. Please try again.",
+      });
+    }
+  }
+
+  async function useHytaleAvatar() {
+    if (!isSignedIn) return;
+    const sourceId =
+      String(notificationProfileUser?.hytalePlayerUuid || "").trim() || String(linkedPlayerUuid || "").trim();
+    if (!sourceId) {
+      setAvatarPanelStatus("No linked Hytale UUID found.");
+      return;
+    }
+    setAvatarPanelStatus("Loading Hytale avatar...");
+    const fetchedAvatar = await fetchHytaleAvatarUrlById(sourceId);
+    if (!fetchedAvatar) {
+      setAvatarPanelStatus("Unable to fetch Hytale avatar.");
+      return;
+    }
+    setHytaleAvatarUrl(fetchedAvatar);
+    setAvatarSource("hytale");
+    setAvatarPanelOpen(false);
+    setAvatarPanelStatus("");
+    setNotificationProfileUser((prev) => (prev?.isOwn ? { ...prev, image: fetchedAvatar } : prev));
+  }
+
+  function chooseCustomAvatarFile() {
+    if (!canUploadOwnAvatar) {
+      setAvatarPanelStatus("Custom uploads are unlocked for Hero, Legend, Mythic, or Staff.");
+      return;
+    }
+    avatarFileInputRef.current?.click();
+  }
+
+  function onCustomAvatarSelected(event) {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+    if (!canUploadOwnAvatar) {
+      setAvatarPanelStatus("Custom uploads are unlocked for Hero, Legend, Mythic, or Staff.");
+      event.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || "");
+      if (!dataUrl) return;
+      setCustomAvatarDataUrl(dataUrl);
+      setAvatarSource("upload");
+      setAvatarPanelOpen(false);
+      setAvatarPanelStatus("");
+      setNotificationProfileUser((prev) => (prev?.isOwn ? { ...prev, image: dataUrl } : prev));
+    };
+    reader.onerror = () => setAvatarPanelStatus("Could not read the selected image.");
+    reader.readAsDataURL(file);
+    event.target.value = "";
+  }
+
   function openDrawerSelfProfileCard() {
     if (!isSignedIn || !userId) return;
     openNotificationProfile({
       authorName: displayName,
       authorUsername: user?.username || "",
-      authorImage: user?.imageUrl || "/assets/HardTale_H_GreyScale.png",
+      authorImage: resolvedOwnAvatar,
       authorUserId: userId,
       authorRank: drawerProfileSummary.rankLabel || "Unregistered",
       authorOwnedRank: drawerProfileSummary.ownedRank || drawerProfileSummary.rankLabel || "Unregistered",
@@ -10992,14 +11163,17 @@ function Layout() {
         toastShape=${toastShape}
         setToastShape=${setToastShape}
         setSettingsOpen=${setSettingsOpen}
+        settingsOpen=${settingsOpen}
         isMobile=${isMobile}
         notificationCount=${notificationCount}
         openNotifications=${openNotifications}
         cartCount=${cartCount}
         openCart=${openCart}
         profileName=${displayName}
-        profileAvatar=${user?.imageUrl || "/assets/HardTale_H_GreyScale.png"}
+        profileAvatar=${resolvedOwnAvatar}
         openProfilePanel=${openDrawerSelfProfileCard}
+        onLogout=${handleAccountLogout}
+        logoutIconSrc=${LOGOUT_ICON_SVG}
       />
     `;
   }
@@ -11053,6 +11227,8 @@ function Layout() {
       setUiFlashEnabled=${setUiFlashEnabled}
       toastShape=${toastShape}
       setToastShape=${setToastShape}
+      openState=${settingsOpen}
+      setOpenState=${setSettingsOpen}
       onOpenChange=${setSettingsOpen}
       isMobile=${isMobile}
     />`;
@@ -11252,7 +11428,7 @@ function Layout() {
                   className="drawer-profile-preview"
                   onClick=${openDrawerSelfProfileCard}
                   title="Open profile card"
-                  avatar=${user?.imageUrl || "/assets/HardTale_H_GreyScale.png"}
+                  avatar=${resolvedOwnAvatar}
                   name=${displayName}
                   username=${formatUsernameForDisplay(user?.username)}
                 >
@@ -11264,6 +11440,12 @@ function Layout() {
               </div>
               <div className=${`drawer-settings-row ${menuSide === "left" ? "left" : "right"}`.trim()}>
                 <${MobileSettingsButton} />
+                <${AccountActionButton}
+                  className="drawer-logout-button"
+                  label="Logout"
+                  iconSrc=${LOGOUT_ICON_SVG}
+                  onClick=${handleAccountLogout}
+                />
               </div>
             <//>
           </div>
@@ -11358,6 +11540,15 @@ function Layout() {
                 .replace(/[^a-z0-9]+/g, "-")}`.trim()}
               avatarSrc=${notificationProfileUser.image}
               avatarAlt=${notificationProfileUser.name}
+              onAvatarClick=${notificationProfileUser?.isOwn
+                ? () => {
+                    setAvatarPanelOpen((prev) => !prev);
+                    setAvatarPanelStatus("");
+                  }
+                : null}
+              avatarButtonTitle=${notificationProfileUser?.isOwn
+                ? "Avatar options"
+                : "Profile avatar"}
               nameClassName=${`profile-card-name ${
                 notificationProfileUser.useRankFont === true ? "rank-font-on" : "rank-font-off"
               } ${
@@ -11423,6 +11614,42 @@ function Layout() {
                 })()}
               </div>`}
             >
+              ${notificationProfileUser?.isOwn
+                ? html`<div className="avatar-source-shell">
+                    <input
+                      ref=${avatarFileInputRef}
+                      className="avatar-file-input"
+                      type="file"
+                      accept="image/*"
+                      onChange=${onCustomAvatarSelected}
+                    />
+                    ${avatarPanelOpen
+                      ? html`<div className="avatar-source-menu">
+                          <button
+                            type="button"
+                            className=${`avatar-source-item ${avatarSource === "hytale" ? "active" : ""}`.trim()}
+                            onClick=${useHytaleAvatar}
+                          >
+                            Use Hytale Avatar
+                          </button>
+                          <button
+                            type="button"
+                            className=${`avatar-source-item ${avatarSource === "upload" ? "active" : ""}`.trim()}
+                            onClick=${chooseCustomAvatarFile}
+                            disabled=${!canUploadOwnAvatar}
+                            title=${canUploadOwnAvatar
+                              ? "Upload a custom avatar"
+                              : "Unlocked for Hero, Legend, Mythic, or Staff"}
+                          >
+                            Upload Your Own
+                          </button>
+                        </div>`
+                      : html``}
+                    ${avatarPanelStatus
+                      ? html`<div className="avatar-source-status muted">${avatarPanelStatus}</div>`
+                      : html``}
+                  </div>`
+                : html``}
               <${ProfileInfoTabs}
                 activeTab=${notificationProfileInfoTab}
                 onTabChange=${setNotificationProfileInfoTab}
@@ -11440,6 +11667,16 @@ function Layout() {
                     achievements=${notificationProfileUser?.achievements || []}
                   />`}
               />
+              ${notificationProfileUser?.isOwn
+                ? html`<div className="profile-account-footer">
+                    <${AccountActionButton}
+                      className="account-panel-logout-link"
+                      label="Logout"
+                      textOnly=${true}
+                      onClick=${handleAccountLogout}
+                    />
+                  </div>`
+                : html``}
             <//>`
           : html``}
       <//>

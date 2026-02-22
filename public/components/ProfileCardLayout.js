@@ -16,6 +16,8 @@ function ProfileCardLayout({
   onMetaRowClick = null,
   rankNode = null,
   badgeNode = null,
+  onAvatarClick = null,
+  avatarButtonTitle = "Change avatar",
   children,
 }) {
   const safeRows = Array.isArray(metaRows) ? metaRows : [];
@@ -49,7 +51,16 @@ function ProfileCardLayout({
             : html`<span>${row?.value || "N/A"}</span>`}
         </div>`,
       )}
-      <img className=${avatarClassName} src=${avatarSrc} alt=${avatarAlt || name || "User"} />
+      ${typeof onAvatarClick === "function"
+        ? html`<button
+            type="button"
+            className="profile-card-avatar-button"
+            onClick=${onAvatarClick}
+            title=${avatarButtonTitle}
+          >
+            <img className=${avatarClassName} src=${avatarSrc} alt=${avatarAlt || name || "User"} />
+          </button>`
+        : html`<img className=${avatarClassName} src=${avatarSrc} alt=${avatarAlt || name || "User"} />`}
       <div className=${nameClassName}>${name}</div>
       ${badgeNode || html``}
       ${username ? html`<div className="profile-card-username">@${username}</div>` : html``}
