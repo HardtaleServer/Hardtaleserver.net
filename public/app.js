@@ -6550,21 +6550,42 @@ function ForumPage({ isAdmin = false }) {
     }
   }
 
+  function computeForumHoverPosition(rect, options = {}) {
+    const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1200;
+    const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 900;
+    const margin = Number.isFinite(Number(options?.margin)) ? Number(options.margin) : 10;
+    const cardWidth = Number.isFinite(Number(options?.cardWidth)) ? Number(options.cardWidth) : 320;
+    const cardHeight = Number.isFinite(Number(options?.cardHeight)) ? Number(options.cardHeight) : 172;
+    const offsetX = Number.isFinite(Number(options?.offsetX)) ? Number(options.offsetX) : 0;
+    const offsetY = Number.isFinite(Number(options?.offsetY)) ? Number(options.offsetY) : 8;
+
+    const maxX = Math.max(margin, viewportWidth - cardWidth - margin);
+    const rawX = rect.left + offsetX;
+    const x = Math.min(Math.max(margin, rawX), maxX);
+
+    const preferredY = rect.bottom + offsetY;
+    const fitsBelow = preferredY + cardHeight <= viewportHeight - margin;
+    if (fitsBelow) return { x, y: preferredY };
+
+    const aboveY = rect.top - cardHeight - 10;
+    if (aboveY >= margin) return { x, y: aboveY };
+
+    const fallbackY = Math.max(margin, viewportHeight - cardHeight - margin);
+    return { x, y: fallbackY };
+  }
+
   function openForumHoverProfile(entry, anchorEl, options = {}) {
     if (!entry || !anchorEl) return;
     const normalized = normalizeForumProfileEntry(entry);
     if (!normalized) return;
     const rect = anchorEl.getBoundingClientRect();
-    const offsetX = Number.isFinite(Number(options?.offsetX)) ? Number(options.offsetX) : 0;
-    const offsetY = Number.isFinite(Number(options?.offsetY)) ? Number(options.offsetY) : 8;
     const key = `${normalized.authorUserId || normalized.authorUsername || normalized.authorName}`.toLowerCase();
-    const maxX = Math.max(10, (typeof window !== "undefined" ? window.innerWidth : 1200) - 340);
-    const left = rect.left + offsetX;
+    const position = computeForumHoverPosition(rect, options);
     setForumHoverProfile({
       key,
       entry: normalized,
-      x: Math.min(Math.max(10, left), maxX),
-      y: rect.bottom + offsetY,
+      x: position.x,
+      y: position.y,
     });
   }
 
@@ -6766,6 +6787,7 @@ function ForumPage({ isAdmin = false }) {
   }
 
   function handleForumMentionHover(username, triggerEl = null) {
+    if (typeof window !== "undefined" && window.matchMedia("(hover: none)").matches) return;
     openForumMentionProfile(username, triggerEl, {
       allowFetch: false,
       suppressToast: true,
@@ -6773,6 +6795,7 @@ function ForumPage({ isAdmin = false }) {
   }
 
   function handleForumMentionLeave() {
+    if (typeof window !== "undefined" && window.matchMedia("(hover: none)").matches) return;
     scheduleForumHoverClose();
   }
 
