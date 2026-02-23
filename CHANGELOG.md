@@ -9,6 +9,10 @@ All notable changes to this project are documented here.
 - Updated profile badge settings dropdown defaults so Donor Tab and Staff Tab now start collapsed.
 - Redesigned mobile profile info tabs into a 2x2 layout with larger tap targets so the Achievements tab is no longer compressed.
 - Fixed forum `@mention` profile preview avatar freshness by using short-lived profile metadata caching and avoiding permanent failed-fetch cache writes, so updated user-selected profile images are pulled in on subsequent opens.
+- Added notification lifecycle controls:
+  - Notification cards now display a live 7-day expiry countdown.
+  - Added per-user `Bin` dismiss action (after read) to hide/delete that notification for the current user only.
+  - Added backend weekly-expiry pruning for old notifications and related read-state rows.
 - Removed temporary root-level response/handoff `.txt` artifacts to keep repository contents focused on code and durable project docs.
 
 ## 2026-02-23 (v1.4.12)

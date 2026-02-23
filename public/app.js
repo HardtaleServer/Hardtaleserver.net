@@ -209,6 +209,7 @@ const CHANGELOG_ENTRIES = [
       "Updated profile badge settings dropdown behavior so Donor Tab and Staff Tab now default collapsed instead of auto-open.",
       "Redesigned mobile profile info tabs into a 2x2 layout with larger touch targets so labels like `Achievements` no longer appear squished.",
       "Fixed forum `@mention` profile preview avatar freshness by switching metadata caching to a short TTL and removing permanent failed-fetch cache entries, so updated user-selected profile images are picked up on subsequent opens.",
+      "Added notification retention UX: notification cards now show a live 7-day expiry countdown and a per-user `Bin` action (available after read) to dismiss individual notifications without admin deletion.",
       "Removed temporary root-level response/handoff `.txt` artifacts from the repository to keep project files focused on runtime code and durable documentation.",
     ],
   },
@@ -10820,6 +10821,7 @@ function Layout() {
   const [notificationProfileUser, setNotificationProfileUser] = useState(null);
   const [notificationProfileInfoTab, setNotificationProfileInfoTab] = useState("badges");
   const [notificationProfileLoading, setNotificationProfileLoading] = useState(false);
+  const [notificationDeletingId, setNotificationDeletingId] = useState("");
   const [notificationProfileOwnedBadgesSaving, setNotificationProfileOwnedBadgesSaving] = useState(false);
   const [notificationProfileStaffBadgeSaving, setNotificationProfileStaffBadgeSaving] = useState(false);
   const [notificationProfileStaffBadgeIconSaving, setNotificationProfileStaffBadgeIconSaving] = useState(false);
@@ -11829,6 +11831,38 @@ function Layout() {
     if (!url) return;
     setShowNotifications(false);
     navigate(url);
+  }
+
+  async function deleteNotificationForMe(item) {
+    const notificationId = String(item?.id || "").trim();
+    if (!notificationId) return;
+    if (!isSignedIn) return;
+    setNotificationDeletingId(notificationId);
+    try {
+      const response = await apiFetchWithToken(
+        getToken,
+        true,
+        `/api/notifications/${encodeURIComponent(notificationId)}/self`,
+        { method: "DELETE" },
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(data?.error || "Failed to delete notification."));
+      }
+      if (Array.isArray(data?.notifications)) {
+        setNotifications(data.notifications);
+      } else {
+        setNotifications((prev) => prev.filter((entry) => String(entry?.id || "") !== notificationId));
+      }
+    } catch (error) {
+      emitAppToast({
+        kind: "error",
+        title: "Notification delete failed",
+        message: String(error?.message || "Failed to delete notification."),
+      });
+    } finally {
+      setNotificationDeletingId("");
+    }
   }
 
   function sanitizeToastText(input, fallback = "An unexpected error occurred.") {
@@ -13273,6 +13307,8 @@ function Layout() {
         <${NotificationsPanel}
           notifications=${sortedNotifications}
           onView=${viewNotification}
+          onDelete=${deleteNotificationForMe}
+          deletingId=${notificationDeletingId}
           onOpenProfile=${openNotificationProfile}
           formatTimestamp=${formatTimestamp}
           isStaffLabel=${isStaffLabel}

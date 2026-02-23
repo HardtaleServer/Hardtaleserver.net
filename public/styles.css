@@ -7510,7 +7510,6 @@ html.custom-scrollbars-enabled .profile-card-overlay .popup > .profile-card::-we
   display: grid;
   gap: 6px;
   position: relative;
-  padding-top: 28px;
   background-image:
     radial-gradient(circle at 20% 0%, rgba(42, 163, 255, 0.06), transparent 45%),
     radial-gradient(circle at 80% 0%, rgba(255, 59, 59, 0.06), transparent 45%);
@@ -7613,10 +7612,42 @@ html.custom-scrollbars-enabled .profile-card-overlay .popup > .profile-card::-we
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
-  position: absolute;
-  top: 10px;
-  right: 12px;
   text-align: right;
+}
+
+.notif-meta-row {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.notif-expiry-countdown {
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.notif-delete-btn {
+  border: 1px solid var(--stroke);
+  background: var(--bg);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.notif-delete-btn:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--stroke));
+}
+
+.notif-delete-btn:disabled {
+  opacity: 0.65;
+  cursor: progress;
 }
 
 .notif-card .author-name.staff {
@@ -8885,9 +8916,7 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   }
 
   .notif-card .notification-timestamp {
-    position: absolute;
-    top: 10px;
-    right: 12px;
+    position: static;
   }
 
   .comment-left.comment-left-main {

@@ -95,6 +95,8 @@ const NOTIFICATION_PROFILE_ALIAS_SOURCE_USERNAME = String(
   .trim()
   .slice(0, 80);
 const NOTIFICATION_PROFILE_ALIAS_TARGETS = new Set(["system", "admin", "hardtale"]);
+const NOTIFICATION_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+let notificationExpiryPruneLastRunAtMs = 0;
 let notificationAliasSourceCache = {
   userId: "",
   expiresAt: 0,
@@ -611,6 +613,25 @@ async function pruneCollection(collection, maxItems) {
     .toArray();
   if (!overflow.length) return;
   await collection.deleteMany({ _id: { $in: overflow.map((entry) => entry._id) } });
+}
+
+async function pruneExpiredNotificationsIfNeeded(force = false) {
+  if (!notificationsCollection || !notificationReadsCollection) return;
+  const nowMs = Date.now();
+  if (!force && nowMs - notificationExpiryPruneLastRunAtMs < 60_000) return;
+  notificationExpiryPruneLastRunAtMs = nowMs;
+  const cutoffIso = new Date(nowMs - NOTIFICATION_RETENTION_MS).toISOString();
+  const expired = await notificationsCollection
+    .find({ createdAt: { $lt: cutoffIso } })
+    .project({ id: 1 })
+    .toArray();
+  if (!expired.length) return;
+  const expiredIds = expired
+    .map((row) => normalizeText(row?.id, 128))
+    .filter(Boolean);
+  if (expiredIds.length === 0) return;
+  await notificationsCollection.deleteMany({ id: { $in: expiredIds } });
+  await notificationReadsCollection.deleteMany({ notificationId: { $in: expiredIds } });
 }
 
 function requireMongo(res) {
@@ -2900,21 +2921,42 @@ async function withNotificationReadState(list = [], userIdRaw = "") {
   const baseItems = stripMongoIdList(list);
   const items = await applyNotificationAuthorAliases(baseItems);
   if (!userId || items.length === 0) {
-    return items.map((item) => ({ ...item, readByMe: false }));
+    return items.map((item) => ({ ...item, readByMe: false, dismissedByMe: false }));
   }
   const ids = items.map((item) => normalizeText(item?.id, 128)).filter(Boolean);
   if (ids.length === 0) {
-    return items.map((item) => ({ ...item, readByMe: false }));
+    return items.map((item) => ({ ...item, readByMe: false, dismissedByMe: false }));
   }
   const reads = await notificationReadsCollection
     .find({ userId, notificationId: { $in: ids } })
-    .project({ notificationId: 1 })
+    .project({ notificationId: 1, readAt: 1, dismissedAt: 1 })
     .toArray();
-  const readSet = new Set(reads.map((entry) => String(entry.notificationId || "")));
+  const readSet = new Set(
+    reads
+      .filter((entry) => Boolean(entry?.readAt || entry?.dismissedAt))
+      .map((entry) => String(entry.notificationId || "")),
+  );
+  const dismissedSet = new Set(
+    reads
+      .filter((entry) => Boolean(entry?.dismissedAt))
+      .map((entry) => String(entry.notificationId || "")),
+  );
   return items.map((item) => ({
     ...item,
     readByMe: readSet.has(String(item.id || "")),
+    dismissedByMe: dismissedSet.has(String(item.id || "")),
   }));
+}
+
+async function loadVisibleNotificationsForUser(userIdRaw = "") {
+  const { userId, query } = await resolveNotificationQueryForUser(userIdRaw);
+  await pruneExpiredNotificationsIfNeeded();
+  const notifications = await notificationsCollection
+    .find(query)
+    .sort({ createdAt: -1 })
+    .toArray();
+  const withState = await withNotificationReadState(notifications, userId);
+  return withState.filter((item) => item?.dismissedByMe !== true);
 }
 
 function normalizeTicketSubject(value) {
@@ -4380,13 +4422,8 @@ app.get("/api/notifications", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
     const auth = getAuth(req);
-    const { userId, query } = await resolveNotificationQueryForUser(auth?.userId);
-
-    const notifications = await notificationsCollection
-      .find(query)
-      .sort({ createdAt: -1 })
-      .toArray();
-    return res.json({ notifications: await withNotificationReadState(notifications, userId) });
+    const notifications = await loadVisibleNotificationsForUser(auth?.userId);
+    return res.json({ notifications });
   } catch (error) {
     console.error("Failed to load notifications", error);
     return res.status(500).json({ error: "Failed to load notifications" });
@@ -4396,6 +4433,7 @@ app.get("/api/notifications", async (req, res) => {
 app.post("/api/notifications/read", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
+    await pruneExpiredNotificationsIfNeeded();
     const auth = getAuth(req);
     const userId = normalizeText(auth?.userId, 128);
     if (!userId) {
@@ -5339,12 +5377,9 @@ app.post("/api/notifications", async (req, res) => {
     });
     await pruneCollection(notificationsCollection, 60);
 
-    const nextNotifications = await notificationsCollection
-      .find({ isDeleted: false })
-      .sort({ createdAt: -1 })
-      .toArray();
+    const nextNotifications = await loadVisibleNotificationsForUser(auth.userId);
     return res.json({
-      notifications: await withNotificationReadState(nextNotifications, auth.userId),
+      notifications: nextNotifications,
     });
   } catch (error) {
     console.error("Failed to create notification", error);
@@ -5369,12 +5404,9 @@ app.patch("/api/notifications/:id", async (req, res) => {
       { id: req.params.id, isDeleted: false },
       { $set: { featured: Boolean(req.body?.featured), updatedAt: new Date().toISOString() } },
     );
-    const nextNotifications = await notificationsCollection
-      .find({ isDeleted: false })
-      .sort({ createdAt: -1 })
-      .toArray();
+    const nextNotifications = await loadVisibleNotificationsForUser(auth.userId);
     return res.json({
-      notifications: await withNotificationReadState(nextNotifications, auth.userId),
+      notifications: nextNotifications,
     });
   } catch (error) {
     console.error("Failed to update notification", error);
@@ -5407,12 +5439,9 @@ app.delete("/api/notifications/:id", async (req, res) => {
     }
     await notificationReadsCollection.deleteMany({ notificationId: req.params.id });
 
-    const nextNotifications = await notificationsCollection
-      .find({ isDeleted: false })
-      .sort({ createdAt: -1 })
-      .toArray();
+    const nextNotifications = await loadVisibleNotificationsForUser(auth.userId);
     return res.json({
-      notifications: await withNotificationReadState(nextNotifications, auth.userId),
+      notifications: nextNotifications,
     });
   } catch (error) {
     console.error("Failed to delete notification", error);
@@ -5648,6 +5677,43 @@ app.post("/api/payments/stripe/create-payment-intent", async (req, res) => {
       code: stripeCode || undefined,
       type: stripeType || undefined,
     });
+  }
+});
+
+app.delete("/api/notifications/:id/self", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    const userId = normalizeText(auth?.userId, 128);
+    if (!userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const notificationId = normalizeText(req.params.id, 128);
+    if (!notificationId) {
+      return res.status(400).json({ error: "Notification id is required" });
+    }
+    const { query } = await resolveNotificationQueryForUser(userId);
+    const visible = await notificationsCollection.findOne(
+      { ...query, id: notificationId },
+      { projection: { _id: 0, id: 1 } },
+    );
+    if (!visible) {
+      return res.status(404).json({ error: "Notification not found" });
+    }
+    const now = new Date().toISOString();
+    await notificationReadsCollection.updateOne(
+      { userId, notificationId },
+      {
+        $set: { dismissedAt: now, readAt: now, updatedAt: now },
+        $setOnInsert: { id: crypto.randomUUID(), userId, notificationId, createdAt: now },
+      },
+      { upsert: true },
+    );
+    const notifications = await loadVisibleNotificationsForUser(userId);
+    return res.json({ notifications });
+  } catch (error) {
+    console.error("Failed to dismiss notification for user", error);
+    return res.status(500).json({ error: "Failed to dismiss notification" });
   }
 });
 
