@@ -1366,18 +1366,20 @@ function isDonorOwnedRank(value) {
 function buildOwnedRankBadges(ownedRank, isStaffUser = false, options = {}) {
   const showAllOwnedRankBadges = options?.showAllOwnedRankBadges !== false;
   const selectedOwnedBadge = normalizeOwnedRankLabel(options?.selectedOwnedBadge || "");
-  if (isStaffUser) {
-    const staffBadges = [...OWNED_RANK_ORDER];
-    if (!showAllOwnedRankBadges && staffBadges.includes(selectedOwnedBadge)) {
-      return [selectedOwnedBadge];
-    }
-    return staffBadges;
-  }
   const tier = OWNED_RANK_TIER[normalizeOwnedRankLabel(ownedRank)] || 0;
+  if (tier <= 0) return [];
   const unlocked = OWNED_RANK_ORDER.filter((rank) => (OWNED_RANK_TIER[rank] || 0) <= tier);
   if (unlocked.length <= 1 || showAllOwnedRankBadges) return unlocked;
   if (unlocked.includes(selectedOwnedBadge)) return [selectedOwnedBadge];
   return [unlocked[unlocked.length - 1]];
+}
+
+function resolvePrimaryOwnedBadge(ownedRank, showAllOwnedRankBadges = true, selectedOwnedBadge = "") {
+  const badges = buildOwnedRankBadges(ownedRank, false, {
+    showAllOwnedRankBadges,
+    selectedOwnedBadge,
+  });
+  return badges.length > 0 ? badges[badges.length - 1] : "Unregistered";
 }
 
 function normalizeProfileGroupLabel(value = "") {
@@ -3913,6 +3915,22 @@ function CommentThread({
                 title="Account Management"
               >
                 <span>Account Management</span>
+              </button>
+            </div>`
+          : isSignedIn
+          ? html`<div className="profile-modal-header-actions">
+              <button
+                type="button"
+                className="copy-action-btn subtle profile-copy-action account-management-pill"
+                onClick=${() =>
+                  emitAppToast({
+                    kind: "info",
+                    title: "Friends Feature Planned",
+                    message: `Friend requests are planned. @${profileUser?.username || profileUser?.name || "user"} support is coming soon.`,
+                  })}
+                title="Add Friend (planned)"
+              >
+                <span>Add Friend</span>
               </button>
             </div>`
           : html``}
@@ -7881,6 +7899,22 @@ function ForumPage({ isAdmin = false }) {
                     <span>Account Management</span>
                   </button>
                 </div>`
+              : isSignedIn
+              ? html`<div className="profile-modal-header-actions">
+                  <button
+                    type="button"
+                    className="copy-action-btn subtle profile-copy-action account-management-pill"
+                    onClick=${() =>
+                      emitAppToast({
+                        kind: "info",
+                        title: "Friends Feature Planned",
+                        message: `Friend requests are planned. @${forumProfileUser?.username || forumProfileUser?.name || "user"} support is coming soon.`,
+                      })}
+                    title="Add Friend (planned)"
+                  >
+                    <span>Add Friend</span>
+                  </button>
+                </div>`
               : html``}
           >
             ${renderForumProfileCard()}
@@ -8106,6 +8140,22 @@ function ForumPage({ isAdmin = false }) {
                   title="Account Management"
                 >
                   <span>Account Management</span>
+                </button>
+              </div>`
+            : isSignedIn
+            ? html`<div className="profile-modal-header-actions">
+                <button
+                  type="button"
+                  className="copy-action-btn subtle profile-copy-action account-management-pill"
+                  onClick=${() =>
+                    emitAppToast({
+                      kind: "info",
+                      title: "Friends Feature Planned",
+                      message: `Friend requests are planned. @${forumProfileUser?.username || forumProfileUser?.name || "user"} support is coming soon.`,
+                    })}
+                  title="Add Friend (planned)"
+                >
+                  <span>Add Friend</span>
                 </button>
               </div>`
             : html``}
@@ -8828,13 +8878,20 @@ function renderLinkedStatusIcon(linked = false) {
 
 function renderOwnedRankBadges(entry, options = {}) {
   if (!entry) return html``;
-  const isStaffUser = Boolean(entry.isStaffUser || entry.staff);
-  const badges = buildOwnedRankBadges(entry.ownedRank, isStaffUser, {
+  const donorBadges = buildOwnedRankBadges(entry.ownedRank, false, {
     showAllOwnedRankBadges: entry?.showAllOwnedRankBadges !== false,
     selectedOwnedBadge: entry?.selectedOwnedBadge || "",
   });
+  const donorBadgeOptions = Array.isArray(entry?.ownedBadgeOptions)
+    ? entry.ownedBadgeOptions.filter((rank) => OWNED_RANK_ORDER.includes(String(rank)))
+    : donorBadges;
   const linkedResolved = Boolean(entry.linkedAccount);
   const linkedBadgeLabel = linkedResolved ? "Linked" : "Unlinked";
+  const hasStaffTier = Boolean(entry?.isStaffUser || entry?.staff);
+  const showStaffTier = hasStaffTier && entry?.showStaffBadge !== false;
+  const staffTierLabel = toStaffPillTitle(entry?.staffRolePreview || entry?.staffRole || entry?.authorStaffRole || "") || "Staff";
+  const staffRoleClass = resolveStaffRoleClass(entry);
+  const groups = deriveProfileGroups(entry);
   const canManageDonorBadge =
     Boolean(entry?.isOwn) &&
     Boolean(entry?.canToggleOwnedBadges) &&
@@ -8855,14 +8912,19 @@ function renderOwnedRankBadges(entry, options = {}) {
       : "icon";
   return html`<div className="profile-card-badges-stack">
     <div className="profile-card-badges-block">
-      <div className="profile-card-badges-title">Badges</div>
-      ${badges.length > 0
+      <div className="profile-card-badges-title">Link Status</div>
+      <div className="profile-card-badges-row">
+        <span className=${`profile-owned-badge rank-${linkedBadgeLabel.toLowerCase()}`.trim()}>
+          ${renderLinkedStatusIcon(linkedResolved)}
+          <span>${linkedBadgeLabel}</span>
+        </span>
+      </div>
+    </div>
+    <div className="profile-card-badges-block">
+      <div className="profile-card-badges-title">Donor Badges</div>
+      ${donorBadges.length > 0
         ? html`<div className="profile-card-badges-row">
-            <span className=${`profile-owned-badge rank-${linkedBadgeLabel.toLowerCase()}`.trim()}>
-              ${renderLinkedStatusIcon(linkedResolved)}
-              <span>${linkedBadgeLabel}</span>
-            </span>
-            ${badges.map((label) => {
+            ${donorBadges.map((label) => {
               const iconType = getRankIconType(label);
               const slug = String(label).trim().toLowerCase();
               return html`<button
@@ -8884,14 +8946,37 @@ function renderOwnedRankBadges(entry, options = {}) {
               </button>`;
             })}
           </div>`
-        : html`<div className="muted profile-card-badges-empty">No store rank badges yet.</div>`}
+        : html`<div className="muted profile-card-badges-empty">No donor badges yet.</div>`}
+    </div>
+    ${hasStaffTier
+      ? html`<div className="profile-card-badges-block">
+          <div className="profile-card-badges-title">Staff Tier</div>
+          ${showStaffTier
+            ? html`<div className="profile-card-badges-row">
+                <span className=${`profile-owned-badge staff-owned-badge ${staffRoleClass}`.trim()}>
+                  ${entry?.showStaffBadgeIcon === false
+                    ? html``
+                    : html`<span className="rank-icon">${renderRankIcon("staff")}</span>`}
+                  <span>${staffTierLabel}</span>
+                </span>
+              </div>`
+            : html`<div className="muted profile-card-badges-empty">Staff tier badge hidden.</div>`}
+        </div>`
+      : html``}
+    <div className="profile-card-badges-block">
+      <div className="profile-card-badges-title">Groups / Guilds / Clans</div>
+      ${groups.length > 0
+        ? html`<div className="profile-card-badges-row profile-groups-row">
+            ${groups.map((group) => html`<span className="profile-group-pill">${group}</span>`)}
+          </div>`
+        : html`<div className="muted profile-card-badges-empty">No groups assigned yet.</div>`}
     </div>
     ${entry?.isOwn && (canManageDonorBadge || canManageStaffBadge)
       ? html`<div className="profile-card-badges-block">
-          <div className="profile-card-badges-title">Badge Controls</div>
+          <div className="profile-card-badges-title">Badge Display Tabs</div>
           ${canManageDonorBadge
             ? html`<details className="profile-badge-dropdown" open>
-                <summary>Donor</summary>
+                <summary>Donor Tab</summary>
                 <label className="profile-card-title-picker">
                   <span className="muted">Displayed donor badge</span>
                   <select
@@ -8907,8 +8992,7 @@ function renderOwnedRankBadges(entry, options = {}) {
                     }}
                   >
                     <option value="__all__">Show all owned donor badges</option>
-                    ${badges
-                      .filter((label) => String(label || "").toLowerCase() !== "linked")
+                    ${donorBadgeOptions
                       .map(
                         (badge) => html`<option value=${badge}>Show ${badge} only</option>`,
                       )}
@@ -8918,7 +9002,7 @@ function renderOwnedRankBadges(entry, options = {}) {
             : html``}
           ${canManageStaffBadge
             ? html`<details className="profile-badge-dropdown" open>
-                <summary>Staff</summary>
+                <summary>Staff Tab</summary>
                 <label className="profile-card-title-picker">
                   <span className="muted">Staff badge mode</span>
                   <select
@@ -8958,17 +9042,17 @@ function renderProfileGroupsCard(entry, options = {}) {
     Array.isArray(entry?.staffRolePreviewOptions) &&
     entry.staffRolePreviewOptions.length > 0 &&
     typeof options?.onStaffRoleChange === "function";
-  const activeGroup = toStaffPillTitle(entry?.staffRolePreview || entry?.staffRole || entry?.authorStaffRole || "");
+  const groups = deriveProfileGroups(entry);
   return html`<div className="profile-card-badges-block">
     <div className="profile-card-badges-title">Groups</div>
-    ${activeGroup
+    ${groups.length > 0
       ? html`<div className="profile-card-badges-row profile-groups-row">
-          <span className="profile-group-pill">${activeGroup}</span>
+          ${groups.map((group) => html`<span className="profile-group-pill">${group}</span>`)}
         </div>`
-      : html`<div className="muted profile-card-badges-empty">No staff groups assigned.</div>`}
+      : html`<div className="muted profile-card-badges-empty">No groups assigned yet.</div>`}
     ${canManageStaffGroup
       ? html`<label className="profile-card-title-picker profile-groups-picker">
-          <span className="muted">Staff group</span>
+          <span className="muted">Staff tier</span>
           <select
             value=${entry?.staffRolePreview || entry?.staffRole || ""}
             disabled=${options?.isSaving === true}
@@ -10232,6 +10316,10 @@ function Layout() {
     rankLabel: "Unregistered",
     ownedRank: "Unregistered",
     staffRole: "",
+    showAllOwnedRankBadges: true,
+    selectedOwnedBadge: "",
+    showStaffBadge: true,
+    showStaffBadgeIcon: true,
   });
   const [showChangelog, setShowChangelog] = useState(false);
   const [showConnectHelp, setShowConnectHelp] = useState(false);
@@ -10318,11 +10406,16 @@ function Layout() {
   const normalizedDrawerOwnedRank = normalizeOwnedRankLabel(
     drawerProfileSummary.ownedRank || drawerProfileSummary.rankLabel || "Unregistered",
   );
+  const drawerPrimaryOwnedBadge = resolvePrimaryOwnedBadge(
+    normalizedDrawerOwnedRank,
+    drawerProfileSummary.showAllOwnedRankBadges !== false,
+    drawerProfileSummary.selectedOwnedBadge || "",
+  );
   const drawerRankBadgeLabel =
-    normalizedDrawerRank && !["Unregistered", "Unlinked"].includes(normalizedDrawerRank)
+    drawerPrimaryOwnedBadge !== "Unregistered"
+      ? drawerPrimaryOwnedBadge
+      : normalizedDrawerRank && !["Unregistered", "Unlinked"].includes(normalizedDrawerRank)
       ? normalizedDrawerRank
-      : normalizedDrawerOwnedRank !== "Unregistered"
-      ? normalizedDrawerOwnedRank
       : isLinkedAccount
       ? "Linked"
       : "Unlinked";
@@ -10635,6 +10728,10 @@ function Layout() {
             rankLabel: "Unregistered",
             ownedRank: "Unregistered",
             staffRole: "",
+            showAllOwnedRankBadges: true,
+            selectedOwnedBadge: "",
+            showStaffBadge: true,
+            showStaffBadgeIcon: true,
           });
         }
         return;
@@ -10655,6 +10752,12 @@ function Layout() {
           user?.unsafeMetadata?.staffRole ||
           "",
       );
+      const metadataShowAllOwnedRankBadges = user?.publicMetadata?.showAllOwnedRankBadges !== false;
+      const metadataSelectedOwnedBadge = normalizeOwnedRankLabel(
+        user?.publicMetadata?.selectedOwnedBadge || user?.unsafeMetadata?.selectedOwnedBadge || "",
+      );
+      const metadataShowStaffBadge = user?.publicMetadata?.showStaffBadge !== false;
+      const metadataShowStaffBadgeIcon = user?.publicMetadata?.showStaffBadgeIcon !== false;
       try {
         const response = await apiFetchWithToken(getToken, true, "/api/profile/settings");
         const data = response.ok ? await response.json().catch(() => ({})) : {};
@@ -10662,10 +10765,20 @@ function Layout() {
         const selectedTitle = String(data?.selectedTitle || metadataRank || "Unregistered");
         const ownedRank = normalizeOwnedRankLabel(data?.ownedRank || metadataOwnedRank || selectedTitle);
         const staffRole = String(data?.staffRole || metadataStaffRole || "");
+        const showAllOwnedRankBadges = data?.showAllOwnedRankBadges !== false;
+        const selectedOwnedBadge = normalizeOwnedRankLabel(
+          data?.selectedOwnedBadge || metadataSelectedOwnedBadge || "",
+        );
+        const showStaffBadge = data?.showStaffBadge !== false;
+        const showStaffBadgeIcon = data?.showStaffBadgeIcon !== false;
         setDrawerProfileSummary({
           rankLabel: selectedTitle,
           ownedRank,
           staffRole,
+          showAllOwnedRankBadges,
+          selectedOwnedBadge,
+          showStaffBadge,
+          showStaffBadgeIcon,
         });
       } catch {
         if (!alive) return;
@@ -10673,6 +10786,10 @@ function Layout() {
           rankLabel: metadataRank || "Unregistered",
           ownedRank: metadataOwnedRank || "Unregistered",
           staffRole: metadataStaffRole,
+          showAllOwnedRankBadges: metadataShowAllOwnedRankBadges,
+          selectedOwnedBadge: metadataSelectedOwnedBadge,
+          showStaffBadge: metadataShowStaffBadge,
+          showStaffBadgeIcon: metadataShowStaffBadgeIcon,
         });
       }
     }
@@ -11911,6 +12028,10 @@ function Layout() {
       authorRank: drawerRankBadgeLabel,
       authorOwnedRank: normalizedDrawerOwnedRank,
       authorStaffRole: drawerProfileSummary.staffRole || "",
+      authorShowStaffBadge: drawerProfileSummary.showStaffBadge !== false,
+      authorShowStaffBadgeIcon: drawerProfileSummary.showStaffBadgeIcon !== false,
+      showAllOwnedRankBadges: drawerProfileSummary.showAllOwnedRankBadges !== false,
+      selectedOwnedBadge: drawerProfileSummary.selectedOwnedBadge || "",
     });
   }
 
@@ -12416,10 +12537,27 @@ function Layout() {
                   name=${displayName}
                   username=${formatUsernameForDisplay(user?.username)}
                 >
-                  <${RankBadge}
-                    label=${drawerRankBadgeLabel}
-                    className="store-owned-badge"
-                  />
+                  ${isStaffAccount && drawerProfileSummary.showStaffBadge !== false
+                    ? html`<span
+                        className=${`profile-owned-badge staff-owned-badge ${resolveStaffRoleClass({
+                          staffRole: drawerProfileSummary.staffRole || "",
+                        })}`.trim()}
+                      >
+                        ${drawerProfileSummary.showStaffBadgeIcon === false
+                          ? html``
+                          : html`<span className="rank-icon">${renderRankIcon("staff")}</span>`}
+                        <span>${toStaffPillTitle(drawerProfileSummary.staffRole || "") || "Staff"}</span>
+                      </span>`
+                    : html``}
+                  ${drawerPrimaryOwnedBadge !== "Unregistered"
+                    ? html`<${RankBadge}
+                        label=${drawerPrimaryOwnedBadge}
+                        className="store-owned-badge"
+                      />`
+                    : html`<${RankBadge}
+                        label=${drawerRankBadgeLabel}
+                        className="store-owned-badge"
+                      />`}
                 <//>
               </div>
               <div className=${`drawer-settings-row ${menuSide === "left" ? "left" : "right"}`.trim()}>
@@ -12571,6 +12709,22 @@ function Layout() {
                 title="Account Management"
               >
                 <span>Account Management</span>
+              </button>
+            </div>`
+          : isSignedIn
+          ? html`<div className="profile-modal-header-actions">
+              <button
+                type="button"
+                className="copy-action-btn subtle profile-copy-action account-management-pill"
+                onClick=${() =>
+                  emitAppToast({
+                    kind: "info",
+                    title: "Friends Feature Planned",
+                    message: `Friend requests are planned. @${notificationProfileUser?.username || notificationProfileUser?.name || "user"} support is coming soon.`,
+                  })}
+                title="Add Friend (planned)"
+              >
+                <span>Add Friend</span>
               </button>
             </div>`
           : html``}

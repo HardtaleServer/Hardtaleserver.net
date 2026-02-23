@@ -70,3 +70,34 @@ Production-Safe Next Steps
 - Add quick actions on profile card: Add Friend, Message (future-flagged).
 - Add mention hover card on desktop and tap card on mobile.
 - Add empty/error/loading states for mention picker and forum activity tab.
+
+---
+
+PLANNED CHANGES - Profile Badges, Social, and Mobile Card Layout
+Date: 2026-02-23
+
+Goals
+- Let users pin achievements as display badges in forum/profile surfaces.
+- Expand social features around friends and guild/clan identity.
+- Keep profile card readable on mobile with constrained viewport + scroll.
+
+Planned scope
+1. Achievement display badges
+- Add `displayAchievementBadges` preferences in profile settings.
+- Allow pinning up to 3 unlocked achievements as visible badges.
+- Render achievement badges alongside current donor/staff display badges in forum identity rows and profile cards.
+
+2. Friends system (Account Panel first)
+- Add `Add Friend` action at profile header action row (under modal `X`) with full backend support.
+- Introduce friend request states: pending, accepted, blocked.
+- Add Friends tab in Account Panel for request management and online status.
+
+3. Groups / guilds / clans
+- Expand groups model beyond staff role into user-managed clan/group memberships.
+- Add create/join/leave group flows and owner/admin roles.
+- Surface shared group tags in profile card and forum identity components.
+
+4. Mobile profile card UX
+- Keep profile card full-height with reliable internal scrolling.
+- Ensure badge section titles and rows never clip under constrained heights.
+- Preserve top quick actions while content scrolls.
