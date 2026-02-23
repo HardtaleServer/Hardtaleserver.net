@@ -6047,6 +6047,47 @@ app.get("/api/profile/link-status/:userId", async (req, res) => {
   }
 });
 
+app.get("/api/profile/public-card/:userId", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const userId = normalizeText(req.params.userId, 128);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+    const user = await clerkClient.users.getUser(userId);
+    const linked = await isLinkedUserId(userId);
+    const staffRole = resolveStaffRoleForUser(user);
+    const isStaff = Boolean(staffRole);
+    const rankInfo = resolveDisplayRankFromMetadata(user?.publicMetadata || {}, isStaff, linked);
+    const ownedRank = normalizeOwnedRank(rankInfo.ownedRank || "Unregistered");
+    const selectedOwnedBadge = resolveSelectedOwnedBadge(user?.publicMetadata || {}, ownedRank);
+    const showAllOwnedRankBadges = resolveShowAllOwnedRankBadgesVisible(user?.publicMetadata || {});
+    return res.json({
+      userId,
+      username: formatUsernameForDisplay(user?.username, 80),
+      name: getUserDisplayName(user),
+      image: String(user?.imageUrl || ""),
+      linked,
+      ownedRank,
+      displayRank: normalizeDisplayTitle(rankInfo.displayRank || ownedRank) || ownedRank,
+      showAllOwnedRankBadges,
+      selectedOwnedBadge,
+      isStaff,
+      staffRole: normalizeStaffRole(staffRole),
+      showStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
+      showStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
+      showStaffGradient: resolveStaffGradientVisible(user?.publicMetadata || {}),
+      showRankEffects: resolveRankEffectsVisible(user?.publicMetadata || {}),
+      useRankFont: resolveRankFontVisible(user?.publicMetadata || {}),
+      showDonorGradient: resolveDonorGradientVisible(user?.publicMetadata || {}),
+      showAvatarVfx: resolveAvatarVfxVisible(user?.publicMetadata || {}),
+    });
+  } catch (error) {
+    console.error("Failed to load public profile card metadata", error);
+    return res.status(500).json({ error: "Failed to load public profile card metadata" });
+  }
+});
+
 app.post("/api/link/redeem", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;

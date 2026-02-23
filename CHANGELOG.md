@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-23 (v1.4.09)
+- Removed forced-edit callouts from forum post cards and single-post forum views entirely (no inline forced-edit banner text in post body areas).
+- Kept forced-edit moderation details scoped to revision history surfaces instead of post-body rendering.
+- Fixed forum `@mention` hover/tap preview badge accuracy by hydrating preview cards with live profile metadata instead of partial forum snapshot data.
+- Added backend public profile-card metadata endpoint for mention previews:
+  - `GET /api/profile/public-card/:userId`
+  - Returns linked status, display/owned rank, selected/equipped donor badge settings, staff badge settings, and visual preference flags.
+- Updated forum mention preview rendering to respect equipped/selected donor badge settings (`showAllOwnedRankBadges` + `selectedOwnedBadge`) and real linked state.
+- Added mention-profile metadata caching in forum UI to reduce repeated profile lookups while keeping badge/link display consistent.
+
 ## 2026-02-23 (v1.4.08)
 - Fixed forum profile-card runtime crash on mention/profile open paths by restoring compatible owned-rank normalization handling in profile card rendering.
 - Reworked forum `Past edits` control placement so it now lives in the right-side action row with post management controls instead of a separate status row.

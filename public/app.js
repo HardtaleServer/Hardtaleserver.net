@@ -95,7 +95,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.08";
+const VERSION = "1.4.09";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -6364,6 +6364,7 @@ function ForumPage({ isAdmin = false }) {
   const [forumHistoryTitle, setForumHistoryTitle] = useState("Post Edit History");
   const forumHoverOpenTimerRef = useRef(0);
   const forumHoverCloseTimerRef = useRef(0);
+  const forumMentionProfileMetaCacheRef = useRef(new Map());
   const FORUM_BODY_MIN_LENGTH = 30;
   const createTemplateOptions = useMemo(
     () => getForumTemplateOptions(selectedSectionId),
@@ -6485,10 +6486,57 @@ function ForumPage({ isAdmin = false }) {
       authorRank: String(entry?.authorRank || "Unregistered"),
       authorOwnedRank: String(entry?.authorOwnedRank || entry?.authorRank || "Unregistered"),
       authorStaffRole: String(entry?.authorStaffRole || ""),
+      authorShowStaffBadge: entry?.authorShowStaffBadge !== false,
+      authorShowStaffBadgeIcon: entry?.authorShowStaffBadgeIcon !== false,
+      authorShowStaffGradient: entry?.authorShowStaffGradient !== false,
+      authorShowRankEffects: entry?.authorShowRankEffects !== false,
+      authorUseRankFont: entry?.authorUseRankFont === true,
+      authorShowDonorGradient: entry?.authorShowDonorGradient !== false,
+      showAllOwnedRankBadges: entry?.showAllOwnedRankBadges !== false,
+      selectedOwnedBadge: String(entry?.selectedOwnedBadge || ""),
       authorIsStaff: Boolean(entry?.authorIsStaff || isStaffLabel(entry?.authorRank || "") || isStaffLabel(entry?.authorStaffRole || "")),
       authorUserId: String(entry?.authorUserId || entry?.createdBy || entry?.userId || "").trim(),
-      linkedAccount: Boolean(entry?.linkedAccount),
+      linkedAccount: entry?.linkedAccount === true || entry?.linked === true,
     };
+  }
+
+  async function hydrateForumProfileEntry(entry) {
+    const normalized = normalizeForumProfileEntry(entry);
+    if (!normalized) return null;
+    const userId = String(normalized.authorUserId || "").trim();
+    if (!userId) return normalized;
+    if (forumMentionProfileMetaCacheRef.current.has(userId)) {
+      const cached = forumMentionProfileMetaCacheRef.current.get(userId);
+      return normalizeForumProfileEntry({ ...normalized, ...(cached || {}) }) || normalized;
+    }
+    try {
+      const response = await fetch(`/api/profile/public-card/${encodeURIComponent(userId)}`);
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json().catch(() => ({}));
+      const meta = {
+        authorName: String(data?.name || normalized.authorName || "User"),
+        authorUsername: String(data?.username || normalized.authorUsername || "").replace(/^@+/, ""),
+        authorImage: String(data?.image || normalized.authorImage || "/assets/HardTale_H_GreyScale.png"),
+        authorRank: String(data?.displayRank || normalized.authorRank || "Unregistered"),
+        authorOwnedRank: String(data?.ownedRank || normalized.authorOwnedRank || normalized.authorRank || "Unregistered"),
+        authorStaffRole: String(data?.staffRole || normalized.authorStaffRole || ""),
+        authorIsStaff: Boolean(data?.isStaff || normalized.authorIsStaff),
+        authorShowStaffBadge: data?.showStaffBadge !== false,
+        authorShowStaffBadgeIcon: data?.showStaffBadgeIcon !== false,
+        authorShowStaffGradient: data?.showStaffGradient !== false,
+        authorShowRankEffects: data?.showRankEffects !== false,
+        authorUseRankFont: data?.useRankFont === true,
+        authorShowDonorGradient: data?.showDonorGradient !== false,
+        showAllOwnedRankBadges: data?.showAllOwnedRankBadges !== false,
+        selectedOwnedBadge: String(data?.selectedOwnedBadge || ""),
+        linkedAccount: Boolean(data?.linked),
+      };
+      forumMentionProfileMetaCacheRef.current.set(userId, meta);
+      return normalizeForumProfileEntry({ ...normalized, ...meta }) || normalized;
+    } catch {
+      forumMentionProfileMetaCacheRef.current.set(userId, {});
+      return normalized;
+    }
   }
 
   function clearForumHoverTimers() {
@@ -6549,7 +6597,7 @@ function ForumPage({ isAdmin = false }) {
     forumHoverCloseTimerRef.current = setTimeout(() => {
       setForumHoverProfile(null);
       forumHoverCloseTimerRef.current = 0;
-    }, 1000);
+    }, 1500);
   }
 
   function handleForumIdentityMouseEnter(entry, anchorEl) {
@@ -6584,10 +6632,11 @@ function ForumPage({ isAdmin = false }) {
     const username = String(preview.authorUsername || "").replace(/^@+/, "");
     const displayBadge = resolvePrimaryOwnedBadge(
       normalizeOwnedRankLabel(preview.authorOwnedRank || preview.authorRank || "Unregistered"),
-      false,
-      normalizeOwnedRankLabel(preview.authorOwnedRank || preview.authorRank || "Unregistered"),
+      preview?.showAllOwnedRankBadges !== false,
+      normalizeOwnedRankLabel(preview?.selectedOwnedBadge || preview.authorOwnedRank || preview.authorRank || "Unregistered"),
     );
-    const showStaff = Boolean(preview.authorIsStaff || isStaffLabel(preview.authorRank || ""));
+    const showStaff = preview?.authorShowStaffBadge !== false &&
+      Boolean(preview.authorIsStaff || isStaffLabel(preview.authorRank || ""));
     return html`<div
       className="forum-profile-peek-shell"
       style=${{ left: `${forumHoverProfile.x}px`, top: `${forumHoverProfile.y}px` }}
@@ -6613,11 +6662,13 @@ function ForumPage({ isAdmin = false }) {
     </div>`;
   }
 
-  async function openForumMentionProfile(username, triggerEl = null) {
+  async function openForumMentionProfile(username, triggerEl = null, options = {}) {
+    const allowFetch = options?.allowFetch !== false;
+    const suppressToast = options?.suppressToast === true;
     const key = String(username || "").trim().replace(/^@+/, "").toLowerCase();
     if (!key) return;
     let entry = mentionProfileDirectory.get(key) || null;
-    if (!entry) {
+    if (!entry && allowFetch) {
       try {
         const response = await fetch(`/api/forum/members?q=${encodeURIComponent(key)}&limit=25`);
         if (response.ok) {
@@ -6665,6 +6716,7 @@ function ForumPage({ isAdmin = false }) {
       } catch {}
     }
     if (!entry) {
+      if (suppressToast) return;
       emitAppToast({
         kind: "warning",
         title: "Mention not found",
@@ -6672,7 +6724,49 @@ function ForumPage({ isAdmin = false }) {
       });
       return;
     }
-    openForumMentionPreview(entry, triggerEl);
+    const hydratedEntry = await hydrateForumProfileEntry(entry);
+    if (hydratedEntry?.authorUserId) {
+      setForumMemberMentions((prev) => {
+        const rows = Array.isArray(prev) ? prev : [];
+        const id = String(hydratedEntry.authorUserId || "").trim();
+        const nextEntry = {
+          userId: id,
+          username: String(hydratedEntry.authorUsername || "").replace(/^@+/, ""),
+          name: String(hydratedEntry.authorName || "User"),
+          image: String(hydratedEntry.authorImage || "/assets/HardTale_H_GreyScale.png"),
+          authorRank: String(hydratedEntry.authorRank || "Unregistered"),
+          authorOwnedRank: String(hydratedEntry.authorOwnedRank || hydratedEntry.authorRank || "Unregistered"),
+          authorStaffRole: String(hydratedEntry.authorStaffRole || ""),
+          authorIsStaff: Boolean(hydratedEntry.authorIsStaff),
+          authorShowStaffBadge: hydratedEntry.authorShowStaffBadge !== false,
+          authorShowStaffBadgeIcon: hydratedEntry.authorShowStaffBadgeIcon !== false,
+          authorShowStaffGradient: hydratedEntry.authorShowStaffGradient !== false,
+          authorShowRankEffects: hydratedEntry.authorShowRankEffects !== false,
+          authorUseRankFont: hydratedEntry.authorUseRankFont === true,
+          authorShowDonorGradient: hydratedEntry.authorShowDonorGradient !== false,
+          showAllOwnedRankBadges: hydratedEntry.showAllOwnedRankBadges !== false,
+          selectedOwnedBadge: String(hydratedEntry.selectedOwnedBadge || ""),
+          linkedAccount: Boolean(hydratedEntry.linkedAccount),
+        };
+        const index = rows.findIndex((row) => String(row?.userId || row?.authorUserId || "").trim() === id);
+        if (index < 0) return [...rows, nextEntry];
+        const next = [...rows];
+        next[index] = { ...next[index], ...nextEntry };
+        return next;
+      });
+    }
+    openForumMentionPreview(hydratedEntry || entry, triggerEl);
+  }
+
+  function handleForumMentionHover(username, triggerEl = null) {
+    openForumMentionProfile(username, triggerEl, {
+      allowFetch: false,
+      suppressToast: true,
+    });
+  }
+
+  function handleForumMentionLeave() {
+    scheduleForumHoverClose();
   }
 
   async function copyForumProfileMetaValue(label, value) {
@@ -8075,12 +8169,6 @@ function ForumPage({ isAdmin = false }) {
                       <h3>${selectedPost.title}</h3>
                     </div>
                   </div>
-                  ${selectedPost?.staffForcedEdit
-                    ? html`<div className="forum-post-forced-notice">
-                        <img src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" className="forum-post-forced-notice-icon" />
-                        <span>Force edited by a staff member.</span>
-                      </div>`
-                    : html``}
                   ${editingPostId === String(selectedPost.id || "")
                     ? html`<form
                         className="forum-edit-form"
@@ -8116,6 +8204,8 @@ function ForumPage({ isAdmin = false }) {
                     : html`<${ForumRenderedMarkdown}
                         value=${selectedPost.body}
                         onMentionClick=${openForumMentionProfile}
+                        onMentionHover=${handleForumMentionHover}
+                        onMentionLeave=${handleForumMentionLeave}
                         className="news-body-paragraph"
                       />`}
                   ${(canManageForumPost(selectedPost) || (selectedPost.editCount || 0) > 0)
@@ -8324,17 +8414,13 @@ function ForumPage({ isAdmin = false }) {
                           <h3>${post.title}</h3>
                         </div>
                       </div>
-                      ${post?.staffForcedEdit
-                        ? html`<div className="forum-post-forced-notice">
-                            <img src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" className="forum-post-forced-notice-icon" />
-                            <span>Force edited by a staff member.</span>
-                          </div>`
-                        : html``}
                       <div className="news-body-paragraph forum-post-preview">
                         <${ForumRenderedMarkdown}
                           value=${post.body || ""}
                           className="forum-post-preview-markdown"
                           onMentionClick=${openForumMentionProfile}
+                          onMentionHover=${handleForumMentionHover}
+                          onMentionLeave=${handleForumMentionLeave}
                         />
                       </div>
                     </${Link}>
@@ -8547,6 +8633,8 @@ function ForumPage({ isAdmin = false }) {
               <${ForumRenderedMarkdown}
                 value=${newPostBody.trim() || "Write content in the editor to preview your post body."}
                 onMentionClick=${openForumMentionProfile}
+                onMentionHover=${handleForumMentionHover}
+                onMentionLeave=${handleForumMentionLeave}
               />
             </div>
           </article>

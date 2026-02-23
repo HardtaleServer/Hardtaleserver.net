@@ -31,7 +31,12 @@ function MobileDrawerProfilePreview({
       <img className="mobile-drawer-profile-avatar" src=${avatar} alt=${name} />
       <div className="mobile-drawer-profile-meta">
         <div className="mobile-drawer-profile-name">${name}</div>
-        ${username ? html`<div className="mobile-drawer-profile-username">@${username}</div>` : html``}
+        ${username
+          ? html`<div className="mobile-drawer-profile-username">
+              <span>@${username}</span>
+              <img className="mobile-drawer-profile-username-inline-avatar" src=${avatar} alt="" aria-hidden="true" />
+            </div>`
+          : html``}
         <div className="mobile-drawer-profile-badges">
           <${RankBadge} label=${normalizedLinkedLabel} className="store-owned-badge" />
           ${showStaffBadge
