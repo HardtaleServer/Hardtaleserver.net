@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-23 (v1.4.08)
+- Fixed forum profile-card runtime crash on mention/profile open paths by restoring compatible owned-rank normalization handling in profile card rendering.
+- Reworked forum `Past edits` control placement so it now lives in the right-side action row with post management controls instead of a separate status row.
+- Updated forced-edit forum post presentation:
+  - Removed legacy forced-edit header emphasis in post body area.
+  - Added compact Hardtale-icon notice above post body (`Force edited by a staff member.`).
+  - Kept detailed forced-edit history context inside the Past Edits modal.
+- Improved forum `@mention` interaction model across desktop and mobile:
+  - Clicking/tapping `@username` now opens the lightweight profile preview card first.
+  - Selecting that preview card opens the full user profile modal.
+  - Mention lookups now resolve more reliably when users are not already present in the local post/comment map.
+- Expanded mention/member resolution to include registered Clerk users for better `@username` discovery and mention-target matching (not only previously active forum posters/commenters).
+- Updated rank-label rendering for badge pills so `Registered` now displays as `Registered` (instead of reusing `Linked` text), ensuring the secondary profile preview pill can correctly represent user rank/donor rank.
+- Added profile header friend-action visual updates:
+  - Added `Add_Friend.svg` icon before `Add Friend` text in profile header actions.
+  - Center-aligned profile modal header action row for a consistent top-of-card friend-action presentation.
+- Added/used `Images/SVGs/Add_Friend.svg` as the shared icon asset for profile friend-action buttons.
+
 ## 2026-02-23 (v1.4.04)
 - Added live notification toasts for new incoming bell notifications with the shared bell icon and Legend-style warning gradient treatment.
 - Moved forced-edit emphasis from forum cards into the Past Edits modal, including Hardtale icon callouts and clearer forced-change history metadata.
