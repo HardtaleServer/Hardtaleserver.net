@@ -95,7 +95,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.10";
+const VERSION = "1.4.11";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -198,6 +198,16 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.4.11",
+    date: "2026-02-23",
+    items: [
+      "Added dedicated purchase toasts for all checkout paths (Stripe return complete, Stripe payment-intent finalize, and local checkout) so players now get explicit queue-state feedback.",
+      "Updated purchase success messaging to reflect fulfillment queue behavior (`Rank processing (PENDING)`) rather than immediate rank activation.",
+      "Added admin fake-purchase toasts (Hero/Legend/Mythic and generic fake checkout actions) with purchase id visibility for support/debug workflows.",
+      "Included pending-rank status line in mobile drawer profile preview when a rank grant is still awaiting server ACK.",
+    ],
+  },
   {
     version: "1.4.07",
     date: "2026-02-23",
@@ -5380,11 +5390,11 @@ function StorePage({
         setAdminPurchaseStatus(String(result?.error || "Fake purchase failed."));
         return;
       }
-      const awardedRank = String(result?.awardedRank || "").trim();
+      const pendingRank = String(result?.pendingRank || "").trim();
       const purchaseId = String(result?.purchaseId || "").trim();
       setAdminPurchaseStatus(
-        awardedRank
-          ? `Fake purchase queued. Rank awarded: ${awardedRank}${purchaseId ? ` (id: ${purchaseId})` : ""}`
+        pendingRank
+          ? `Fake purchase queued. Rank processing: ${pendingRank}${purchaseId ? ` (id: ${purchaseId})` : ""}`
           : `Fake purchase queued${purchaseId ? ` (id: ${purchaseId})` : ""}.`,
       );
     } catch (error) {
@@ -10770,6 +10780,8 @@ function Layout() {
     selectedOwnedBadge: "",
     showStaffBadge: true,
     showStaffBadgeIcon: true,
+    hasPendingRankGrant: false,
+    pendingRank: "",
   });
   const [showChangelog, setShowChangelog] = useState(false);
   const [showConnectHelp, setShowConnectHelp] = useState(false);
@@ -10862,6 +10874,9 @@ function Layout() {
     drawerProfileSummary.selectedOwnedBadge || "",
   );
   const resolvedDrawerStaffRole = String(drawerProfileSummary.staffRole || "").trim();
+  const drawerPendingRank = drawerProfileSummary.hasPendingRankGrant
+    ? String(drawerProfileSummary.pendingRank || "").trim()
+    : "";
   const drawerDisplayedBadge =
     drawerPrimaryOwnedBadge !== "Unregistered"
       ? drawerPrimaryOwnedBadge
@@ -11190,6 +11205,8 @@ function Layout() {
             selectedOwnedBadge: "",
             showStaffBadge: true,
             showStaffBadgeIcon: true,
+            hasPendingRankGrant: false,
+            pendingRank: "",
           });
         }
         return;
@@ -11229,6 +11246,8 @@ function Layout() {
         );
         const showStaffBadge = data?.showStaffBadge !== false;
         const showStaffBadgeIcon = data?.showStaffBadgeIcon !== false;
+        const hasPendingRankGrant = data?.hasPendingRankGrant === true;
+        const pendingRank = hasPendingRankGrant ? String(data?.pendingRank || "") : "";
         setDrawerProfileSummary({
           rankLabel: selectedTitle,
           ownedRank,
@@ -11237,6 +11256,8 @@ function Layout() {
           selectedOwnedBadge,
           showStaffBadge,
           showStaffBadgeIcon,
+          hasPendingRankGrant,
+          pendingRank,
         });
       } catch {
         if (!alive) return;
@@ -11248,6 +11269,8 @@ function Layout() {
           selectedOwnedBadge: metadataSelectedOwnedBadge,
           showStaffBadge: metadataShowStaffBadge,
           showStaffBadgeIcon: metadataShowStaffBadgeIcon,
+          hasPendingRankGrant: false,
+          pendingRank: "",
         });
       }
     }
@@ -11356,14 +11379,14 @@ function Layout() {
         }
         setCart(buildCartFromIds(data?.cart?.items || []));
         setCartPricing(data?.pricing || null);
-        const awardedRank = String(data?.awardedRank || "").trim();
+        const pendingRank = String(data?.pendingRank || "").trim();
         pushToast({
           id: `stripe-success-${sessionId}`,
           kind: "success",
           title: "Checkout complete",
-          message: awardedRank
-            ? `Stripe payment confirmed. Rank awarded: ${awardedRank}.`
-            : "Stripe payment confirmed successfully.",
+          message: pendingRank
+            ? `Stripe payment confirmed. Rank processing (PENDING): ${pendingRank}.`
+            : "Stripe payment confirmed. Rank processing (PENDING).",
           duration: 7000,
         });
         setCartStatus("");
@@ -12549,15 +12572,36 @@ function Layout() {
         }
         setCart(buildCartFromIds(finalizeData?.cart?.items || []));
         setCartPricing(finalizeData?.pricing || null);
-        const awardedRank = String(finalizeData?.awardedRank || "").trim();
-        setCartStatus(awardedRank ? `Checkout complete. Rank awarded: ${awardedRank}` : "Checkout complete.");
+        const pendingRank = String(finalizeData?.pendingRank || "").trim();
+        pushToast({
+          id: `checkout-success-intent-${intentId}`,
+          kind: "success",
+          title: "Purchase queued",
+          message: pendingRank
+            ? `Payment confirmed. Rank processing (PENDING): ${pendingRank}.`
+            : "Payment confirmed. Rank processing (PENDING).",
+          duration: 6500,
+        });
+        setCartStatus(
+          pendingRank
+            ? `Checkout complete. Rank processing (PENDING): ${pendingRank}`
+            : "Checkout complete. Rank processing (PENDING).",
+        );
         setTimeout(() => {
           setShowCart(false);
           setCartStatus("");
         }, 900);
         return;
       } catch (error) {
-        setCartStatus(String(error?.message || "Secure checkout failed. Please try again."));
+        const errorMessage = String(error?.message || "Secure checkout failed. Please try again.");
+        setCartStatus(errorMessage);
+        pushToast({
+          id: `checkout-error-intent-${Date.now()}`,
+          kind: "error",
+          title: "Secure checkout failed",
+          message: errorMessage,
+          duration: 9000,
+        });
         return;
       }
     }
@@ -12572,14 +12616,35 @@ function Layout() {
       const data = await response.json();
       setCart(buildCartFromIds(data?.cart?.items || []));
       setCartPricing(data?.pricing || null);
-      const awardedRank = String(data?.awardedRank || "").trim();
-      setCartStatus(awardedRank ? `Checkout complete. Rank awarded: ${awardedRank}` : "Checkout complete.");
+      const pendingRank = String(data?.pendingRank || "").trim();
+      pushToast({
+        id: `checkout-success-local-${String(data?.purchaseId || Date.now())}`,
+        kind: "success",
+        title: "Purchase queued",
+        message: pendingRank
+          ? `Checkout complete. Rank processing (PENDING): ${pendingRank}.`
+          : "Checkout complete. Rank processing (PENDING).",
+        duration: 6500,
+      });
+      setCartStatus(
+        pendingRank
+          ? `Checkout complete. Rank processing (PENDING): ${pendingRank}`
+          : "Checkout complete. Rank processing (PENDING).",
+      );
       setTimeout(() => {
         setShowCart(false);
         setCartStatus("");
       }, 900);
     } catch (error) {
-      setCartStatus("Checkout failed. Please try again.");
+      const errorMessage = "Checkout failed. Please try again.";
+      setCartStatus(errorMessage);
+      pushToast({
+        id: `checkout-error-local-${Date.now()}`,
+        kind: "error",
+        title: "Checkout failed",
+        message: errorMessage,
+        duration: 8000,
+      });
     }
   }
 
@@ -12639,13 +12704,31 @@ function Layout() {
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
+      pushToast({
+        id: `fake-purchase-error-${forcedItemId || "cart"}-${Date.now()}`,
+        kind: "error",
+        title: "Fake purchase failed",
+        message: String(data?.error || "Fake purchase failed."),
+        duration: 7000,
+      });
       return { ok: false, error: String(data?.error || "Fake purchase failed.") };
     }
     setCart(buildCartFromIds(data?.cart?.items || []));
+    const purchaseId = String(data?.purchaseId || "");
+    const pendingRank = String(data?.pendingRank || "");
+    pushToast({
+      id: `fake-purchase-success-${purchaseId || Date.now()}`,
+      kind: "info",
+      title: "Fake purchase queued",
+      message: pendingRank
+        ? `${pendingRank} rank grant queued${purchaseId ? ` (purchase: ${purchaseId})` : ""}.`
+        : `Fake rank grant queued${purchaseId ? ` (purchase: ${purchaseId})` : ""}.`,
+      duration: 6500,
+    });
     return {
       ok: true,
-      purchaseId: String(data?.purchaseId || ""),
-      awardedRank: String(data?.awardedRank || ""),
+      purchaseId,
+      pendingRank,
     };
   }
 
@@ -12997,6 +13080,7 @@ function Layout() {
                   username=${formatUsernameForDisplay(user?.username)}
                   linkedLabel=${isLinkedAccount ? "Linked" : "Unlinked"}
                   displayedBadge=${drawerDisplayedBadge}
+                  processingLabel=${drawerPendingRank ? `Rank processing (PENDING): ${drawerPendingRank}` : ""}
                   showStaffBadge=${isStaffAccount && drawerProfileSummary.showStaffBadge !== false}
                   staffLabel=${toStaffPillTitle(resolvedDrawerStaffRole) || "Staff"}
                   staffRoleClass=${resolveStaffRoleClass({

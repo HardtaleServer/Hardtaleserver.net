@@ -12,6 +12,7 @@ function MobileDrawerProfilePreview({
   username = "",
   linkedLabel = "Unlinked",
   displayedBadge = "Unregistered",
+  processingLabel = "",
   showStaffBadge = false,
   staffLabel = "Staff",
   staffRoleClass = "",
@@ -23,6 +24,7 @@ function MobileDrawerProfilePreview({
     normalizedDisplayedBadge &&
     !["Unregistered", "Unlinked"].includes(normalizedDisplayedBadge) &&
     normalizedDisplayedBadge.toLowerCase() !== normalizedLinkedLabel.toLowerCase();
+  const normalizedProcessingLabel = String(processingLabel || "").trim();
   return html`
     <button
       type="button"
@@ -50,6 +52,9 @@ function MobileDrawerProfilePreview({
             ? html`<${RankBadge} label=${normalizedDisplayedBadge} className="store-owned-badge" />`
             : html``}
         </div>
+        ${normalizedProcessingLabel
+          ? html`<div className="muted mobile-drawer-profile-processing">${normalizedProcessingLabel}</div>`
+          : html``}
       </div>
     </button>
   `;

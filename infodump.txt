@@ -1,0 +1,80 @@
+Hardtale Store v1 + Queue/Security + Toasts Infodump (2026-02-23)
+
+Summary
+- v1 scope is ranks-only fulfillment. Gold/currency remain UI placeholders.
+- Web never applies in-game rank directly.
+- Web enqueues grants in Mongo; plugin applies LP; website shows PENDING until ACK.
+
+Canonical Fulfillment Lane
+- GET /api/server/pending-fulfillments
+- POST /api/server/ack-fulfillment
+- Legacy /api/fulfillment/* now shims to the same grant handlers (single lane).
+
+Server Auth + Hardening
+- /api/server/* requires Authorization: Bearer <NETSTORE_SERVER_SECRET>.
+- Clerk auth not accepted on /api/server/*.
+- Optional IP allowlist via SERVER_API_IP_ALLOWLIST / NETSTORE_SERVER_IP_ALLOWLIST.
+- Dedicated strict limiter bucket for /api/server/*.
+- Baseline helmet-style security headers added.
+
+Admin Auth Policy
+- Admin auth is now userId allowlist only (ADMIN_USER_IDS / ADMIN_USER_ID).
+- Username/email fallback removed.
+
+Grants Schema (implemented)
+- grantId (unique)
+- idempotencyKey (unique)
+- purchaseId
+- buyerUserId
+- playerUuid
+- serverId
+- state: PENDING | APPLIED | FAILED
+- grants: [{ type: "RANK", value: "HERO|LEGEND|MYTHIC" }]
+- source
+- createdAt / updatedAt
+- appliedAt / failedAt
+- errorCode / errorMessage
+
+Indexes
+- unique: { grantId: 1 }
+- unique: { idempotencyKey: 1 }
+- compound: { state: 1, serverId: 1, createdAt: 1 }
+
+Stripe Idempotency Rules
+- Checkout Session: stripe:checkout_session:<session.id>
+- Payment Intent: stripe:payment_intent:<paymentIntent.id>
+- Unique idempotency index guarantees replay-safe dedupe.
+
+State Machine
+- Allowed: PENDING -> APPLIED | FAILED
+- Already final ACK returns idempotent final state.
+- Unknown grantId returns 404.
+
+Rank Display / Activation
+- Rank remains processing (PENDING) until ACK APPLIED.
+- Donor rank metadata sync now happens post-ACK APPLIED.
+
+Support/Admin Endpoints
+- GET /api/admin/grants/failed
+- GET /api/admin/grants/pending?olderThanMinutes=<n>
+
+Frontend Purchase Toasts (v1.4.11)
+- Added purchase toasts for:
+  - Stripe /api/payments/stripe/complete
+  - Stripe /api/payments/stripe/finalize-intent
+  - Local /api/cart/checkout
+  - Admin fake purchases
+- Updated success wording to queue-aware text: Rank processing (PENDING).
+- Added pending processing label in mobile drawer profile preview.
+
+Files touched
+- server.js
+- public/app.js
+- public/components/MobileDrawerProfilePreview.js
+- CHANGELOG.md
+
+Validation
+- node --check server.js
+- node --check public/app.js
+- node --check public/components/MobileDrawerProfilePreview.js
+- npm test passed

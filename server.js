@@ -27,6 +27,10 @@ const LOCAL_DEV_LINK_SERVICE_BASE_URL = "http://127.0.0.1:8080";
 const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = String(process.env.HOST || "0.0.0.0").trim() || "0.0.0.0";
+const TRUST_PROXY_ENABLED = String(process.env.TRUST_PROXY || "true").toLowerCase() !== "false";
+if (TRUST_PROXY_ENABLED) {
+  app.set("trust proxy", 1);
+}
 const DEFAULT_ADMIN_EMAILS = [
   "chashsmurfis@gmail.com",
   "hardtaleserver@gmail.com",
@@ -138,7 +142,14 @@ const ACHIEVEMENT_DEFS = [
 ];
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI || "";
 const MONGO_DB_NAME = process.env.MONGO_DB || process.env.MONGODB_DB || "hardtaledb";
-const SERVER_SECRET = String(process.env.SERVER_SECRET || process.env.HARDTALE_API_TOKEN || process.env.FULFILLMENT_API_TOKEN || "").trim();
+const NETSTORE_SERVER_SECRET = String(
+  process.env.NETSTORE_SERVER_SECRET ||
+    process.env.SERVER_SECRET ||
+    process.env.HARDTALE_API_TOKEN ||
+    process.env.FULFILLMENT_API_TOKEN ||
+    "",
+).trim();
+const SERVER_SECRET = NETSTORE_SERVER_SECRET;
 const FULFILLMENT_API_TOKEN = String(process.env.FULFILLMENT_API_TOKEN || "").trim();
 const HARDTALE_API_TOKEN = String(process.env.HARDTALE_API_TOKEN || "").trim();
 const PLUGIN_API_TOKENS = Array.from(
@@ -204,6 +215,12 @@ const stripeClient = STRIPE_ENABLED
       apiVersion: "2024-06-20",
     })
   : null;
+const SERVER_API_ALLOWLIST = new Set(
+  String(process.env.SERVER_API_IP_ALLOWLIST || process.env.NETSTORE_SERVER_IP_ALLOWLIST || "")
+    .split(",")
+    .map((entry) => String(entry || "").trim())
+    .filter(Boolean),
+);
 
 const publicDir = path.join(__dirname, "public");
 const imagesDir = path.join(__dirname, "Images");
@@ -390,9 +407,11 @@ async function connectMongo() {
       await fulfillmentJobsCollection.createIndex({ jobId: 1 }, { unique: true });
       await fulfillmentJobsCollection.createIndex({ status: 1, createdAt: 1 });
       await fulfillmentJobsCollection.createIndex({ playerUuid: 1, status: 1, createdAt: 1 });
-      await grantsCollection.createIndex({ status: 1, createdAt: 1 });
-      await grantsCollection.createIndex({ playerUuid: 1, status: 1, createdAt: 1 });
-      await grantsCollection.createIndex({ idempotencyKey: 1 }, { unique: true, sparse: true });
+      await grantsCollection.createIndex({ grantId: 1 }, { unique: true });
+      await grantsCollection.createIndex({ idempotencyKey: 1 }, { unique: true });
+      await grantsCollection.createIndex({ state: 1, serverId: 1, createdAt: 1 });
+      await grantsCollection.createIndex({ buyerUserId: 1, createdAt: -1 });
+      await grantsCollection.createIndex({ playerUuid: 1, state: 1, createdAt: 1 });
       mongoReconnectDelayMs = 1000;
       console.log("Connected to MongoDB");
     } catch (error) {
@@ -697,6 +716,87 @@ function secretFingerprint(value) {
   return `len=${token.length} value=${token.slice(0, 4)}...${token.slice(-4)}`;
 }
 
+function getClientIp(req) {
+  const forwarded = normalizeText(req.headers?.["x-forwarded-for"], 512);
+  if (forwarded) {
+    const first = forwarded
+      .split(",")
+      .map((entry) => String(entry || "").trim())
+      .find(Boolean);
+    if (first) return first;
+  }
+  return normalizeText(req.ip || req.socket?.remoteAddress || "", 128);
+}
+
+function isIpAllowedForServerApi(req) {
+  if (SERVER_API_ALLOWLIST.size === 0) return true;
+  const ip = getClientIp(req);
+  return ip ? SERVER_API_ALLOWLIST.has(ip) : false;
+}
+
+function createMemoryRateLimiter({
+  name,
+  windowMs,
+  max,
+  message = "Too many requests",
+  status = 429,
+  keyBuilder,
+}) {
+  const buckets = new Map();
+  return (req, res, next) => {
+    const now = Date.now();
+    const key =
+      typeof keyBuilder === "function"
+        ? String(keyBuilder(req) || "")
+        : `${getClientIp(req)}:${normalizeText(req.path || "", 200)}`;
+    if (!key) return next();
+    let row = buckets.get(key);
+    if (!row || row.resetAt <= now) {
+      row = { count: 0, resetAt: now + windowMs };
+      buckets.set(key, row);
+    }
+    row.count += 1;
+    if (row.count > max) {
+      const retryAfterSec = Math.max(1, Math.ceil((row.resetAt - now) / 1000));
+      res.setHeader("Retry-After", String(retryAfterSec));
+      return res.status(status).json({ error: message, bucket: name });
+    }
+    return next();
+  };
+}
+
+const apiGeneralLimiter = createMemoryRateLimiter({
+  name: "api_general",
+  windowMs: 60_000,
+  max: 400,
+  message: "Too many API requests",
+  keyBuilder: (req) => `${getClientIp(req)}:api_general`,
+});
+
+const apiPaymentsLimiter = createMemoryRateLimiter({
+  name: "api_payments",
+  windowMs: 60_000,
+  max: 45,
+  message: "Too many payment requests",
+  keyBuilder: (req) => `${getClientIp(req)}:${normalizeText(req.path || "", 120)}:payments`,
+});
+
+const apiLinkLimiter = createMemoryRateLimiter({
+  name: "api_link",
+  windowMs: 60_000,
+  max: 45,
+  message: "Too many link requests",
+  keyBuilder: (req) => `${getClientIp(req)}:${normalizeText(req.path || "", 120)}:link`,
+});
+
+const apiServerLimiter = createMemoryRateLimiter({
+  name: "api_server",
+  windowMs: 60_000,
+  max: 25,
+  message: "Too many server API requests",
+  keyBuilder: (req) => `${getClientIp(req)}:${normalizeText(req.path || "", 120)}:server`,
+});
+
 function requireFulfillmentAuth(req, res, routeLabel = "server_api") {
   if (PLUGIN_API_TOKENS.length === 0) {
     console.warn(`[server.auth] ${routeLabel} denied: no server API token configured`);
@@ -753,6 +853,41 @@ function requireServerSecret(req, res, routeLabel = "server_api") {
     console.warn(
       `[server.auth] ${routeLabel} denied: invalid_server_secret ` +
         `(incoming=${secretFingerprint(token)} expected=${secretFingerprint(SERVER_SECRET)} hasBearer=${Boolean(bearerToken)} hasXServerSecret=${Boolean(headerServerSecret)} hasXServiceAuth=${Boolean(headerServiceAuth)})`,
+    );
+    res.status(403).json({ error: "invalid_server_secret" });
+    return false;
+  }
+  recordServerHeartbeat(req, routeLabel);
+  return true;
+}
+
+function requireNetstoreServerAuth(req, res, routeLabel = "server_api") {
+  if (!NETSTORE_SERVER_SECRET) {
+    console.warn(`[server.auth] ${routeLabel} denied: NETSTORE_SERVER_SECRET not configured`);
+    res.status(503).json({ error: "netstore_server_secret_not_configured" });
+    return false;
+  }
+  if (!isIpAllowedForServerApi(req)) {
+    console.warn(`[server.auth] ${routeLabel} denied: ip_not_allowlisted (ip=${getClientIp(req)})`);
+    res.status(403).json({ error: "ip_not_allowlisted" });
+    return false;
+  }
+  const authHeader = String(req.headers?.authorization || "");
+  const bearerPrefix = "Bearer ";
+  if (!authHeader.startsWith(bearerPrefix)) {
+    console.warn(`[server.auth] ${routeLabel} denied: missing_bearer_header`);
+    res.status(401).json({ error: "missing_authorization_bearer" });
+    return false;
+  }
+  const token = authHeader.slice(bearerPrefix.length).trim();
+  if (!token) {
+    console.warn(`[server.auth] ${routeLabel} denied: empty_bearer_token`);
+    res.status(401).json({ error: "missing_authorization_bearer" });
+    return false;
+  }
+  if (token !== NETSTORE_SERVER_SECRET) {
+    console.warn(
+      `[server.auth] ${routeLabel} denied: invalid_server_secret (incoming=${secretFingerprint(token)} expected=${secretFingerprint(NETSTORE_SERVER_SECRET)})`,
     );
     res.status(403).json({ error: "invalid_server_secret" });
     return false;
@@ -905,6 +1040,9 @@ async function processCartCheckout(userId, options = {}) {
   const paymentStatus = normalizeText(options?.paymentStatus, 40) || "PAID";
   const stripeSessionId = normalizeText(options?.stripeSessionId, 160);
   const stripePaymentIntentId = normalizeText(options?.stripePaymentIntentId, 160);
+  const source = normalizeText(options?.source, 40).toLowerCase() || "local";
+  const idempotencyKeyHint = normalizeText(options?.idempotencyKey, 200);
+  const serverId = normalizeText(options?.serverId, 40) || "";
   const linked = await getEffectiveLinkedAccountForUserId(userId);
   if (!linked) {
     throw createHttpError(403, "Link your game account before checkout");
@@ -919,34 +1057,15 @@ async function processCartCheckout(userId, options = {}) {
   const user = await clerkClient.users.getUser(userId);
   const currentOwnedRank = applyLinkedOwnedRankFloor(user?.publicMetadata?.rank, true);
   const pricing = calculateCartPricing(items, currentOwnedRank);
-  const purchasedHighestRank = getHighestRankFromItems(items);
-
-  let awardedRank = "";
-  if (purchasedHighestRank) {
-    const currentRank = String(user?.publicMetadata?.rank || "Unregistered");
-    awardedRank = maxRankLabel(currentRank, purchasedHighestRank);
-    if (awardedRank !== currentRank) {
-      const nextMetadata = {
-        ...user.publicMetadata,
-        rank: awardedRank,
-      };
-      const nextDisplayRank = resolveDisplayRankFromMetadata(
-        nextMetadata,
-        isAdminUser(user),
-        true,
-      ).displayRank;
-      await clerkClient.users.updateUserMetadata(userId, {
-        publicMetadata: nextMetadata,
-      });
-      await commentsCollection.updateMany(
-        { userId, isDeleted: false },
-        { $set: { authorRank: nextDisplayRank, updatedAt: new Date() } },
-      );
-    }
-  }
+  const rankGrantRows = buildRankGrantRowsFromItems(items);
+  const pendingRank = normalizeText(rankGrantRows?.[0]?.value || "", 20) || null;
 
   const purchaseId = purchaseIdHint || crypto.randomUUID();
-  const nowIso = new Date().toISOString();
+  const now = new Date();
+  const nowIso = now.toISOString();
+  let alreadyProcessed = false;
+  let resolvedPurchaseId = purchaseId;
+  let resolvedPendingRank = pendingRank;
   try {
     await purchasesCollection.insertOne({
       id: purchaseId,
@@ -963,7 +1082,7 @@ async function processCartCheckout(userId, options = {}) {
       total: pricing.total,
       subtotal: pricing.subtotal,
       discount: pricing.discount,
-      awardedRank: awardedRank || null,
+      pendingRank,
       createdAt: nowIso,
       updatedAt: nowIso,
     });
@@ -971,15 +1090,33 @@ async function processCartCheckout(userId, options = {}) {
     if (error?.code === 11000 && purchaseIdHint) {
       const existing = await purchasesCollection.findOne({ purchaseId: purchaseIdHint });
       if (existing) {
-        return {
-          purchaseId: normalizeText(existing.purchaseId || existing.id, 128),
-          awardedRank: normalizeText(existing.awardedRank, 20) || null,
-          cartItems: normalizeCartItems([]),
-          alreadyProcessed: true,
-        };
+        alreadyProcessed = true;
+        resolvedPurchaseId = normalizeText(existing.purchaseId || existing.id, 128) || purchaseIdHint;
+        resolvedPendingRank = normalizeText(existing.pendingRank, 20) || pendingRank;
+      } else {
+        throw error;
       }
+    } else {
+      throw error;
     }
-    throw error;
+  }
+
+  let grantId = "";
+  if (rankGrantRows.length > 0) {
+    const idempotencyKey = idempotencyKeyHint || `purchase:${resolvedPurchaseId}:rank`;
+    const grantResult = await enqueueGrant({
+      grantId: crypto.randomUUID(),
+      idempotencyKey,
+      purchaseId: resolvedPurchaseId,
+      buyerUserId: userId,
+      playerUuid: normalizePlayerUuid(linked?.playerUuid),
+      source,
+      serverId,
+      grants: rankGrantRows,
+    });
+    if (grantResult?.grantId) {
+      grantId = normalizeText(grantResult.grantId, 120);
+    }
   }
 
   await cartsCollection.updateOne(
@@ -988,18 +1125,19 @@ async function processCartCheckout(userId, options = {}) {
       $set: {
         userId,
         items: [],
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso,
       },
     },
     { upsert: true },
   );
 
   return {
-    purchaseId,
-    awardedRank: awardedRank || null,
+    purchaseId: resolvedPurchaseId,
+    pendingRank: resolvedPendingRank,
+    grantId: grantId || null,
     cartItems: [],
     pricing,
-    alreadyProcessed: false,
+    alreadyProcessed,
   };
 }
 
@@ -1296,38 +1434,73 @@ async function enqueueFulfillmentJob({
 }
 
 async function enqueueGrant({
+  grantId = "",
+  purchaseId = "",
   playerUuid = "",
-  userId = "",
-  type = "PERK",
-  value = "",
-  payload = {},
-  serverId = "prod",
+  buyerUserId = "",
+  grants = [],
+  source = "stripe",
+  serverId = "",
   idempotencyKey = "",
 }) {
   if (!grantsCollection) {
     return { ok: false, status: 503, error: "grants collection unavailable" };
   }
+  const normalizedGrantRows = Array.isArray(grants)
+    ? grants
+        .map((entry) => {
+          const type = normalizeText(entry?.type || "", 20).toUpperCase();
+          const value = normalizeText(entry?.value || "", 80).toUpperCase();
+          if (!type || !value) return null;
+          return { type, value };
+        })
+        .filter(Boolean)
+    : [];
+  if (normalizedGrantRows.length === 0) {
+    return { ok: false, status: 400, error: "grants array is required" };
+  }
+  const normalizedIdempotencyKey = normalizeText(idempotencyKey || "", 200);
+  if (!normalizedIdempotencyKey) {
+    return { ok: false, status: 400, error: "idempotencyKey is required" };
+  }
+  const normalizedGrantId = normalizeText(grantId || "", 120) || crypto.randomUUID();
+  const normalizedPurchaseId = normalizeText(purchaseId || "", 160);
   const now = new Date();
   const doc = {
-    grantId: `grant_${crypto.randomUUID()}`,
+    grantId: normalizedGrantId,
+    idempotencyKey: normalizedIdempotencyKey,
+    purchaseId: normalizedPurchaseId,
+    buyerUserId: normalizeText(buyerUserId || "", 128),
     playerUuid: normalizePlayerUuid(playerUuid),
-    userId: normalizeText(userId || "", 128),
-    type: normalizeText(type || "PERK", 30).toUpperCase(),
-    value: normalizeText(value || "", 120),
-    payload: payload && typeof payload === "object" ? payload : {},
-    status: "PENDING",
-    serverId: normalizeText(serverId || "prod", 40) || "prod",
-    idempotencyKey: normalizeText(idempotencyKey || "", 200),
+    serverId: normalizeText(serverId || "", 40) || null,
+    state: "PENDING",
+    grants: normalizedGrantRows,
+    source: normalizeText(source || "stripe", 40).toLowerCase() || "stripe",
     createdAt: now,
     updatedAt: now,
+    appliedAt: null,
+    failedAt: null,
+    errorCode: null,
+    errorMessage: null,
   };
-  if (!doc.idempotencyKey) delete doc.idempotencyKey;
+  if (!doc.purchaseId) delete doc.purchaseId;
+  if (!doc.buyerUserId) delete doc.buyerUserId;
+  if (!doc.serverId) doc.serverId = null;
   try {
     const inserted = await grantsCollection.insertOne(doc);
     return { ok: true, grantId: doc.grantId, id: String(inserted.insertedId || "") };
   } catch (error) {
-    if (error?.code === 11000 && doc.idempotencyKey) {
-      return { ok: true, duplicate: true };
+    if (error?.code === 11000) {
+      const existing = await grantsCollection.findOne(
+        { idempotencyKey: normalizedIdempotencyKey },
+        { projection: { _id: 0, grantId: 1, state: 1 } },
+      );
+      return {
+        ok: true,
+        duplicate: true,
+        grantId: normalizeText(existing?.grantId || normalizedGrantId, 120),
+        state: normalizeText(existing?.state || "", 20).toUpperCase() || "PENDING",
+      };
     }
     throw error;
   }
@@ -2244,6 +2417,12 @@ function buildFulfillmentGrants(items = []) {
   return grants;
 }
 
+function buildRankGrantRowsFromItems(items = []) {
+  const highestRank = getHighestRankFromItems(items);
+  if (!highestRank) return [];
+  return [{ type: "RANK", value: String(highestRank).toUpperCase() }];
+}
+
 function maxRankLabel(currentRank, nextRank) {
   const currentTier = STORE_RANK_BY_LABEL[currentRank] || 0;
   const nextTier = STORE_RANK_BY_LABEL[nextRank] || 0;
@@ -2309,6 +2488,45 @@ function resolveDisplayRankFromMetadata(metadata = {}, includeAllTitles = false,
       ? "Unregistered"
       : ownedRank;
   return { ownedRank, displayRank, availableTitles };
+}
+
+async function getRankFulfillmentStateForUser(userId) {
+  const safeUserId = normalizeText(userId, 128);
+  if (!safeUserId || !grantsCollection) {
+    return {
+      hasPendingRankGrant: false,
+      pendingRank: null,
+      pendingGrantId: null,
+      pendingSince: null,
+    };
+  }
+  const pending = await grantsCollection
+    .find(
+      {
+        buyerUserId: safeUserId,
+        state: "PENDING",
+        grants: { $elemMatch: { type: "RANK" } },
+      },
+      { projection: { _id: 0, grantId: 1, grants: 1, createdAt: 1 } },
+    )
+    .sort({ createdAt: -1 })
+    .limit(1)
+    .next();
+  if (!pending) {
+    return {
+      hasPendingRankGrant: false,
+      pendingRank: null,
+      pendingGrantId: null,
+      pendingSince: null,
+    };
+  }
+  return {
+    hasPendingRankGrant: true,
+    pendingRank: normalizeText(pending?.grants?.[0]?.value || "", 20) || null,
+    pendingGrantId: normalizeText(pending?.grantId || "", 120) || null,
+    pendingSince:
+      pending?.createdAt instanceof Date ? pending.createdAt.toISOString() : String(pending?.createdAt || "") || null,
+  };
 }
 
 function normalizeGroupLabel(value, max = 40) {
@@ -3151,43 +3369,11 @@ async function getAdminUser() {
 
 function isAdminUser(user) {
   if (!user) return false;
-  const staffRole = resolveStaffRoleForUser(user);
-  if (staffRole && TOP_STAFF_ROLE_SET.has(staffRole)) {
-    return true;
-  }
   if (ADMIN_USER_ID_SET.has(String(user.id || ""))) return true;
-  const username = String(user.username || "").trim().toLowerCase();
-  if (username && ADMIN_USERNAME_SET.has(username)) return true;
-  if (ADMIN_EMAIL_SET.size === 0) return false;
-  return user.emailAddresses?.some(
-    (entry) => ADMIN_EMAIL_SET.has(entry.emailAddress?.toLowerCase()),
-  );
+  return false;
 }
 
-async function fulfillStripeCheckoutSession(session, source = "manual") {
-  const sessionId = normalizeText(session?.id, 160);
-  if (!sessionId) {
-    return { success: false, skipped: true, reason: "missing_session_id" };
-  }
-  const paymentStatus = String(session?.payment_status || "").toLowerCase();
-  if (paymentStatus !== "paid") {
-    return { success: false, skipped: true, reason: "payment_not_paid" };
-  }
-  const userId = normalizeText(session?.client_reference_id || session?.metadata?.userId, 128);
-  if (!userId) {
-    return { success: false, skipped: true, reason: "missing_user_id" };
-  }
-  const result = await processCartCheckout(userId, {
-    purchaseId: sessionId,
-    purchaseProvider: "STRIPE",
-    paymentStatus: "PAID",
-    stripeSessionId: sessionId,
-    source,
-  });
-  return { success: true, ...result };
-}
-
-async function queueStripeFulfillmentFromSession(session, source = "stripe_webhook", stripeEventId = "") {
+async function queueStripeFulfillmentFromSession(session, source = "stripe_webhook") {
   const sessionId = normalizeText(session?.id, 160);
   if (!sessionId) {
     return { ok: false, skipped: true, reason: "missing_session_id" };
@@ -3205,45 +3391,61 @@ async function queueStripeFulfillmentFromSession(session, source = "stripe_webho
     { projection: { _id: 0, playerUuid: 1 } },
   );
   const playerUuid = normalizePlayerUuid(linked?.playerUuid);
+  if (!playerUuid) {
+    return { ok: false, skipped: true, reason: "user_not_linked" };
+  }
   const cartItemIds = normalizeText(session?.metadata?.cartItemIds || "", 800)
     .split(",")
     .map((entry) => normalizeText(entry, 64))
     .filter(Boolean);
-  const normalizedSource = normalizeText(source, 60) || "stripe_webhook";
+  const rankGrantRows = buildRankGrantRowsFromItems(cartItemIds.map((id) => ({ id })));
+  if (rankGrantRows.length === 0) {
+    return { ok: false, skipped: true, reason: "no_rank_items" };
+  }
+  const normalizedSource = normalizeText(source, 40).toLowerCase() || "stripe_webhook";
   const paymentIntentId = normalizeText(session?.payment_intent, 160);
   const amountTotal = Number(session?.amount_total || 0);
   const currency = normalizeText(session?.currency, 20).toLowerCase();
-  const itemIds = cartItemIds.length > 0 ? cartItemIds : ["rank-unknown"];
-  const grants = [];
-  for (let index = 0; index < itemIds.length; index += 1) {
-    const itemId = itemIds[index];
-    const product = STORE_RANK_PRODUCTS[itemId];
-    const value = product?.rank ? String(product.rank).toUpperCase() : normalizeText(itemId, 80).toUpperCase();
-    const payload = {
-      source: normalizedSource,
-      stripe: {
-        sessionId,
-        paymentIntentId,
-        amountTotal,
-        currency,
-        itemId,
+  const purchaseId = sessionId;
+  const nowIso = new Date().toISOString();
+  await purchasesCollection.updateOne(
+    { purchaseId },
+    {
+      $set: {
+        id: purchaseId,
+        purchaseId,
+        userId,
+        uuid: playerUuid,
+        status: "PAID",
+        provider: "STRIPE",
+        stripeSessionId: sessionId,
+        stripePaymentIntentId: paymentIntentId || null,
+        items: cartItemIds.map((itemId) => ({ id: itemId })),
+        total: Number.isFinite(amountTotal) ? Number((amountTotal / 100).toFixed(2)) : null,
+        currency: currency || null,
+        pendingRank: normalizeText(rankGrantRows?.[0]?.value || "", 20) || null,
+        updatedAt: nowIso,
       },
-    };
-    const idempotencyKeyBase = normalizeText(stripeEventId || sessionId, 120) || sessionId;
-    const grant = await enqueueGrant({
-      playerUuid,
-      userId,
-      type: "RANK",
-      value,
-      payload,
-      serverId: "prod",
-      idempotencyKey: `${idempotencyKeyBase}:${index}:${itemId}`,
-    });
-    grants.push(grant);
-  }
+      $setOnInsert: {
+        createdAt: nowIso,
+        fulfilled: false,
+      },
+    },
+    { upsert: true },
+  );
+  const grant = await enqueueGrant({
+    grantId: crypto.randomUUID(),
+    idempotencyKey: `stripe:checkout_session:${sessionId}`,
+    purchaseId,
+    buyerUserId: userId,
+    playerUuid,
+    source: normalizedSource,
+    grants: rankGrantRows,
+  });
   return {
-    ok: grants.some((entry) => entry?.ok),
-    alreadyExists: grants.every((entry) => entry?.duplicate),
+    ok: Boolean(grant?.ok),
+    grantId: normalizeText(grant?.grantId || "", 120),
+    alreadyExists: Boolean(grant?.duplicate),
     skipped: false,
   };
 }
@@ -3278,7 +3480,6 @@ async function handleStripeWebhook(req, res) {
       const queued = await queueStripeFulfillmentFromSession(
         session,
         `webhook:${event.type}`,
-        normalizeText(event.id, 120),
       );
       return res.json({
         received: true,
@@ -3315,7 +3516,26 @@ app.post(
   handleStripeWebhook,
 );
 
+app.use((req, res, next) => {
+  // Helmet-style baseline hardening without external dependency.
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("Referrer-Policy", "same-origin");
+  res.setHeader("X-DNS-Prefetch-Control", "off");
+  res.setHeader("X-Download-Options", "noopen");
+  res.setHeader("X-Permitted-Cross-Domain-Policies", "none");
+  res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+  if (req.secure || String(req.headers?.["x-forwarded-proto"] || "").toLowerCase() === "https") {
+    res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
+  next();
+});
+
 app.use(express.json({ limit: "100kb" }));
+app.use("/api", apiGeneralLimiter);
+app.use("/api/payments", apiPaymentsLimiter);
+app.use("/api/link", apiLinkLimiter);
+app.use("/api/server", apiServerLimiter);
 const clerkApiMiddleware = clerkMiddleware();
 app.use("/api", (req, res, next) => {
   const safePath = String(req.path || "");
@@ -3541,7 +3761,7 @@ app.post("/api/admin/store/fake-purchase", async (req, res) => {
       cart: { items: result.cartItems },
       pricing: result.pricing,
       purchaseId: result.purchaseId,
-      awardedRank: result.awardedRank,
+      pendingRank: result.pendingRank,
       alreadyProcessed: result.alreadyProcessed,
       fakeItemId: forcedItemId || null,
     });
@@ -3551,6 +3771,82 @@ app.post("/api/admin/store/fake-purchase", async (req, res) => {
     }
     console.error("Failed to run admin fake purchase", error);
     return res.status(500).json({ error: "Failed to run admin fake purchase" });
+  }
+});
+
+app.get("/api/admin/grants/failed", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const actingUser = await clerkClient.users.getUser(auth.userId);
+    if (!isAdminUser(actingUser)) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+    const limitRaw = Number(req.query?.limit);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 250) : 100;
+    const rows = await grantsCollection
+      .find({ state: "FAILED" })
+      .sort({ updatedAt: -1, createdAt: -1 })
+      .limit(limit)
+      .project({
+        _id: 0,
+        grantId: 1,
+        purchaseId: 1,
+        buyerUserId: 1,
+        playerUuid: 1,
+        state: 1,
+        grants: 1,
+        errorCode: 1,
+        errorMessage: 1,
+        createdAt: 1,
+        updatedAt: 1,
+        failedAt: 1,
+      })
+      .toArray();
+    return res.json({ grants: rows });
+  } catch (error) {
+    console.error("Failed to load failed grants", error);
+    return res.status(500).json({ error: "Failed to load failed grants" });
+  }
+});
+
+app.get("/api/admin/grants/pending", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const actingUser = await clerkClient.users.getUser(auth.userId);
+    if (!isAdminUser(actingUser)) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+    const olderThanMinutesRaw = Number(req.query?.olderThanMinutes);
+    const olderThanMinutes = Number.isFinite(olderThanMinutesRaw)
+      ? Math.min(Math.max(Math.trunc(olderThanMinutesRaw), 1), 24 * 60)
+      : 10;
+    const cutoff = new Date(Date.now() - olderThanMinutes * 60 * 1000);
+    const limitRaw = Number(req.query?.limit);
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 250) : 100;
+    const rows = await grantsCollection
+      .find({ state: "PENDING", createdAt: { $lte: cutoff } })
+      .sort({ createdAt: 1 })
+      .limit(limit)
+      .project({
+        _id: 0,
+        grantId: 1,
+        purchaseId: 1,
+        buyerUserId: 1,
+        playerUuid: 1,
+        state: 1,
+        grants: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      })
+      .toArray();
+    return res.json({ olderThanMinutes, grants: rows });
+  } catch (error) {
+    console.error("Failed to load stale pending grants", error);
+    return res.status(500).json({ error: "Failed to load pending grants" });
   }
 });
 
@@ -3598,6 +3894,7 @@ app.get("/api/profile/title", async (req, res) => {
     const isStaff = Boolean(staffRoleBase);
     const staffRolePreviewOptions = getAllowedStaffRolePreviewOptions(staffRoleBase);
     const staffRolePreview = normalizeStaffRole(user?.publicMetadata?.staffRolePreview);
+    const rankFulfillment = await getRankFulfillmentStateForUser(auth.userId);
     const { ownedRank, displayRank, availableTitles } = resolveDisplayRankFromMetadata(
       user?.publicMetadata || {},
       isStaff,
@@ -3632,10 +3929,49 @@ app.get("/api/profile/title", async (req, res) => {
       showDonorGradient: resolveDonorGradientVisible(user?.publicMetadata || {}),
       canToggleAvatarVfx: isStaff || ownedRank !== "Unregistered",
       showAvatarVfx: resolveAvatarVfxVisible(user?.publicMetadata || {}),
+      hasPendingRankGrant: rankFulfillment.hasPendingRankGrant,
+      pendingRank: rankFulfillment.pendingRank,
+      pendingGrantId: rankFulfillment.pendingGrantId,
+      pendingSince: rankFulfillment.pendingSince,
     });
   } catch (error) {
     console.error("Failed to load profile title settings", error);
     return res.status(500).json({ error: "Failed to load profile title settings" });
+  }
+});
+
+app.get("/api/profile/settings", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const user = await clerkClient.users.getUser(auth.userId);
+    const linked = await isLinkedUserId(auth.userId);
+    const staffRole = resolveStaffRoleForUser(user);
+    const rankInfo = resolveDisplayRankFromMetadata(
+      user?.publicMetadata || {},
+      Boolean(staffRole),
+      linked,
+    );
+    const ownedRank = normalizeOwnedRank(rankInfo.ownedRank || "Unregistered") || "Unregistered";
+    const rankFulfillment = await getRankFulfillmentStateForUser(auth.userId);
+    return res.json({
+      ownedRank,
+      selectedTitle: rankInfo.displayRank,
+      availableTitles: rankInfo.availableTitles,
+      staffRole,
+      showAllOwnedRankBadges: resolveShowAllOwnedRankBadgesVisible(user?.publicMetadata || {}),
+      selectedOwnedBadge: resolveSelectedOwnedBadge(user?.publicMetadata || {}, ownedRank),
+      showStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
+      showStaffBadgeIcon: resolveStaffBadgeIconVisible(user?.publicMetadata || {}),
+      hasPendingRankGrant: rankFulfillment.hasPendingRankGrant,
+      pendingRank: rankFulfillment.pendingRank,
+      pendingGrantId: rankFulfillment.pendingGrantId,
+      pendingSince: rankFulfillment.pendingSince,
+    });
+  } catch (error) {
+    console.error("Failed to load profile settings", error);
+    return res.status(500).json({ error: "Failed to load profile settings" });
   }
 });
 
@@ -5095,7 +5431,7 @@ app.post("/api/cart/checkout", async (req, res) => {
       cart: { items: result.cartItems },
       pricing: result.pricing,
       purchaseId: result.purchaseId,
-      awardedRank: result.awardedRank,
+      pendingRank: result.pendingRank,
       alreadyProcessed: result.alreadyProcessed,
     });
   } catch (error) {
@@ -5345,13 +5681,15 @@ app.post("/api/payments/stripe/finalize-intent", async (req, res) => {
       purchaseProvider: "STRIPE",
       paymentStatus: "PAID",
       stripePaymentIntentId: intent.id,
+      source: "stripe_payment_intent_finalize",
+      idempotencyKey: `stripe:payment_intent:${intent.id}`,
     });
     return res.json({
       success: true,
       cart: { items: result.cartItems },
       pricing: result.pricing,
       purchaseId: result.purchaseId,
-      awardedRank: result.awardedRank,
+      pendingRank: result.pendingRank,
       alreadyProcessed: result.alreadyProcessed,
     });
   } catch (error) {
@@ -5390,18 +5728,22 @@ app.post("/api/payments/stripe/complete", async (req, res) => {
       return res.status(400).json({ error: "Payment has not completed yet" });
     }
 
-    const result = await fulfillStripeCheckoutSession(session, "checkout-complete");
-    if (!result?.success) {
-      return res.status(400).json({ error: "Unable to fulfill checkout session" });
-    }
+    const existing = await grantsCollection.findOne(
+      { idempotencyKey: `stripe:checkout_session:${sessionId}` },
+      { projection: { _id: 0, grantId: 1, state: 1, grants: 1, createdAt: 1 } },
+    );
 
     return res.json({
       success: true,
-      cart: { items: result.cartItems },
-      pricing: result.pricing,
-      purchaseId: result.purchaseId,
-      awardedRank: result.awardedRank,
-      alreadyProcessed: result.alreadyProcessed,
+      processing: true,
+      purchaseId: sessionId,
+      grantQueued: Boolean(existing?.grantId),
+      grantId: normalizeText(existing?.grantId || "", 120) || null,
+      grantState: normalizeText(existing?.state || "", 20) || "PENDING",
+      pendingRank: normalizeText(existing?.grants?.[0]?.value || "", 20) || null,
+      message: existing?.grantId
+        ? "Payment confirmed. Rank processing is pending server ACK."
+        : "Payment confirmed. Webhook queueing is still in progress.",
     });
   } catch (error) {
     if (error?.status) {
@@ -5413,135 +5755,11 @@ app.post("/api/payments/stripe/complete", async (req, res) => {
 });
 
 app.get("/api/fulfillment/pending", async (req, res) => {
-  try {
-    if (!(await requireMongoReady(res))) return;
-    if (!requireFulfillmentAuth(req, res)) return;
-
-    const serverId = normalizeText(req.query?.server || req.query?.serverId, 80) || "default";
-    const limitRaw = Number(req.query?.limit);
-    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 500) : 50;
-    const uuids = [
-      ...normalizeUuidList(req.query?.uuid),
-      ...normalizeUuidList(req.query?.uuids),
-      ...normalizeUuidList(req.query?.onlineUuids),
-      ...normalizeUuidList(req.query?.online),
-    ];
-    const filter = {
-      status: "PAID",
-      fulfilled: { $ne: true },
-      fulfillmentState: { $nin: ["APPLIED", "FAILED"] },
-    };
-    if (uuids.length > 0) {
-      filter.uuid = { $in: Array.from(new Set(uuids)) };
-    }
-    const docs = await purchasesCollection
-      .find(filter)
-      .sort({ createdAt: 1 })
-      .limit(limit)
-      .project({
-        _id: 0,
-        purchaseId: 1,
-        id: 1,
-        userId: 1,
-        uuid: 1,
-        grants: 1,
-        items: 1,
-        status: 1,
-        fulfilled: 1,
-        createdAt: 1,
-      })
-      .toArray();
-    const purchases = docs.map((doc) => ({
-      purchaseId: normalizeText(doc.purchaseId || doc.id, 128),
-      uuid: normalizePlayerUuid(doc.uuid),
-      grants: Array.isArray(doc.grants) ? doc.grants : [],
-      status: normalizeText(doc.status, 20) || "PAID",
-      fulfilled: Boolean(doc.fulfilled),
-      createdAt: doc.createdAt || new Date().toISOString(),
-    }));
-    const actions = purchases
-      .filter((purchase) => purchase.purchaseId && purchase.uuid)
-      .map((purchase) => ({
-        id: purchase.purchaseId,
-        playerUuid: purchase.uuid,
-        type: "PURCHASE_GRANT",
-        payload: {
-          purchaseId: purchase.purchaseId,
-          grants: purchase.grants,
-        },
-        createdAt: purchase.createdAt,
-      }));
-    return res.json({ server: serverId, actions, purchases });
-  } catch (error) {
-    console.error("Failed to load pending fulfillments", error);
-    return res.status(500).json({ error: "Failed to load pending fulfillments" });
-  }
+  return handlePendingGrants(req, res, "legacy_pending_fulfillment");
 });
 
 app.post("/api/fulfillment/ack", async (req, res) => {
-  try {
-    if (!(await requireMongoReady(res))) return;
-    if (!requireFulfillmentAuth(req, res)) return;
-
-    const purchaseId = normalizeText(req.body?.purchaseId || req.body?.id, 128);
-    if (!purchaseId) {
-      return res.status(400).json({ error: "id is required" });
-    }
-    const now = new Date().toISOString();
-    const requestedStatus = normalizeText(req.body?.status, 20).toUpperCase();
-    let finalStatus = requestedStatus === "FAILED" ? "FAILED" : "APPLIED";
-    if (!requestedStatus && req.body?.ok === false) {
-      finalStatus = "FAILED";
-    }
-    const resultPayload = req.body?.result && typeof req.body.result === "object"
-      ? req.body.result
-      : {
-          ok: finalStatus === "APPLIED",
-          detail: normalizeText(req.body?.detail || "", 300),
-          serverId: normalizeText(req.body?.server || req.body?.serverId || "", 80),
-          error: normalizeText(req.body?.error || "", 500),
-        };
-    const ackFilter = {
-      $or: [{ purchaseId }, { id: purchaseId }],
-      fulfillmentState: { $nin: ["APPLIED", "FAILED"] },
-    };
-    const ackUpdate = {
-      $set: {
-        fulfilled: true,
-        fulfillmentState: finalStatus,
-        fulfilledAt: now,
-        fulfillmentResult: resultPayload,
-        updatedAt: now,
-      },
-    };
-    const updated = await purchasesCollection.updateOne(ackFilter, ackUpdate);
-    if (updated.modifiedCount > 0) {
-      return res.json({
-        success: true,
-        id: purchaseId,
-        purchaseId,
-        status: finalStatus,
-        alreadyFinal: false,
-      });
-    }
-    const existing = await purchasesCollection.findOne(
-      { $or: [{ purchaseId }, { id: purchaseId }] },
-      { projection: { _id: 0, fulfilled: 1, fulfillmentState: 1 } },
-    );
-    if (existing && (existing.fulfilled === true || ["APPLIED", "FAILED"].includes(existing.fulfillmentState))) {
-      return res.json({
-        success: true,
-        id: purchaseId,
-        purchaseId,
-        status: normalizeText(existing.fulfillmentState, 20) || "APPLIED",
-        alreadyFinal: true,
-      });
-    }
-    return res.status(404).json({ error: "Purchase not found" });
-  } catch (error) {
-    console.error("Failed to acknowledge fulfillment", error);
-    return res.status(500).json({ error: "Failed to acknowledge fulfillment" });
-  }
+  return handleAckGrants(req, res, "legacy_ack_fulfillment");
 });
 
 app.post("/api/link/create", async (req, res) => {
@@ -5641,7 +5859,7 @@ app.post("/api/link/claim", async (req, res) => {
 app.post("/api/server/register-code", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
-    if (!requireServerSecret(req, res, "register_code")) return;
+    if (!requireNetstoreServerAuth(req, res, "register_code")) return;
     const code = normalizeLinkCode(req.body?.code);
     const playerUuid = normalizePlayerUuid(req.body?.playerUuid || req.body?.uuid);
     const playerName = normalizeText(req.body?.playerName || req.body?.username || "", 60);
@@ -5670,7 +5888,7 @@ app.post("/api/server/register-code", async (req, res) => {
 app.get("/api/server/pending-links", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
-    if (!requireServerSecret(req, res, "pending_links")) return;
+    if (!requireNetstoreServerAuth(req, res, "pending_links")) return;
     const limitRaw = Number(req.query?.limit);
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 200) : 50;
     const now = new Date();
@@ -5707,7 +5925,7 @@ app.get("/api/server/pending-links", async (req, res) => {
 app.post("/api/server/ack-link", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
-    if (!requireServerSecret(req, res, "ack_link")) return;
+    if (!requireNetstoreServerAuth(req, res, "ack_link")) return;
     const code = normalizeLinkCode(req.body?.code);
     if (code.length !== 8) {
       return res.status(400).json({ error: "code is required" });
@@ -5781,103 +5999,176 @@ app.post("/api/server/ack-link", async (req, res) => {
 async function handlePendingGrants(req, res, routeLabel) {
   try {
     if (!(await requireMongoReady(res))) return;
-    if (!requireServerSecret(req, res, routeLabel)) return;
-    const serverId = normalizeText(req.query?.serverId || req.query?.server || "prod", 40) || "prod";
+    if (!requireNetstoreServerAuth(req, res, routeLabel)) return;
+    const serverIdFilter = normalizeText(req.query?.serverId || req.query?.server || "", 40) || "";
     const limitRaw = Number(req.query?.limit);
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 200) : 50;
+    const query = { state: "PENDING" };
+    if (serverIdFilter) {
+      query.serverId = serverIdFilter;
+    }
     const docs = await grantsCollection
-      .find({ status: "PENDING", serverId })
+      .find(query)
       .sort({ createdAt: 1 })
       .limit(limit)
-      .project({ _id: 1, grantId: 1, playerUuid: 1, type: 1, value: 1, payload: 1, createdAt: 1 })
+      .project({ _id: 0, grantId: 1, purchaseId: 1, playerUuid: 1, grants: 1, createdAt: 1, serverId: 1 })
       .toArray();
     const grants = docs.map((doc) => ({
-      grantId: normalizeText(doc.grantId || String(doc._id || ""), 160),
+      grantId: normalizeText(doc.grantId || "", 160),
+      purchaseId: normalizeText(doc.purchaseId || "", 160) || null,
       playerUuid: normalizePlayerUuid(doc.playerUuid),
-      type: normalizeText(doc.type || "PERK", 30).toUpperCase(),
-      value: normalizeText(doc.value || "", 120),
-      payload: doc.payload && typeof doc.payload === "object" ? doc.payload : {},
+      grants: Array.isArray(doc.grants)
+        ? doc.grants
+            .map((entry) => ({
+              type: normalizeText(entry?.type || "", 20).toUpperCase(),
+              value: normalizeText(entry?.value || "", 80).toUpperCase(),
+            }))
+            .filter((entry) => entry.type && entry.value)
+        : [],
       createdAt: doc.createdAt instanceof Date ? doc.createdAt.toISOString() : String(doc.createdAt || ""),
     }));
-    return res.json({
-      grants,
-      jobs: grants.map((entry) => ({
-        jobId: entry.grantId,
-        playerUuid: entry.playerUuid,
-        payload: {
-          type: entry.type,
-          value: entry.value,
-          ...entry.payload,
-        },
-      })),
-    });
+    return res.json({ serverId: serverIdFilter || null, grants });
   } catch (error) {
     console.error("Failed to load pending grants", error);
     return res.status(500).json({ error: "Failed to load pending grants" });
   }
 }
 
+function parseAckTimestamp(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function normalizeDonorRankLabelFromGrant(value) {
+  const raw = normalizeText(value || "", 20).toUpperCase();
+  if (raw === "HERO") return "Hero";
+  if (raw === "LEGEND") return "Legend";
+  if (raw === "MYTHIC") return "Mythic";
+  return "";
+}
+
+async function applyAckedDonorRankToUser(grantDoc) {
+  const userId = normalizeText(grantDoc?.buyerUserId || "", 128);
+  if (!userId) return;
+  const grantRows = Array.isArray(grantDoc?.grants) ? grantDoc.grants : [];
+  const rankRows = grantRows
+    .map((entry) => normalizeDonorRankLabelFromGrant(entry?.value))
+    .filter(Boolean);
+  if (rankRows.length === 0) return;
+  const targetRank = rankRows.reduce((current, next) => maxRankLabel(current, next), "Unregistered");
+  if (!targetRank || targetRank === "Unregistered") return;
+
+  const user = await clerkClient.users.getUser(userId);
+  const currentRank = normalizeOwnedRank(user?.publicMetadata?.rank) || "Unregistered";
+  const nextRank = maxRankLabel(currentRank, targetRank);
+  if (nextRank === currentRank) return;
+  const linked = await isLinkedUserId(userId).catch(() => false);
+  const nextMetadata = {
+    ...(user?.publicMetadata || {}),
+    rank: nextRank,
+  };
+  const nextRankInfo = resolveDisplayRankFromMetadata(nextMetadata, isStaffUser(user), linked);
+  await clerkClient.users.updateUserMetadata(userId, {
+    publicMetadata: nextMetadata,
+  });
+  await commentsCollection.updateMany(
+    { userId, isDeleted: false },
+    {
+      $set: {
+        authorRank: nextRankInfo.displayRank,
+        authorOwnedRank: nextRank,
+        updatedAt: new Date(),
+      },
+    },
+  );
+  await forumPostsCollection.updateMany(
+    { authorUserId: userId, isDeleted: false },
+    {
+      $set: {
+        authorRank: nextRankInfo.displayRank,
+        authorOwnedRank: nextRank,
+        updatedAt: new Date().toISOString(),
+      },
+    },
+  );
+}
+
 async function handleAckGrants(req, res, routeLabel) {
   try {
     if (!(await requireMongoReady(res))) return;
-    if (!requireServerSecret(req, res, routeLabel)) return;
-    const ackRows = Array.isArray(req.body?.acks) ? req.body.acks : null;
-    if (ackRows && ackRows.length > 0) {
-      const updates = [];
-      for (const row of ackRows) {
-        const grantId = normalizeText(row?.grantId || row?.jobId || row?.id, 160);
-        if (!grantId) continue;
-        const rawStatus = normalizeText(row?.status || row?.result, 20).toUpperCase();
-        const nextStatus = rawStatus === "APPLIED" ? "APPLIED" : "FAILED";
-        const errorText = normalizeText(row?.message || row?.error || "", 500);
-        const now = new Date();
-        const updateResult = await grantsCollection.updateOne(
-          { grantId, status: "PENDING" },
-          {
-            $set: {
-              status: nextStatus,
-              appliedAt: now,
-              updatedAt: now,
-              error: nextStatus === "FAILED" ? errorText : "",
-            },
-          },
-        );
-        updates.push({ grantId, updated: updateResult.modifiedCount > 0, status: nextStatus });
-      }
-      return res.json({ success: true, updates });
-    }
-
-    const grantId = normalizeText(req.body?.grantId || req.body?.jobId || req.body?.id, 160);
+    if (!requireNetstoreServerAuth(req, res, routeLabel)) return;
+    const grantId = normalizeText(req.body?.grantId, 160);
     if (!grantId) {
       return res.status(400).json({ error: "grantId is required" });
     }
-    const rawStatus = normalizeText(req.body?.status || req.body?.result, 20).toUpperCase();
-    const nextStatus = rawStatus === "APPLIED" ? "APPLIED" : "FAILED";
+    const requestedStatus = normalizeText(req.body?.status, 20).toUpperCase();
+    if (!["APPLIED", "FAILED"].includes(requestedStatus)) {
+      return res.status(400).json({ error: "status must be APPLIED or FAILED" });
+    }
+    const existing = await grantsCollection.findOne({ grantId });
+    if (!existing) {
+      return res.status(404).json({ error: "Grant not found" });
+    }
+    const currentState = normalizeText(existing.state || "", 20).toUpperCase();
+    if (currentState && currentState !== "PENDING") {
+      return res.json({ success: true, grantId, status: currentState, alreadyFinal: true });
+    }
     const now = new Date();
-    const errorText = normalizeText(req.body?.message || req.body?.error || "", 500);
-
-    const updated = await grantsCollection.updateOne(
-      { grantId, status: "PENDING" },
+    const appliedAt = parseAckTimestamp(req.body?.appliedAt) || now;
+    const failedAt = parseAckTimestamp(req.body?.failedAt) || now;
+    const errorCode = normalizeText(req.body?.errorCode, 80).toUpperCase() || null;
+    const errorMessage = normalizeText(req.body?.errorMessage, 500) || null;
+    const updateResult = await grantsCollection.updateOne(
+      { grantId, state: "PENDING" },
       {
         $set: {
-          status: nextStatus,
-          appliedAt: now,
+          state: requestedStatus,
           updatedAt: now,
-          error: nextStatus === "FAILED" ? errorText : "",
+          appliedAt: requestedStatus === "APPLIED" ? appliedAt : null,
+          failedAt: requestedStatus === "FAILED" ? failedAt : null,
+          errorCode: requestedStatus === "FAILED" ? errorCode : null,
+          errorMessage: requestedStatus === "FAILED" ? errorMessage : null,
         },
       },
     );
-    if (updated.modifiedCount > 0) {
-      return res.json({ success: true, grantId, status: nextStatus, alreadyFinal: false });
+    if (updateResult.modifiedCount === 0) {
+      const refreshed = await grantsCollection.findOne(
+        { grantId },
+        { projection: { _id: 0, state: 1 } },
+      );
+      if (refreshed?.state && refreshed.state !== "PENDING") {
+        return res.json({ success: true, grantId, status: String(refreshed.state), alreadyFinal: true });
+      }
+      return res.status(404).json({ error: "Grant not found" });
     }
-    const existing = await grantsCollection.findOne(
-      { grantId },
-      { projection: { _id: 0, status: 1 } },
-    );
-    if (existing?.status && existing.status !== "PENDING") {
-      return res.json({ success: true, grantId, status: String(existing.status), alreadyFinal: true });
+    const purchaseId = normalizeText(existing?.purchaseId || "", 160);
+    if (purchaseId) {
+      await purchasesCollection.updateOne(
+        { purchaseId },
+        {
+          $set: {
+            fulfilled: requestedStatus === "APPLIED",
+            fulfillmentState: requestedStatus,
+            fulfilledAt: now.toISOString(),
+            updatedAt: now.toISOString(),
+            fulfillmentErrorCode: requestedStatus === "FAILED" ? errorCode : null,
+            fulfillmentErrorMessage: requestedStatus === "FAILED" ? errorMessage : null,
+          },
+        },
+      );
     }
-    return res.status(404).json({ error: "Grant not found" });
+    if (requestedStatus === "APPLIED") {
+      const appliedDoc = await grantsCollection.findOne({ grantId });
+      await applyAckedDonorRankToUser(appliedDoc).catch((error) => {
+        console.error("Failed to sync rank metadata after grant ACK", {
+          grantId,
+          error: error?.message || String(error),
+        });
+      });
+    }
+    return res.json({ success: true, grantId, status: requestedStatus, alreadyFinal: false });
   } catch (error) {
     console.error("Failed to acknowledge grant", error);
     return res.status(500).json({ error: "Failed to acknowledge grant" });
@@ -6062,6 +6353,7 @@ app.get("/api/profile/public-card/:userId", async (req, res) => {
     const ownedRank = normalizeOwnedRank(rankInfo.ownedRank || "Unregistered");
     const selectedOwnedBadge = resolveSelectedOwnedBadge(user?.publicMetadata || {}, ownedRank);
     const showAllOwnedRankBadges = resolveShowAllOwnedRankBadgesVisible(user?.publicMetadata || {});
+    const rankFulfillment = await getRankFulfillmentStateForUser(userId);
     return res.json({
       userId,
       username: formatUsernameForDisplay(user?.username, 80),
@@ -6081,6 +6373,10 @@ app.get("/api/profile/public-card/:userId", async (req, res) => {
       useRankFont: resolveRankFontVisible(user?.publicMetadata || {}),
       showDonorGradient: resolveDonorGradientVisible(user?.publicMetadata || {}),
       showAvatarVfx: resolveAvatarVfxVisible(user?.publicMetadata || {}),
+      hasPendingRankGrant: rankFulfillment.hasPendingRankGrant,
+      pendingRank: rankFulfillment.pendingRank,
+      pendingGrantId: rankFulfillment.pendingGrantId,
+      pendingSince: rankFulfillment.pendingSince,
     });
   } catch (error) {
     console.error("Failed to load public profile card metadata", error);

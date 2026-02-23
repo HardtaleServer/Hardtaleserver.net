@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-23 (v1.4.11)
+- Added purchase toast notifications across all checkout paths:
+  - Stripe return finalize (`/api/payments/stripe/complete`)
+  - Stripe payment-intent finalize (`/api/payments/stripe/finalize-intent`)
+  - Local checkout (`/api/cart/checkout`)
+- Updated purchase success UX text to queue-aware messaging (`Rank processing (PENDING)`) instead of immediate rank-awarded wording.
+- Added explicit error toasts for failed secure checkout and failed local checkout flows.
+- Added admin fake-purchase toasts with purchase id context for faster debugging/support.
+- Added pending-rank processing line in mobile drawer profile preview when rank fulfillment is awaiting server ACK.
+
 ## 2026-02-23 (v1.4.10)
 - Retuned forum `@mention` preview-card anchor positioning to match requested dropdown-style placement under inline mentions (screenshot-aligned lower positioning).
 - Updated mention-card horizontal offset behavior so preview placement better tracks the mention context inside forum/reply content blocks.
