@@ -105,6 +105,7 @@ const NOTIFICATIONS_ICON_SVG = "/Images/SVGs/ui/Notifications.svg";
 const BASKET_ICON_SVG = "/Images/SVGs/ui/Basket.svg";
 const DRAWER_MENU_ICON_SVG = "/Images/SVGs/ui/DrawerMenu.svg";
 const LOGOUT_ICON_SVG = "/Images/SVGs/Logout.svg";
+const ADD_FRIEND_ICON_SVG = "/Images/SVGs/Add_Friend.svg";
 const WARNING_STATUS_ICON_SVG = "/Images/SVGs/toasts/Warning.svg";
 const SUCCESS_STATUS_ICON_SVG = "/Images/SVGs/toasts/Success.svg";
 const ERROR_STATUS_ICON_SVG = "/Images/SVGs/toasts/Error.svg";
@@ -3960,6 +3961,7 @@ function CommentThread({
                   })}
                 title="Add Friend (planned)"
               >
+                <img src=${ADD_FRIEND_ICON_SVG} alt="" aria-hidden="true" className="profile-action-icon-img" />
                 <span>Add Friend</span>
               </button>
             </div>`
@@ -6506,11 +6508,31 @@ function ForumPage({ isAdmin = false }) {
     if (!normalized) return;
     const rect = anchorEl.getBoundingClientRect();
     const key = `${normalized.authorUserId || normalized.authorUsername || normalized.authorName}`.toLowerCase();
+    const maxX = Math.max(10, (typeof window !== "undefined" ? window.innerWidth : 1200) - 340);
     setForumHoverProfile({
       key,
       entry: normalized,
-      x: Math.max(10, rect.left),
+      x: Math.min(Math.max(10, rect.left), maxX),
       y: rect.bottom + 8,
+    });
+  }
+
+  function openForumMentionPreview(entry, triggerEl = null) {
+    const normalized = normalizeForumProfileEntry(entry);
+    if (!normalized) return;
+    clearForumHoverTimers();
+    if (triggerEl?.getBoundingClientRect) {
+      openForumHoverProfile(normalized, triggerEl);
+      return;
+    }
+    const key = `${normalized.authorUserId || normalized.authorUsername || normalized.authorName}`.toLowerCase();
+    const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 1200;
+    const x = Math.max(10, Math.min(Math.round((viewportWidth - 320) / 2), viewportWidth - 340));
+    setForumHoverProfile({
+      key,
+      entry: normalized,
+      x,
+      y: 112,
     });
   }
 
@@ -6591,7 +6613,7 @@ function ForumPage({ isAdmin = false }) {
     </div>`;
   }
 
-  async function openForumMentionProfile(username) {
+  async function openForumMentionProfile(username, triggerEl = null) {
     const key = String(username || "").trim().replace(/^@+/, "").toLowerCase();
     if (!key) return;
     let entry = mentionProfileDirectory.get(key) || null;
@@ -6650,7 +6672,7 @@ function ForumPage({ isAdmin = false }) {
       });
       return;
     }
-    openForumProfileCard(entry);
+    openForumMentionPreview(entry, triggerEl);
   }
 
   async function copyForumProfileMetaValue(label, value) {
@@ -8175,6 +8197,7 @@ function ForumPage({ isAdmin = false }) {
                       })}
                     title="Add Friend (planned)"
                   >
+                    <img src=${ADD_FRIEND_ICON_SVG} alt="" aria-hidden="true" className="profile-action-icon-img" />
                     <span>Add Friend</span>
                   </button>
                 </div>`
@@ -8425,6 +8448,7 @@ function ForumPage({ isAdmin = false }) {
                     })}
                   title="Add Friend (planned)"
                 >
+                  <img src=${ADD_FRIEND_ICON_SVG} alt="" aria-hidden="true" className="profile-action-icon-img" />
                   <span>Add Friend</span>
                 </button>
               </div>`
@@ -12984,6 +13008,7 @@ function Layout() {
                   })}
                 title="Add Friend (planned)"
               >
+                <img src=${ADD_FRIEND_ICON_SVG} alt="" aria-hidden="true" className="profile-action-icon-img" />
                 <span>Add Friend</span>
               </button>
             </div>`

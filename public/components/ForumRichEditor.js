@@ -58,7 +58,7 @@ function ForumRenderedMarkdown({ value = "", className = "", onMentionClick = nu
       event.preventDefault();
       const mention = String(trigger.getAttribute("data-mention") || "").trim();
       if (!mention) return;
-      onMentionClick(mention);
+      onMentionClick(mention, trigger);
     }}
     dangerouslySetInnerHTML=${{ __html: htmlValue }}
   />`;

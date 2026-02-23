@@ -4244,8 +4244,14 @@ emoji-picker.reaction-picker-panel {
 
 .profile-modal-header-actions {
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
   margin: 2px 0 8px;
+}
+
+.profile-action-icon-img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
 }
 
 .account-panel-logout-link {

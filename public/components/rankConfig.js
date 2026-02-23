@@ -13,7 +13,7 @@ const RANK_ICON_BY_LABEL = {
 const RANK_DISPLAY_BY_LABEL = {
   unregistered: "Unlinked",
   unlinked: "Unlinked",
-  registered: "Linked",
+  registered: "Registered",
   linked: "Linked",
 };
 
