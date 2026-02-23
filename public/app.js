@@ -4011,7 +4011,7 @@ function CommentThread({
                 ? html`<div className="profile-card-username">@${profileUser.username}</div>`
                 : html``}
               ${(() => {
-                const normalizedRank = normalizeOwnedRank(profileUser.rankLabel || "Unregistered");
+                const normalizedRank = normalizeOwnedRankLabel(profileUser.rankLabel || "Unregistered");
                 const useStaffAsPrimaryBadge = Boolean(profileUser.staff) && (normalizedRank === "Unregistered" || normalizedRank === "Unlinked");
                 const badgeLabel = useStaffAsPrimaryBadge
                   ? toStaffPillTitle(profileUser.staffRole) || "Staff"
@@ -7558,7 +7558,7 @@ function ForumPage({ isAdmin = false }) {
         ? html`<div className="profile-card-username">@${forumProfileUser.username}</div>`
         : html``}
       ${(() => {
-        const normalizedRank = normalizeOwnedRank(forumProfileUser.rankLabel || "Unregistered");
+        const normalizedRank = normalizeOwnedRankLabel(forumProfileUser.rankLabel || "Unregistered");
         const useStaffAsPrimaryBadge = Boolean(forumProfileUser.staff) && (normalizedRank === "Unregistered" || normalizedRank === "Unlinked");
         const badgeLabel = useStaffAsPrimaryBadge
           ? toStaffPillTitle(forumProfileUser.staffRole) || "Staff"
