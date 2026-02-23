@@ -4479,6 +4479,12 @@ emoji-picker.reaction-picker-panel {
   gap: 10px;
 }
 
+.private-message-peek-btn {
+  margin-left: auto;
+  font-size: 12px;
+  padding: 6px 10px;
+}
+
 .private-message-hero {
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--stroke));
   border-radius: 12px;
@@ -4529,6 +4535,21 @@ emoji-picker.reaction-picker-panel {
   gap: 8px;
 }
 
+.private-message-author-trigger {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+}
+
+.private-message-author-trigger:hover {
+  text-decoration: underline;
+}
+
 .private-message-item-body {
   margin-top: 5px;
   white-space: pre-wrap;
@@ -4561,6 +4582,10 @@ emoji-picker.reaction-picker-panel {
 
 .private-message-send-row {
   justify-content: space-between;
+}
+
+.private-message-delete-btn {
+  margin-right: auto;
 }
 
 .private-message-count {
@@ -9216,17 +9241,6 @@ body[data-theme="dark"] .friend-rank-pill.rank-mythic {
 .mobile-drawer-profile-username {
   font-size: 12px;
   color: var(--muted);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.mobile-drawer-profile-username-inline-avatar {
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  object-fit: cover;
-  border: 1px solid var(--stroke);
 }
 
 .mobile-drawer-profile-badges {

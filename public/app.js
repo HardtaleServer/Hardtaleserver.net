@@ -77,6 +77,7 @@ const NAV_KEY = "hardtale-nav";
 const MENU_SIDE_KEY = "hardtale-menu-side";
 const MOBILE_NAV_STYLE_KEY = "hardtale-mobile-nav-style";
 const MOBILE_FRIEND_SEARCH_PLACEMENT_KEY = "hardtale-mobile-friend-search-placement";
+const PRIVATE_MESSAGE_MAX_CHARS = 150;
 const LAST_NON_LINK_ROUTE_KEY = "hardtale-last-non-link-route";
 const LINK_REMINDER_LAST_SHOWN_PREFIX = "hardtale-link-reminder-last-shown";
 const LINK_REMINDER_READ_PREFIX = "hardtale-link-reminder-read";
@@ -97,7 +98,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.26";
+const VERSION = "1.4.27";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -10093,13 +10094,17 @@ function HomePage({
                             key=${entry.userId}
                             type="button"
                             className="home-hero-friend-chip"
-                            onClick=${() =>
+                            onClick=${(event) =>
                               (typeof onOpenFriendProfile === "function"
-                                ? onOpenFriendProfile(entry)
+                                ? onOpenFriendProfile(entry, event.currentTarget)
                                 : onOpenFriendsModal && onOpenFriendsModal())}
                             onMouseEnter=${(event) =>
                               typeof onFriendHoverOpen === "function" && onFriendHoverOpen(entry, event.currentTarget)}
                             onMouseLeave=${() =>
+                              typeof onFriendHoverClose === "function" && onFriendHoverClose()}
+                            onFocus=${(event) =>
+                              typeof onFriendHoverOpen === "function" && onFriendHoverOpen(entry, event.currentTarget)}
+                            onBlur=${() =>
                               typeof onFriendHoverClose === "function" && onFriendHoverClose()}
                             title=${entry.name || "Friend"}
                           >
@@ -11209,6 +11214,7 @@ function Layout() {
   const [privateMessageStatus, setPrivateMessageStatus] = useState("");
   const [privateMessageLoading, setPrivateMessageLoading] = useState(false);
   const [privateMessageSending, setPrivateMessageSending] = useState(false);
+  const [privateMessageDeleting, setPrivateMessageDeleting] = useState(false);
   const [userSearchQuery, setUserSearchQuery] = useState("");
   const [userSearchOpen, setUserSearchOpen] = useState(false);
   const [userSearchLoading, setUserSearchLoading] = useState(false);
@@ -12473,7 +12479,7 @@ function Layout() {
       username: formatUsernameForDisplay(targetUser?.username || targetUser?.authorUsername || ""),
       image: String(targetUser?.image || targetUser?.authorImage || "/assets/HardTale_H_GreyScale.png"),
     });
-    setPrivateMessageBody(String(options?.initialBody || "").trim().slice(0, 1200));
+    setPrivateMessageBody(String(options?.initialBody || "").trim().slice(0, PRIVATE_MESSAGE_MAX_CHARS));
     setPrivateMessageStatus("");
     setPrivateMessageThread([]);
     setPrivateMessageOpen(true);
@@ -12482,6 +12488,8 @@ function Layout() {
 
   async function sendPrivateMessage() {
     if (!privateMessageTarget?.userId || !privateMessageBody.trim() || privateMessageSending) return;
+    const safeBody = String(privateMessageBody || "").trim().slice(0, PRIVATE_MESSAGE_MAX_CHARS);
+    if (!safeBody) return;
     setPrivateMessageSending(true);
     setPrivateMessageStatus("Sending...");
     try {
@@ -12490,7 +12498,7 @@ function Layout() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           targetUserId: privateMessageTarget.userId,
-          body: privateMessageBody.trim(),
+          body: safeBody,
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -12504,6 +12512,31 @@ function Layout() {
       setPrivateMessageStatus(String(error?.message || "Failed to send private message."));
     } finally {
       setPrivateMessageSending(false);
+    }
+  }
+
+  async function deletePrivateMessageConversation() {
+    const targetUserId = String(privateMessageTarget?.userId || "").trim();
+    if (!targetUserId || privateMessageDeleting) return;
+    if (!window.confirm("Delete this private message conversation for your account?")) return;
+    setPrivateMessageDeleting(true);
+    setPrivateMessageStatus("Deleting conversation...");
+    try {
+      const response = await apiFetchWithToken(
+        getToken,
+        true,
+        `/api/private-messages/thread/${encodeURIComponent(targetUserId)}`,
+        { method: "DELETE" },
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(data?.error || "Failed to delete conversation."));
+      setPrivateMessageThread([]);
+      setPrivateMessageBody("");
+      setPrivateMessageStatus("Conversation deleted.");
+    } catch (error) {
+      setPrivateMessageStatus(String(error?.message || "Failed to delete conversation."));
+    } finally {
+      setPrivateMessageDeleting(false);
     }
   }
 
@@ -13573,6 +13606,17 @@ function Layout() {
     }, 180);
   }
 
+  function toggleFriendHoverProfile(entry, anchorEl = null) {
+    const nextUserId = String(entry?.userId || entry?.authorUserId || "").trim();
+    const currentUserId = String(friendHoverProfile?.userId || "").trim();
+    clearFriendHoverTimers();
+    if (nextUserId && currentUserId && nextUserId === currentUserId) {
+      setFriendHoverProfile(null);
+      return;
+    }
+    openFriendHoverProfile(entry, anchorEl);
+  }
+
   function renderFriendHoverProfileCard() {
     if (!friendHoverProfile) return html``;
     const badge = resolveFriendBadge(friendHoverProfile);
@@ -14366,7 +14410,7 @@ function Layout() {
           onOpenNewsAuthorProfile=${openNotificationProfile}
           homeFriendsPreview=${allFriends}
           onOpenFriendsModal=${() => setFriendsModalOpen(true)}
-          onOpenFriendProfile=${(entry) => openUserDirectoryProfile(entry)}
+          onOpenFriendProfile=${(entry, anchorEl) => toggleFriendHoverProfile(entry, anchorEl)}
           onFriendHoverOpen=${scheduleFriendHoverOpen}
           onFriendHoverClose=${scheduleFriendHoverClose}
         />
@@ -14446,8 +14490,8 @@ function Layout() {
                         key=${entry.userId}
                         type="button"
                         className="mobile-online-friend-chip"
-                        onClick=${() => openUserDirectoryProfile(entry)}
-                        title=${`Open ${entry.name}'s profile`}
+                        onClick=${(event) => toggleFriendHoverProfile(entry, event.currentTarget)}
+                        title=${`Show ${entry.name}'s profile preview`}
                       >
                         <img src=${entry.image} alt=${entry.name} />
                         <span>${entry.name}</span>
@@ -15110,6 +15154,7 @@ function Layout() {
           setPrivateMessageThread([]);
           setPrivateMessageBody("");
           setPrivateMessageStatus("");
+          setPrivateMessageDeleting(false);
         }}
         title=${privateMessageTarget?.username
           ? `Private Message - @${privateMessageTarget.username}`
@@ -15119,7 +15164,11 @@ function Layout() {
         ${!privateMessageTarget
           ? html`<p className="muted">No recipient selected.</p>`
           : html`<div className="private-message-panel private-message-modern">
-              <div className="private-message-target private-message-hero">
+              <div
+                className="private-message-target private-message-hero"
+                onMouseEnter=${(event) => scheduleFriendHoverOpen(privateMessageTarget, event.currentTarget)}
+                onMouseLeave=${scheduleFriendHoverClose}
+              >
                 <img
                   className="comment-avatar small"
                   src=${privateMessageTarget.image || "/assets/HardTale_H_GreyScale.png"}
@@ -15131,24 +15180,59 @@ function Layout() {
                     ${privateMessageTarget.username ? `@${privateMessageTarget.username}` : ""}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  className="ghost-btn private-message-peek-btn"
+                  onClick=${(event) => toggleFriendHoverProfile(privateMessageTarget, event.currentTarget)}
+                >
+                  Profile Preview
+                </button>
               </div>
               <div className="private-message-thread private-message-thread-shell">
                 ${privateMessageLoading
                   ? html`<p className="muted">Loading conversation...</p>`
                   : privateMessageThread.length === 0
                   ? html`<p className="muted">No private messages yet.</p>`
-                  : privateMessageThread.map((entry) => html`<div
+                  : privateMessageThread.map((entry) => {
+                      const fromId = String(entry?.fromUserId || "").trim();
+                      const outgoing = fromId === String(userId || "").trim();
+                      const hoverEntry = outgoing
+                        ? {
+                            userId: String(userId || "").trim(),
+                            username: formatUsernameForDisplay(user?.username || ""),
+                            name: displayName || "You",
+                            image: resolvedOwnAvatar || "/assets/HardTale_H_GreyScale.png",
+                            rankLabel: drawerProfileSummary.rankLabel || "Unregistered",
+                            ownedRank: normalizedDrawerOwnedRank || drawerProfileSummary.rankLabel || "Unregistered",
+                            staffRole: drawerProfileSummary.staffRole || "",
+                            isStaffUser: Boolean(isStaff),
+                          }
+                        : {
+                            userId: fromId,
+                            username: formatUsernameForDisplay(entry?.fromUsername || ""),
+                            name: String(entry?.fromName || "User"),
+                            image: String(entry?.fromImage || "/assets/HardTale_H_GreyScale.png"),
+                          };
+                      return html`<div
                         key=${entry.id}
-                        className=${`private-message-item ${
-                          String(entry?.fromUserId || "") === String(userId || "") ? "outgoing" : "incoming"
-                        }`.trim()}
+                        className=${`private-message-item ${outgoing ? "outgoing" : "incoming"}`.trim()}
                       >
                         <div className="private-message-item-header">
-                          <span className="comment-author">${entry?.fromName || "User"}</span>
+                          <button
+                            type="button"
+                            className="private-message-author-trigger"
+                            onMouseEnter=${(event) => scheduleFriendHoverOpen(hoverEntry, event.currentTarget)}
+                            onMouseLeave=${scheduleFriendHoverClose}
+                            onClick=${(event) => toggleFriendHoverProfile(hoverEntry, event.currentTarget)}
+                            title=${`Show ${hoverEntry?.name || "User"} profile preview`}
+                          >
+                            ${entry?.fromName || "User"}
+                          </button>
                           <span className="muted">${formatTimestamp(entry?.createdAt)}</span>
                         </div>
                         <div className="private-message-item-body">${entry?.body || ""}</div>
-                      </div>`)}
+                      </div>`;
+                    })}
               </div>
               <div className="private-message-composer">
                 <label className="private-message-input-label" for="private-message-input-box">
@@ -15158,19 +15242,29 @@ function Layout() {
                   id="private-message-input-box"
                   className="private-message-input"
                   rows="4"
-                  maxLength="1200"
+                  maxLength=${String(PRIVATE_MESSAGE_MAX_CHARS)}
                   placeholder="Write a private message..."
                   value=${privateMessageBody}
-                  onInput=${(event) => setPrivateMessageBody(event.target.value)}
+                  onInput=${(event) => setPrivateMessageBody(String(event.target.value || "").slice(0, PRIVATE_MESSAGE_MAX_CHARS))}
                 ></textarea>
               </div>
               <div className="comment-actions right private-message-send-row">
-                <span className="muted private-message-count">${String(privateMessageBody || "").length}/1200</span>
+                <button
+                  className="button ghost-btn private-message-delete-btn"
+                  type="button"
+                  onClick=${deletePrivateMessageConversation}
+                  disabled=${privateMessageDeleting}
+                >
+                  ${privateMessageDeleting ? "Deleting..." : "Delete Conversation"}
+                </button>
+                <span className="muted private-message-count">
+                  ${String(privateMessageBody || "").length}/${PRIVATE_MESSAGE_MAX_CHARS}
+                </span>
                 <button
                   className="button primary private-message-send-btn"
                   type="button"
                   onClick=${sendPrivateMessage}
-                  disabled=${privateMessageSending || !privateMessageBody.trim()}
+                  disabled=${privateMessageSending || privateMessageDeleting || !privateMessageBody.trim()}
                 >
                   ${privateMessageSending ? "Sending..." : "Send"}
                 </button>

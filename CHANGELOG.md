@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-23 (v1.4.27)
+- Updated profile preview behavior across Friends + PM surfaces:
+  - Home hero friend chips and mobile drawer friend chips now open a profile preview card first.
+  - Clicking the preview card opens the full user profile popup.
+  - Private Message user identities now support hover/tap profile preview and click-through to full profile.
+- Refined profile preview card visuals:
+  - Removed the inline tiny username avatar from the shared drawer/peek profile preview card component.
+- Updated Private Messages limits and controls:
+  - Reduced private message max body length from `1200` to `150` (frontend + backend validation).
+  - Added conversation delete support in PM modal (`Delete Conversation`).
+  - Added `DELETE /api/private-messages/thread/:targetUserId`.
+  - PM thread reads now exclude rows deleted by the current user.
+
 ## 2026-02-23 (v1.4.26)
 - Added mobile setting `Friend search location` (`Drawer` or `Navbar`) with persisted placement and matching mobile UI rendering behavior.
 - Fixed forum viewer profile-card hydration to prefer public-card metadata so selected UUID/profile image sources resolve correctly on viewed users.

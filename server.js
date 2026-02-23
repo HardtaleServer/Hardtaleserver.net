@@ -3276,7 +3276,7 @@ function normalizeForumBodyFormat(value) {
 }
 
 function normalizePrivateMessageBody(value) {
-  return normalizeText(value, 1200);
+  return normalizeText(value, 150);
 }
 
 function normalizePrivateMessageDoc(doc) {
@@ -7796,9 +7796,19 @@ app.get("/api/private-messages/thread/:targetUserId", async (req, res) => {
     const rows = await privateMessagesCollection
       .find({
         isDeleted: false,
-        $or: [
-          { fromUserId: auth.userId, toUserId: targetUserId },
-          { fromUserId: targetUserId, toUserId: auth.userId },
+        $and: [
+          {
+            $or: [
+              { fromUserId: auth.userId, toUserId: targetUserId },
+              { fromUserId: targetUserId, toUserId: auth.userId },
+            ],
+          },
+          {
+            $or: [
+              { deletedBy: { $exists: false } },
+              { deletedBy: { $nin: [auth.userId] } },
+            ],
+          },
         ],
       })
       .sort({ createdAt: 1 })
@@ -7809,6 +7819,43 @@ app.get("/api/private-messages/thread/:targetUserId", async (req, res) => {
   } catch (error) {
     console.error("Failed to load private message thread", error);
     return res.status(500).json({ error: "Failed to load private message thread" });
+  }
+});
+
+app.delete("/api/private-messages/thread/:targetUserId", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const targetUserId = normalizeText(req.params.targetUserId, 128);
+    if (!targetUserId || targetUserId === auth.userId) {
+      return res.status(400).json({ error: "Invalid private message target" });
+    }
+    const now = new Date().toISOString();
+    const result = await privateMessagesCollection.updateMany(
+      {
+        isDeleted: false,
+        $or: [
+          { fromUserId: auth.userId, toUserId: targetUserId },
+          { fromUserId: targetUserId, toUserId: auth.userId },
+        ],
+      },
+      {
+        $addToSet: { deletedBy: auth.userId },
+        $set: { updatedAt: now },
+      },
+    );
+    return res.json({
+      ok: true,
+      targetUserId,
+      deletedCount: Number(result?.modifiedCount || 0),
+      updatedAt: now,
+    });
+  } catch (error) {
+    console.error("Failed to delete private message conversation", error);
+    return res.status(500).json({ error: "Failed to delete private message conversation" });
   }
 });
 

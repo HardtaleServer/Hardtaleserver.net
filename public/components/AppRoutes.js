@@ -41,6 +41,9 @@ export default function AppRoutes({
   onOpenNewsAuthorProfile,
   homeFriendsPreview,
   onOpenFriendsModal,
+  onOpenFriendProfile,
+  onFriendHoverOpen,
+  onFriendHoverClose,
 }) {
   return html`
     <${Routes} location=${routesLocation}>
@@ -59,6 +62,9 @@ export default function AppRoutes({
           isSignedIn=${isSignedIn}
           friendsPreview=${homeFriendsPreview}
           onOpenFriendsModal=${onOpenFriendsModal}
+          onOpenFriendProfile=${onOpenFriendProfile}
+          onFriendHoverOpen=${onFriendHoverOpen}
+          onFriendHoverClose=${onFriendHoverClose}
         />`}
       />
       <${Route}
@@ -76,6 +82,9 @@ export default function AppRoutes({
           isSignedIn=${isSignedIn}
           friendsPreview=${homeFriendsPreview}
           onOpenFriendsModal=${onOpenFriendsModal}
+          onOpenFriendProfile=${onOpenFriendProfile}
+          onFriendHoverOpen=${onFriendHoverOpen}
+          onFriendHoverClose=${onFriendHoverClose}
         />`}
       />
       <${Route}
@@ -165,6 +174,9 @@ export default function AppRoutes({
           isSignedIn=${isSignedIn}
           friendsPreview=${homeFriendsPreview}
           onOpenFriendsModal=${onOpenFriendsModal}
+          onOpenFriendProfile=${onOpenFriendProfile}
+          onFriendHoverOpen=${onFriendHoverOpen}
+          onFriendHoverClose=${onFriendHoverClose}
         />`}
       />
       <${Route}
@@ -182,6 +194,9 @@ export default function AppRoutes({
           isSignedIn=${isSignedIn}
           friendsPreview=${homeFriendsPreview}
           onOpenFriendsModal=${onOpenFriendsModal}
+          onOpenFriendProfile=${onOpenFriendProfile}
+          onFriendHoverOpen=${onFriendHoverOpen}
+          onFriendHoverClose=${onFriendHoverClose}
         />`}
       />
       <${Route}
