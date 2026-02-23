@@ -5104,6 +5104,9 @@ function StorePage({
   const [cooldownUntil, setCooldownUntil] = useState(0);
   const [cooldownLeft, setCooldownLeft] = useState(0);
   const [ticketSent, setTicketSent] = useState(false);
+  const comparisonTopWrapRef = useRef(null);
+  const comparisonBottomWrapRef = useRef(null);
+  const comparisonSyncingRef = useRef(false);
   const location = useLocation();
   const { user } = useUser();
   const { isSignedIn } = useAuth();
@@ -5309,6 +5312,20 @@ function StorePage({
     return html`<span className="store-comparison-value-text">${String(value || "-")}</span>`;
   }
 
+  function syncComparisonScroll(source) {
+    if (comparisonSyncingRef.current) return;
+    const topWrap = comparisonTopWrapRef.current;
+    const bottomWrap = comparisonBottomWrapRef.current;
+    if (!topWrap || !bottomWrap) return;
+    const sourceWrap = source === "bottom" ? bottomWrap : topWrap;
+    const targetWrap = source === "bottom" ? topWrap : bottomWrap;
+    comparisonSyncingRef.current = true;
+    targetWrap.scrollLeft = sourceWrap.scrollLeft;
+    requestAnimationFrame(() => {
+      comparisonSyncingRef.current = false;
+    });
+  }
+
   function togglePerkRow(itemId) {
     setOpenPerkRows((prev) => ({
       ...prev,
@@ -5499,7 +5516,11 @@ function StorePage({
           <div className="store-comparison-shell">
             <div className="section-title">Rank Comparison</div>
             <div className="store-comparison-scroll-hint">Scroll right for more -></div>
-            <div className="store-comparison-wrap">
+            <div
+              className="store-comparison-wrap"
+              ref=${comparisonTopWrapRef}
+              onScroll=${() => syncComparisonScroll("top")}
+            >
               <table className="store-comparison-table" role="table" aria-label="Rank feature comparison">
                 <thead>
                   <tr>
@@ -5527,7 +5548,11 @@ function StorePage({
               </button>
             </div>
             ${showComparison
-              ? html`<div className="store-comparison-wrap expanded">
+              ? html`<div
+                  className="store-comparison-wrap expanded"
+                  ref=${comparisonBottomWrapRef}
+                  onScroll=${() => syncComparisonScroll("bottom")}
+                >
                   <table className="store-comparison-table" role="table" aria-label="Extended rank feature comparison">
                     <tbody>
                       ${extendedComparisonRows.map((row) => html`<tr key=${`extended-row-${row.label}`}>
@@ -5541,6 +5566,7 @@ function StorePage({
                 </div>
                 `
               : html``}
+            <div className="store-comparison-scroll-hint store-comparison-scroll-hint-bottom">Scroll right for more -></div>
           </div>`
         : html`<div className="store-section-placeholder">
             <div className="section-title">${normalizedSection === "gold" ? "Gold Shop" : "Currency Shop"}</div>
@@ -9151,6 +9177,7 @@ function VotePage() {
 
 function LinkPage({ onClose = null, isLinkedAccount = false }) {
   const location = useLocation();
+  const { user } = useUser();
   const { getToken, isSignedIn, isLoaded: isAuthLoaded } = useAuth();
   const { openSignIn } = useClerk();
   const LINK_BAD_QUERY_TELEMETRY_UNTIL_MS = Date.parse("2026-02-24T23:59:59Z");
@@ -9254,6 +9281,13 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
   const urlCode = strictQuery.code;
   const isCooldownActive = cooldownLeft > 0;
   const debugCode = isComplete ? fullCode : urlCode;
+  const clerkUsername = formatUsernameForDisplay(user?.username, 80) || "unknown";
+  const clerkEmail = String(user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress || "");
+  const linkedDebugSummary = linkedInfo.linked
+    ? `Linked Account | ${linkedInfo.playerName || "Unknown"} (${linkedInfo.maskedPlayerUuid || "UUID unknown"} -> ${
+        linkedInfo.playerName || "PlayerDB username unavailable"
+      }) to Clerk: ${clerkUsername}${clerkEmail ? ` / ${clerkEmail}` : ""}`
+    : "";
 
   useEffect(() => {
     if (!isLinkedAccount) return;
@@ -9448,6 +9482,14 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
       }
     };
   }, [debugCode, LINK_CODE_REGEX]);
+
+  useEffect(() => {
+    if (!showComparison) return;
+    const topWrap = comparisonTopWrapRef.current;
+    const bottomWrap = comparisonBottomWrapRef.current;
+    if (!topWrap || !bottomWrap) return;
+    bottomWrap.scrollLeft = topWrap.scrollLeft;
+  }, [showComparison]);
 
   function formatCooldown(ms) {
     const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
@@ -9674,27 +9716,35 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
             </div>`
           : html``}
         <div className="link-code-grid" onPaste=${onPaste}>
-          ${digits.map(
-            (digit, index) => html`<input
-              key=${`link-digit-${index}`}
-              ref=${(node) => {
-                inputRefs.current[index] = node;
-              }}
-              className="link-code-input"
-              type="text"
-              inputmode="text"
-              autocomplete="one-time-code"
-              pattern="[A-Za-z0-9]*"
-              maxLength="1"
-              value=${digit}
-              disabled=${linkedInfo.linked}
-              readOnly=${linkedInfo.linked}
-              aria-label=${`Link code character ${index + 1}`}
-              onInput=${(event) => onInput(index, event)}
-              onKeyDown=${(event) => onKeyDown(index, event)}
-              onFocus=${(event) => event.target.select()}
-            />`,
-          )}
+          ${linkedInfo.linked
+            ? html`<input
+                className="link-code-input link-code-input-linked"
+                type="text"
+                value="HARDTALE :D"
+                readOnly
+                aria-label="Linked account message"
+              />`
+            : digits.map(
+                (digit, index) => html`<input
+                  key=${`link-digit-${index}`}
+                  ref=${(node) => {
+                    inputRefs.current[index] = node;
+                  }}
+                  className="link-code-input"
+                  type="text"
+                  inputmode="text"
+                  autocomplete="one-time-code"
+                  pattern="[A-Za-z0-9]*"
+                  maxLength="1"
+                  value=${digit}
+                  disabled=${linkedInfo.linked}
+                  readOnly=${linkedInfo.linked}
+                  aria-label=${`Link code character ${index + 1}`}
+                  onInput=${(event) => onInput(index, event)}
+                  onKeyDown=${(event) => onKeyDown(index, event)}
+                  onFocus=${(event) => event.target.select()}
+                />`,
+              )}
         </div>
         <div className="link-actions">
           ${isCooldownActive
@@ -9703,16 +9753,18 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
               </div>`
             : html``}
           <button
-            className="button primary"
+            className=${`button primary link-verify-btn ${linkedInfo.linked ? "linked-done" : ""}`.trim()}
             type="button"
             disabled=${linkedInfo.linked || !isComplete || isSubmitting || isCooldownActive}
             onClick=${onVerifyClick}
-            title=${isCooldownActive ? "Link currently on cooldown" : "Verify link code"}
+            title=${linkedInfo.linked ? "Account already linked" : isCooldownActive ? "Link currently on cooldown" : "Verify link code"}
           >
             ${isSubmitting
               ? linkMode === "mock"
                 ? "Simulating..."
                 : "Linking..."
+              : linkedInfo.linked
+              ? "Already Linked"
               : isCooldownActive
               ? "On cooldown"
               : linkMode === "mock"
@@ -9742,6 +9794,10 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
           <div className="link-debug-panel">
             <div className="link-debug-title">Link Debug</div>
             <div className="link-debug-grid">
+              ${linkedInfo.linked
+                ? html`<div className="muted">Linked mapping</div>
+                    <div className="link-status-success">${linkedDebugSummary}</div>`
+                : html``}
               <div className="muted">Route query</div>
               <div>${strictQuery.rawSearch ? `?${strictQuery.rawSearch}` : "(none)"}</div>
               <div className="muted">Parsed code</div>

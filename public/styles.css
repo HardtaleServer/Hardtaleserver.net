@@ -4729,6 +4729,12 @@ emoji-picker.reaction-picker-panel {
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
 }
 
+.link-code-input-linked {
+  grid-column: 1 / -1;
+  font-size: clamp(24px, 5vw, 34px);
+  letter-spacing: 0.04em;
+}
+
 .link-code-input:focus {
   outline: none;
   border-color: transparent;
@@ -4747,6 +4753,13 @@ emoji-picker.reaction-picker-panel {
 .link-actions {
   display: grid;
   gap: 8px;
+}
+
+.link-verify-btn.linked-done {
+  background: #5d6673;
+  border-color: #6f7885;
+  color: #e8edf5;
+  box-shadow: none;
 }
 
 .link-hint {
@@ -5849,6 +5862,10 @@ body[data-theme="dark"] .store-cta {
 
 .store-comparison-scroll-hint {
   display: none;
+}
+
+.store-comparison-scroll-hint-bottom {
+  margin-top: 8px;
 }
 
 .store-comparison-status-icon {
