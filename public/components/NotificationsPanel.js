@@ -31,6 +31,7 @@ export default function NotificationsPanel({
   deletingId = "",
   friendActionBusyId = "",
   currentUserId = "",
+  currentUserAvatar = "",
   formatTimestamp,
   isStaffLabel,
   featuredIconSrc = "/Images/SVGs/ui/Featured.svg",
@@ -58,6 +59,10 @@ export default function NotificationsPanel({
           .replace(/[^a-z0-9]+/g, "-");
         const authorImage = String(item?.authorImage || "/assets/HardTale_H_GreyScale.png");
         const authorUserId = String(item?.authorUserId || "").trim();
+        const effectiveAuthorImage =
+          authorUserId && String(authorUserId) === String(currentUserId || "").trim() && currentUserAvatar
+            ? String(currentUserAvatar)
+            : authorImage;
         const isSystemAuthor = /^system$/i.test(authorLabel) || authorUserId === "";
         const canOpenProfile =
           typeof onOpenProfile === "function" &&
@@ -117,10 +122,10 @@ export default function NotificationsPanel({
                       title="Open profile card"
                       aria-label="Open profile card"
                     >
-                      <img className="notif-profile-avatar" src=${authorImage} alt=${authorLabel} />
+                      <img className="notif-profile-avatar" src=${effectiveAuthorImage} alt=${authorLabel} />
                     </button>`
                   : html`<span className="notif-profile-peek static" aria-hidden="true">
-                      <img className="notif-profile-avatar" src=${authorImage} alt=${authorLabel} />
+                      <img className="notif-profile-avatar" src=${effectiveAuthorImage} alt=${authorLabel} />
                     </span>`}
                 ${canOpenProfile
                   ? html`<button

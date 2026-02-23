@@ -76,6 +76,7 @@ const THEME_KEY = "hardtale-theme";
 const NAV_KEY = "hardtale-nav";
 const MENU_SIDE_KEY = "hardtale-menu-side";
 const MOBILE_NAV_STYLE_KEY = "hardtale-mobile-nav-style";
+const MOBILE_FRIEND_SEARCH_PLACEMENT_KEY = "hardtale-mobile-friend-search-placement";
 const LAST_NON_LINK_ROUTE_KEY = "hardtale-last-non-link-route";
 const LINK_REMINDER_LAST_SHOWN_PREFIX = "hardtale-link-reminder-last-shown";
 const LINK_REMINDER_READ_PREFIX = "hardtale-link-reminder-read";
@@ -96,7 +97,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.25";
+const VERSION = "1.4.26";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -202,6 +203,17 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.4.26",
+    date: "2026-02-23",
+    items: [
+      "Added mobile setting `Friend search location` (`Drawer` or `Navbar`) with persisted placement and matching mobile UI rendering behavior.",
+      "Fixed forum viewer profile-card hydration to prefer public-card metadata so selected UUID/profile image sources resolve correctly on viewed users.",
+      "Separated forum viewer-card ownership logic from own account profile management so donor/staff management tabs no longer appear on viewer cards.",
+      "Improved profile modal overflow handling by moving tall profile-card content into an internal scroll region with themed custom scrollbar support.",
+      "Updated notifications profile avatar mapping so current-user authored items consistently render the latest selected avatar source.",
+    ],
+  },
   {
     version: "1.4.22",
     date: "2026-02-23",
@@ -1648,6 +1660,23 @@ function useMobileNavStyle() {
   }, [mobileNavStyle]);
 
   return { mobileNavStyle, setMobileNavStyle };
+}
+
+function useMobileFriendSearchPlacement() {
+  const [mobileFriendSearchPlacement, setMobileFriendSearchPlacement] = useState(
+    localStorage.getItem(MOBILE_FRIEND_SEARCH_PLACEMENT_KEY) || "drawer",
+  );
+
+  useEffect(() => {
+    const normalized = mobileFriendSearchPlacement === "navbar" ? "navbar" : "drawer";
+    if (normalized !== mobileFriendSearchPlacement) {
+      setMobileFriendSearchPlacement(normalized);
+      return;
+    }
+    localStorage.setItem(MOBILE_FRIEND_SEARCH_PLACEMENT_KEY, normalized);
+  }, [mobileFriendSearchPlacement]);
+
+  return { mobileFriendSearchPlacement, setMobileFriendSearchPlacement };
 }
 
 function useLogoSide() {
@@ -4898,6 +4927,8 @@ function SettingsMenu({
   setMenuSide,
   mobileNavStyle,
   setMobileNavStyle,
+  mobileFriendSearchPlacement,
+  setMobileFriendSearchPlacement,
   logoSide,
   setLogoSide,
   mobileLogoStyle,
@@ -5105,6 +5136,16 @@ function SettingsMenu({
                           <option value="right">Right</option>
                         </select>
                       </div>
+                  <div className="settings-row">
+                    <label>Friend search location</label>
+                    <select
+                      value=${mobileFriendSearchPlacement}
+                      onChange=${(event) => setMobileFriendSearchPlacement(event.target.value)}
+                    >
+                      <option value="drawer">Drawer</option>
+                      <option value="navbar">Navbar</option>
+                    </select>
+                  </div>
                   <div className="settings-row">
                     <label>Mobile navbar background</label>
                     <select
@@ -6682,6 +6723,18 @@ function ForumPage({ isAdmin = false }) {
     return String(post?.authorUserId || post?.createdBy || "");
   }
 
+  function resolveForumAuthorImage(entry) {
+    const targetId = String(entry?.authorUserId || entry?.createdBy || entry?.userId || "").trim();
+    const fallback = String(entry?.authorImage || entry?.image || "/assets/HardTale_H_GreyScale.png");
+    return resolveForumLocalAvatarOverride(targetId, fallback);
+  }
+
+  function resolveForumEditorImage(entry) {
+    const targetId = String(entry?.editorUserId || "").trim();
+    const fallback = String(entry?.editorImage || "/assets/HardTale_H_GreyScale.png");
+    return resolveForumLocalAvatarOverride(targetId, fallback);
+  }
+
   function canManageForumPost(post) {
     if (!isSignedIn) return false;
     const authorUserId = getForumPostAuthorUserId(post);
@@ -7244,7 +7297,7 @@ function ForumPage({ isAdmin = false }) {
                   {
                     authorName: entry.editorName || "Editor",
                     authorUsername: entry.editorUsername || "",
-                    authorImage: entry.editorImage || "/assets/HardTale_H_GreyScale.png",
+                    authorImage: resolveForumEditorImage(entry),
                     authorRank: entry.editorRank || "Unregistered",
                     authorOwnedRank: entry.editorOwnedRank || entry.editorRank || "Unregistered",
                     authorStaffRole: entry.editorStaffRole || "",
@@ -7259,7 +7312,7 @@ function ForumPage({ isAdmin = false }) {
                   {
                     authorName: entry.editorName || "Editor",
                     authorUsername: entry.editorUsername || "",
-                    authorImage: entry.editorImage || "/assets/HardTale_H_GreyScale.png",
+                    authorImage: resolveForumEditorImage(entry),
                     authorRank: entry.editorRank || "Unregistered",
                     authorOwnedRank: entry.editorOwnedRank || entry.editorRank || "Unregistered",
                     authorStaffRole: entry.editorStaffRole || "",
@@ -7273,7 +7326,7 @@ function ForumPage({ isAdmin = false }) {
             >
               <img
                 className="comment-avatar small"
-                src=${entry.editorImage || "/assets/HardTale_H_GreyScale.png"}
+                src=${resolveForumEditorImage(entry)}
                 alt=${entry.editorName || "Editor"}
               />
             </button>
@@ -7286,7 +7339,7 @@ function ForumPage({ isAdmin = false }) {
                     {
                       authorName: entry.editorName || "Editor",
                       authorUsername: entry.editorUsername || "",
-                      authorImage: entry.editorImage || "/assets/HardTale_H_GreyScale.png",
+                      authorImage: resolveForumEditorImage(entry),
                       authorRank: entry.editorRank || "Unregistered",
                       authorOwnedRank: entry.editorOwnedRank || entry.editorRank || "Unregistered",
                       authorStaffRole: entry.editorStaffRole || "",
@@ -7301,7 +7354,7 @@ function ForumPage({ isAdmin = false }) {
                     {
                       authorName: entry.editorName || "Editor",
                       authorUsername: entry.editorUsername || "",
-                      authorImage: entry.editorImage || "/assets/HardTale_H_GreyScale.png",
+                      authorImage: resolveForumEditorImage(entry),
                       authorRank: entry.editorRank || "Unregistered",
                       authorOwnedRank: entry.editorOwnedRank || entry.editorRank || "Unregistered",
                       authorStaffRole: entry.editorStaffRole || "",
@@ -7449,40 +7502,42 @@ function ForumPage({ isAdmin = false }) {
     if (!entry) return;
     setForumProfileCardLoading(true);
     try {
-    const rankLabel = String(entry.authorRank || "Unregistered");
-    const authorName = String(entry.authorName || "User");
-    const authorUsername = String(entry.authorUsername || "");
-    const authorUserId = String(entry.authorUserId || entry.createdBy || "");
-    const isOwn = Boolean(userId && authorUserId && String(userId) === authorUserId);
+    const hydratedEntry = (await hydrateForumProfileEntry(entry)) || entry;
+    const rankLabel = String(hydratedEntry.authorRank || "Unregistered");
+    const authorName = String(hydratedEntry.authorName || "User");
+    const authorUsername = String(hydratedEntry.authorUsername || "");
+    const authorUserId = String(hydratedEntry.authorUserId || hydratedEntry.createdBy || "");
+    // Forum-opened profile cards are always "viewer" cards; own account management stays in personal profile panel.
+    const isOwn = false;
     let isStaffUser =
-      Boolean(entry?.authorIsStaff) ||
-      isStaffLabel(entry?.authorStaffRole || "") ||
+      Boolean(hydratedEntry?.authorIsStaff) ||
+      isStaffLabel(hydratedEntry?.authorStaffRole || "") ||
       isStaffLabel(authorName) ||
       isStaffLabel(authorUsername) ||
       isStaffLabel(rankLabel);
     let availableTitles = [];
-    let staffRole = String(entry?.authorStaffRole || "");
+    let staffRole = String(hydratedEntry?.authorStaffRole || "");
     let staffRoleBase = "";
     let canPreviewStaffRole = false;
     let staffRolePreview = "";
     let staffRolePreviewOptions = [];
     let selectedTitle = rankLabel;
-    let ownedRank = normalizeOwnedRankLabel(entry?.authorOwnedRank || rankLabel);
+    let ownedRank = normalizeOwnedRankLabel(hydratedEntry?.authorOwnedRank || rankLabel);
     let canToggleOwnedBadges = false;
-    let showAllOwnedRankBadges = entry?.showAllOwnedRankBadges !== false;
-    let selectedOwnedBadge = normalizeOwnedRankLabel(entry?.selectedOwnedBadge || "");
+    let showAllOwnedRankBadges = hydratedEntry?.showAllOwnedRankBadges !== false;
+    let selectedOwnedBadge = normalizeOwnedRankLabel(hydratedEntry?.selectedOwnedBadge || "");
     let ownedBadgeOptions = buildOwnedRankBadges(ownedRank, false, { showAllOwnedRankBadges: true });
     let canToggleStaffBadge = false;
-    let showStaffBadge = entry?.authorShowStaffBadge !== false;
-    let showStaffBadgeIcon = entry?.authorShowStaffBadgeIcon !== false;
+    let showStaffBadge = hydratedEntry?.authorShowStaffBadge !== false;
+    let showStaffBadgeIcon = hydratedEntry?.authorShowStaffBadgeIcon !== false;
     let canToggleStaffGradient = false;
-    let showStaffGradient = entry?.authorShowStaffGradient !== false;
+    let showStaffGradient = hydratedEntry?.authorShowStaffGradient !== false;
     let canToggleRankEffects = false;
     let showRankEffects = true;
     let canToggleRankFont = false;
-    let useRankFont = entry?.authorUseRankFont === true;
+    let useRankFont = hydratedEntry?.authorUseRankFont === true;
     let canToggleDonorGradient = false;
-    let showDonorGradient = entry?.authorShowDonorGradient !== false;
+    let showDonorGradient = hydratedEntry?.authorShowDonorGradient !== false;
     let canToggleAvatarVfx = false;
     let showAvatarVfx = true;
     if (isOwn && isSignedIn) {
@@ -7538,7 +7593,7 @@ function ForumPage({ isAdmin = false }) {
     setForumProfileUser({
       name: authorName,
       username: formatUsernameForDisplay(authorUsername),
-      image: String(entry.authorImage || "/assets/HardTale_H_GreyScale.png"),
+      image: String(hydratedEntry.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel: selectedTitle,
       ownedRank,
       canToggleOwnedBadges,
@@ -8527,11 +8582,11 @@ function ForumPage({ isAdmin = false }) {
                       title="Open profile card"
                       aria-label="Open profile card"
                     >
-                      <img
-                        className="forum-post-author-avatar"
-                        src=${selectedPost.authorImage || "/assets/HardTale_H_GreyScale.png"}
-                        alt=${selectedPost.authorName || "User"}
-                      />
+                        <img
+                          className="forum-post-author-avatar"
+                          src=${resolveForumAuthorImage(selectedPost)}
+                          alt=${selectedPost.authorName || "User"}
+                        />
                     </button>
                     <span className="muted">By</span>
                     <button
@@ -8774,7 +8829,7 @@ function ForumPage({ isAdmin = false }) {
                       >
                         <img
                           className="forum-post-author-avatar"
-                          src=${post.authorImage || "/assets/HardTale_H_GreyScale.png"}
+                          src=${resolveForumAuthorImage(post)}
                           alt=${post.authorName || "User"}
                         />
                       </button>
@@ -11119,6 +11174,7 @@ function Layout() {
   const { placement, setPlacement } = useNavPlacement();
   const { menuSide, setMenuSide } = useMenuSide();
   const { mobileNavStyle, setMobileNavStyle } = useMobileNavStyle();
+  const { mobileFriendSearchPlacement, setMobileFriendSearchPlacement } = useMobileFriendSearchPlacement();
   const { logoSide, setLogoSide } = useLogoSide();
   const { mobileLogoStyle, setMobileLogoStyle } = useMobileLogoStyle();
   const { showMobileIsland, setShowMobileIsland } = useMobileIsland();
@@ -11263,6 +11319,15 @@ function Layout() {
     });
     return copy;
   }, [notifications]);
+  const displayNotifications = useMemo(() => {
+    const ownId = String(userId || "").trim();
+    if (!ownId || !resolvedOwnAvatar) return sortedNotifications;
+    return sortedNotifications.map((item) => {
+      const authorId = String(item?.authorUserId || "").trim();
+      if (!authorId || authorId !== ownId) return item;
+      return { ...item, authorImage: resolvedOwnAvatar };
+    });
+  }, [sortedNotifications, userId, resolvedOwnAvatar]);
   const stateBackgroundHref = normalizeInternalRoute(location?.state?.backgroundHref || "", "");
   const storedBackgroundHref = readLastNonLinkRoute();
   const linkBackgroundHref = stateBackgroundHref || storedBackgroundHref || "/";
@@ -13438,7 +13503,10 @@ function Layout() {
       userId: normalizedUserId,
       username: normalizedUsername,
       name: normalizedName || normalizedUsername,
-      image: String(entry?.image || entry?.authorImage || "/assets/HardTale_H_GreyScale.png"),
+      image:
+        normalizedUserId && String(normalizedUserId) === String(userId || "").trim()
+          ? resolvedOwnAvatar
+          : String(entry?.image || entry?.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel: String(entry?.rankLabel || entry?.authorRank || "Unregistered"),
       ownedRank: String(entry?.ownedRank || entry?.authorOwnedRank || entry?.rankLabel || "Unregistered"),
       staffRole: String(entry?.staffRole || entry?.authorStaffRole || ""),
@@ -13885,6 +13953,8 @@ function Layout() {
     const rootRef = mobile ? userSearchMobileRootRef : userSearchRootRef;
     const inputRef = mobile ? userSearchMobileInputRef : userSearchDesktopInputRef;
     const rows = userSearchResults.slice(0, 30);
+    const mobileHasQuery = String(userSearchQuery || "").trim().length > 0;
+    const shouldShowDropdown = userSearchOpen && (!mobile || mobileHasQuery);
     return html`
       <div className=${containerClass} ref=${rootRef}>
         <div className="user-search-input-shell">
@@ -13896,17 +13966,26 @@ function Layout() {
             name=${mobile ? "mobile-user-search" : "desktop-user-search"}
             placeholder="Search users"
             value=${userSearchQuery}
-            onFocus=${() => setUserSearchOpen(true)}
-            onInput=${(event) => {
-              setUserSearchQuery(event.target.value);
+            onFocus=${() => {
+              if (mobile && !mobileHasQuery) return;
               setUserSearchOpen(true);
+            }}
+            onInput=${(event) => {
+              const nextValue = event.target.value;
+              const hasQuery = String(nextValue || "").trim().length > 0;
+              setUserSearchQuery(nextValue);
+              if (mobile && !hasQuery) {
+                setUserSearchOpen(false);
+              } else {
+                setUserSearchOpen(true);
+              }
               window.requestAnimationFrame(() => {
                 inputRef.current?.focus?.();
               });
             }}
           />
         </div>
-        ${userSearchOpen
+        ${shouldShowDropdown
           ? html`<div className="user-search-dropdown">
               ${userSearchLoading
                 ? html`<div className="user-search-state muted">Searching users...</div>`
@@ -13940,7 +14019,7 @@ function Layout() {
                           ${relation.state !== "SELF"
                             ? html`<button
                                 type="button"
-                                className="user-search-row-action"
+                                className=${`user-search-row-action ${mobile ? "mobile-compact" : ""}`.trim()}
                                 onClick=${(event) => {
                                   event.preventDefault();
                                   event.stopPropagation();
@@ -13971,12 +14050,14 @@ function Layout() {
                                   ? "Accept friend request"
                                   : "Add friend"}
                               >
-                                <img
-                                  src=${canRemove ? PERSON_REMOVE_ICON_SVG : PERSON_ADD_ICON_SVG}
-                                  alt=""
-                                  aria-hidden="true"
-                                />
-                                <span>${busy ? "..." : canRemove ? "Remove" : relation.state === "PENDING_INCOMING" ? "Accept" : "Add"}</span>
+                                ${mobile
+                                  ? html`<span>${busy ? "..." : canRemove ? "Remove" : relation.state === "PENDING_INCOMING" ? "Accept" : "Add"}</span>`
+                                  : html`<img
+                                      src=${canRemove ? PERSON_REMOVE_ICON_SVG : PERSON_ADD_ICON_SVG}
+                                      alt=""
+                                      aria-hidden="true"
+                                    />
+                                    <span>${busy ? "..." : canRemove ? "Remove" : relation.state === "PENDING_INCOMING" ? "Accept" : "Add"}</span>`}
                               </button>`
                             : html``}
                         </div>`;
@@ -14125,6 +14206,8 @@ function Layout() {
       setMenuSide=${setMenuSide}
       mobileNavStyle=${mobileNavStyle}
       setMobileNavStyle=${setMobileNavStyle}
+      mobileFriendSearchPlacement=${mobileFriendSearchPlacement}
+      setMobileFriendSearchPlacement=${setMobileFriendSearchPlacement}
       logoSide=${logoSide}
       setLogoSide=${setLogoSide}
       mobileLogoStyle=${mobileLogoStyle}
@@ -14205,6 +14288,13 @@ function Layout() {
                       </button>
                     `}
               </div>
+            </div>`
+          : html``}
+        ${isMobile && isSignedIn && mobileFriendSearchPlacement === "navbar"
+          ? html`<div
+              className=${`mobile-nav-search-slot ${menuSide === "left" ? "left" : "right"} ${showMobileNav ? "hidden" : ""}`.trim()}
+            >
+              ${renderUserSearchBar({ mobile: true })}
             </div>`
           : html``}
         ${desktopStickyVisible ? html`<${DesktopStickyBar} />` : html``}
@@ -14332,7 +14422,7 @@ function Layout() {
                   `}
               </div>
             </div>
-          ${renderUserSearchBar({ mobile: true })}
+          ${mobileFriendSearchPlacement === "drawer" ? renderUserSearchBar({ mobile: true }) : html``}
           <${SignedIn}>
             <section className="mobile-online-friends">
               <div className="mobile-online-friends-head">
@@ -14530,7 +14620,7 @@ function Layout() {
         title="Notifications"
       >
         <${NotificationsPanel}
-          notifications=${sortedNotifications}
+          notifications=${displayNotifications}
           onView=${viewNotification}
           onDelete=${deleteNotificationForMe}
           deletingId=${notificationDeletingId}
@@ -14539,6 +14629,7 @@ function Layout() {
           onFriendAction=${handleNotificationFriendAction}
           friendActionBusyId=${friendRequestActionBusyId}
           currentUserId=${userId}
+          currentUserAvatar=${resolvedOwnAvatar}
           formatTimestamp=${formatTimestamp}
           isStaffLabel=${isStaffLabel}
           featuredIconSrc=${FEATURED_BADGE_ICON_SVG}

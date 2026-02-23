@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-23 (v1.4.26)
+- Added mobile setting `Friend search location` (`Drawer` or `Navbar`) with persisted placement and matching mobile UI rendering behavior.
+- Fixed forum viewer profile-card hydration to prefer public-card metadata so selected UUID/profile image sources resolve correctly on viewed users.
+- Separated forum viewer-card ownership logic from own account profile management so donor/staff management tabs no longer appear on viewer cards.
+- Improved profile modal overflow handling by moving tall profile-card content into an internal scroll region with themed custom scrollbar support.
+- Updated notifications profile avatar mapping so current-user authored items consistently render the latest selected avatar source.
+
 ## 2026-02-23 (v1.4.25)
 - Moved the mobile drawer `Friends` preview card block to sit directly under the mobile user-search bar so social discovery and friend access stay grouped in one place.
 - Removed the duplicated lower placement of the same mobile friends block near the drawer footer/profile area.
