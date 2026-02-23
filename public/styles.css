@@ -1659,8 +1659,11 @@ body[data-theme="dark"] {
 
 .forum-profile-peek-shell .forum-profile-peek-card.mobile-drawer-profile-preview {
   background: var(--bg) !important;
+  background-color: var(--bg) !important;
+  background-image: none !important;
   opacity: 1 !important;
   backdrop-filter: none !important;
+  color: var(--text) !important;
 }
 
 .forum-history-body {

@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-23 (v1.4.10)
+- Retuned forum `@mention` preview-card anchor positioning to match requested dropdown-style placement under inline mentions (screenshot-aligned lower positioning).
+- Updated mention-card horizontal offset behavior so preview placement better tracks the mention context inside forum/reply content blocks.
+- Forced mention preview cards to render fully opaque (no inherited transparency/gradient bleed) with explicit theme-aware surface and text colors:
+  - Light theme: solid white via `var(--bg)`
+  - Dark theme: solid dark surface via `var(--bg)`
+- Prevented mention preview cards from inheriting surrounding link/text color by enforcing card text color tokens.
+
 ## 2026-02-23 (v1.4.09)
 - Removed forced-edit callouts from forum post cards and single-post forum views entirely (no inline forced-edit banner text in post body areas).
 - Kept forced-edit moderation details scoped to revision history surfaces instead of post-body rendering.

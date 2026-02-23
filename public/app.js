@@ -95,7 +95,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.09";
+const VERSION = "1.4.10";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -6573,7 +6573,11 @@ function ForumPage({ isAdmin = false }) {
     if (!normalized) return;
     clearForumHoverTimers();
     if (triggerEl?.getBoundingClientRect) {
-      openForumHoverProfile(normalized, triggerEl, { offsetX: -25, offsetY: 50 });
+      const useTouchLayout = typeof window !== "undefined" && window.matchMedia("(hover: none)").matches;
+      openForumHoverProfile(normalized, triggerEl, {
+        offsetX: useTouchLayout ? 12 : 28,
+        offsetY: useTouchLayout ? 14 : 18,
+      });
       return;
     }
     const key = `${normalized.authorUserId || normalized.authorUsername || normalized.authorName}`.toLowerCase();
@@ -6835,7 +6839,7 @@ function ForumPage({ isAdmin = false }) {
         ? html`<div className="forum-history-forced-banner">
             <img src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" className="forum-history-forced-icon" />
             <span>
-              Hardtale forced edit notice: ${latestForcedEdit.editorName || "Staff"} updated this post and opened a private support ticket for discussion.
+              Staff moderation update: ${latestForcedEdit.editorName || "Staff"} updated this post and opened a private support ticket for discussion.
             </span>
           </div>`
         : html``}
@@ -6926,7 +6930,7 @@ function ForumPage({ isAdmin = false }) {
                 ? html`<div className="forum-history-forced-row">
                     <img src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" className="forum-history-forced-icon" />
                     <span className="forum-post-edited-note forced">
-                      Forcefully changed by ${entry.editorName || "Staff"}${entry?.editorUsername ? ` (@${entry.editorUsername})` : ""}.
+                      Updated by ${entry.editorName || "Staff"}${entry?.editorUsername ? ` (@${entry.editorUsername})` : ""}.
                     </span>
                   </div>`
                 : html``}
