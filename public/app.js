@@ -208,6 +208,7 @@ const CHANGELOG_ENTRIES = [
       "Reworked mobile profile-card modal sizing to use a bounded popup with internal profile-content scrolling instead of full-height takeover, and routed that internal scroll region through the custom scrollbar theme.",
       "Updated profile badge settings dropdown behavior so Donor Tab and Staff Tab now default collapsed instead of auto-open.",
       "Redesigned mobile profile info tabs into a 2x2 layout with larger touch targets so labels like `Achievements` no longer appear squished.",
+      "Fixed forum `@mention` profile preview avatar freshness by switching metadata caching to a short TTL and removing permanent failed-fetch cache entries, so updated user-selected profile images are picked up on subsequent opens.",
       "Removed temporary root-level response/handoff `.txt` artifacts from the repository to keep project files focused on runtime code and durable documentation.",
     ],
   },
@@ -6399,6 +6400,7 @@ function ForumPage({ isAdmin = false }) {
   const forumHoverCloseTimerRef = useRef(0);
   const forumHoverResolveTokenRef = useRef(0);
   const forumMentionProfileMetaCacheRef = useRef(new Map());
+  const FORUM_PROFILE_META_CACHE_TTL_MS = 60 * 1000;
   const FORUM_BODY_MIN_LENGTH = 30;
   const createTemplateOptions = useMemo(
     () => getForumTemplateOptions(selectedSectionId),
@@ -6541,7 +6543,11 @@ function ForumPage({ isAdmin = false }) {
     if (!userId) return normalized;
     if (forumMentionProfileMetaCacheRef.current.has(userId)) {
       const cached = forumMentionProfileMetaCacheRef.current.get(userId);
-      return normalizeForumProfileEntry({ ...normalized, ...(cached || {}) }) || normalized;
+      const fetchedAt = Number(cached?.fetchedAt || 0);
+      const isFresh = Date.now() - fetchedAt <= FORUM_PROFILE_META_CACHE_TTL_MS;
+      if (isFresh && cached?.meta && typeof cached.meta === "object") {
+        return normalizeForumProfileEntry({ ...normalized, ...cached.meta }) || normalized;
+      }
     }
     try {
       const response = await fetch(`/api/profile/public-card/${encodeURIComponent(userId)}`);
@@ -6565,10 +6571,12 @@ function ForumPage({ isAdmin = false }) {
         selectedOwnedBadge: String(data?.selectedOwnedBadge || ""),
         linkedAccount: Boolean(data?.linked),
       };
-      forumMentionProfileMetaCacheRef.current.set(userId, meta);
+      forumMentionProfileMetaCacheRef.current.set(userId, {
+        meta,
+        fetchedAt: Date.now(),
+      });
       return normalizeForumProfileEntry({ ...normalized, ...meta }) || normalized;
     } catch {
-      forumMentionProfileMetaCacheRef.current.set(userId, {});
       return normalized;
     }
   }
