@@ -2258,22 +2258,48 @@ function CommentThread({
   const [selfProfileChooserOpen, setSelfProfileChooserOpen] = useState(false);
   const [selfProfileChooserEntry, setSelfProfileChooserEntry] = useState(null);
   const focusAppliedRef = useRef(false);
+  const loadCommentsRetryTimerRef = useRef(0);
   const isForumThread = String(newsId || "").startsWith("forum:");
 
-  async function loadComments() {
+  function resolveEntryUserId(entry) {
+    return String(entry?.userId || entry?.authorUserId || entry?.createdBy || "").trim();
+  }
+
+  async function loadComments(retryAttempt = 0) {
     try {
       const response = await fetch(`/api/comments?newsId=${encodeURIComponent(newsId)}`);
-      if (!response.ok) return;
+      if (!response.ok) throw new Error("Failed");
       const data = await response.json();
       const next = Array.isArray(data.comments) ? data.comments : [];
+      if (loadCommentsRetryTimerRef.current) {
+        clearTimeout(loadCommentsRetryTimerRef.current);
+        loadCommentsRetryTimerRef.current = 0;
+      }
       setComments(next);
       setCommentCount(next.length);
-    } catch {}
+    } catch {
+      if (retryAttempt >= 1) return;
+      if (loadCommentsRetryTimerRef.current) clearTimeout(loadCommentsRetryTimerRef.current);
+      loadCommentsRetryTimerRef.current = window.setTimeout(() => {
+        loadComments(retryAttempt + 1);
+      }, 900);
+    }
   }
 
   useEffect(() => {
     loadComments();
+    return () => {
+      if (loadCommentsRetryTimerRef.current) {
+        clearTimeout(loadCommentsRetryTimerRef.current);
+        loadCommentsRetryTimerRef.current = 0;
+      }
+    };
   }, [newsId]);
+
+  useEffect(() => {
+    if (!open) return;
+    loadComments();
+  }, [open]);
 
   useEffect(() => {
     if (autoOpen) setOpen(true);
@@ -2400,8 +2426,9 @@ function CommentThread({
   }
 
   function isOriginalPoster(entry) {
-    if (!isForumThread || !threadOwnerUserId || !entry?.userId) return false;
-    return String(entry.userId) === String(threadOwnerUserId);
+    const entryUserId = resolveEntryUserId(entry);
+    if (!isForumThread || !threadOwnerUserId || !entryUserId) return false;
+    return entryUserId === String(threadOwnerUserId);
   }
 
   function authorSizeClass(value) {
@@ -3217,9 +3244,9 @@ function CommentThread({
     if (!entry) return;
     setProfileCardLoading(true);
     try {
-    const authorUserId = String(entry?.userId || entry?.authorUserId || entry?.createdBy || "");
+    const authorUserId = resolveEntryUserId(entry);
     const rank = resolveRank(entry);
-    const isOwn = Boolean(userId && entry.userId && entry.userId === userId);
+    const isOwn = Boolean(userId && authorUserId && String(authorUserId) === String(userId));
     const email = String(entry.authorEmail || "").toLowerCase();
     const username = String(entry.authorUsername || "").toLowerCase();
     const authorName = String(entry.authorName || "").toLowerCase();
@@ -3352,7 +3379,7 @@ function CommentThread({
 
   function openCommentProfileEntry(entry) {
     if (!entry) return;
-    const entryUserId = String(entry?.userId || "");
+    const entryUserId = resolveEntryUserId(entry);
     const isOwnEntry = Boolean(isSignedIn && userId && entryUserId && String(userId) === entryUserId);
     if (isOwnEntry) {
       setSelfProfileChooserEntry(entry);
@@ -3566,9 +3593,9 @@ function CommentThread({
                             ${actionStatusByComment[comment.id]}
                           </div>`
                         : html``}
-                      ${(editingId !== comment.id && (comment.userId === userId || (isSignedIn && !commentsLocked)))
+                      ${(editingId !== comment.id && (resolveEntryUserId(comment) === String(userId || "") || (isSignedIn && !commentsLocked)))
                         ? html`<div className="comment-controls right">
-                            ${comment.userId === userId
+                            ${resolveEntryUserId(comment) === String(userId || "")
                               ? html`<button
                                   className="ghost-btn"
                                   type="button"
@@ -3716,9 +3743,9 @@ function CommentThread({
                                             </p>
                                           </div>`}
                                       ${(editingReplyKey !== `${comment.id}:${reply.id}` &&
-                                      (reply.userId === userId || (isSignedIn && !commentsLocked)))
+                                      (resolveEntryUserId(reply) === String(userId || "") || (isSignedIn && !commentsLocked)))
                                         ? html`<div className="comment-controls right">
-                                            ${reply.userId === userId
+                                            ${resolveEntryUserId(reply) === String(userId || "")
                                               ? html`<button
                                                   className="ghost-btn"
                                                   type="button"
