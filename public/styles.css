@@ -1256,18 +1256,29 @@ body[data-theme="dark"] {
 .forum-markdown-render h3 {
   margin: 0 0 10px;
   line-height: 1.25;
+  font-family: "Bebas Neue", sans-serif;
+  letter-spacing: 0.02em;
+  color: var(--text);
 }
 
 .forum-markdown-render h1 {
-  font-size: 1.4rem;
+  font-size: 2rem;
 }
 
 .forum-markdown-render h2 {
-  font-size: 1.22rem;
+  font-size: 1.55rem;
 }
 
 .forum-markdown-render h3 {
-  font-size: 1.08rem;
+  font-size: 1.25rem;
+}
+
+.forum-markdown-render strong {
+  font-weight: 700;
+}
+
+.forum-markdown-render em {
+  font-style: italic;
 }
 
 .forum-markdown-render ul,

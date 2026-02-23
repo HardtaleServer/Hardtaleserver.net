@@ -43,3 +43,14 @@ test("markdown renderer outputs safe html and blocks unsafe script/link payloads
   assert.equal(html.includes("javascript:"), false);
   assert.equal(html.includes("https://example.com"), true);
 });
+
+test("markdown renderer supports h1/h2/h3 with bold and italic", () => {
+  const html = markdownToSafeHtml(
+    "# Heading One\n## Heading Two\n### Heading Three\nThis has **bold** and *italic* text.",
+  );
+  assert.equal(html.includes("<h1>Heading One</h1>"), true);
+  assert.equal(html.includes("<h2>Heading Two</h2>"), true);
+  assert.equal(html.includes("<h3>Heading Three</h3>"), true);
+  assert.equal(html.includes("<strong>bold</strong>"), true);
+  assert.equal(html.includes("<em>italic</em>"), true);
+});

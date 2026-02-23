@@ -24,7 +24,8 @@ function applyInlineMarkdown(input) {
   let value = escapeHtml(input);
   const codeSpans = [];
   value = value.replace(/`([^`]+)`/g, (_, code) => {
-    const token = `__CODE_SPAN_${codeSpans.length}__`;
+    // Use a token that cannot collide with markdown markers like "__bold__".
+    const token = `@@CODE_SPAN_${codeSpans.length}@@`;
     codeSpans.push(`<code>${escapeHtml(code)}</code>`);
     return token;
   });
@@ -39,10 +40,10 @@ function applyInlineMarkdown(input) {
     if (!safeUrl) return escapeHtml(text);
     return `<a href="${escapeHtml(safeUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>`;
   });
-  value = value.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-  value = value.replace(/__([^_]+)__/g, "<strong>$1</strong>");
-  value = value.replace(/\*([^*\n]+)\*/g, "<em>$1</em>");
-  value = value.replace(/_([^_\n]+)_/g, "<em>$1</em>");
+  value = value.replace(/\*\*(?=\S)([\s\S]*?\S)\*\*/g, "<strong>$1</strong>");
+  value = value.replace(/__(?=\S)([\s\S]*?\S)__/g, "<strong>$1</strong>");
+  value = value.replace(/\*(?=\S)([\s\S]*?\S)\*/g, "<em>$1</em>");
+  value = value.replace(/_(?=\S)([\s\S]*?\S)_/g, "<em>$1</em>");
   value = value.replace(/~~([^~]+)~~/g, "<s>$1</s>");
   value = value.replace(/\+\+([^+]+)\+\+/g, "<u>$1</u>");
   value = value.replace(
@@ -52,7 +53,7 @@ function applyInlineMarkdown(input) {
   );
 
   codeSpans.forEach((snippet, index) => {
-    value = value.replace(`__CODE_SPAN_${index}__`, snippet);
+    value = value.replace(`@@CODE_SPAN_${index}@@`, snippet);
   });
   return value;
 }

@@ -401,19 +401,19 @@ export default function ForumRichEditor({
           title="Toggle tools"
         >
           <img className="forum-editor-tools-icon" src=${ADMIN_PANEL_ICON_SVG} alt="" aria-hidden="true" />
-          <span>Tools</span>
+          <span>Markdown Tools</span>
         </button>
         <div className="forum-editor-status muted">${draftStatus}</div>
       </div>
 
       <div className=${`forum-editor-toolbar ${toolbarExpanded ? "expanded" : ""}`.trim()}>
-        <button type="button" className="ghost-btn" onClick=${() => wrap("**")}><strong>B</strong></button>
-        <button type="button" className="ghost-btn" onClick=${() => wrap("*")}><em>I</em></button>
+        <button type="button" className="ghost-btn" onClick=${() => wrap("**")} title="Bold (Ctrl+B)"><strong>B</strong></button>
+        <button type="button" className="ghost-btn" onClick=${() => wrap("*")} title="Italic (Ctrl+I)"><em>I</em></button>
         <button type="button" className="ghost-btn" onClick=${() => wrap("++")}>U</button>
         <button type="button" className="ghost-btn" onClick=${() => wrap("~~")}>S</button>
-        <button type="button" className="ghost-btn" onClick=${() => prefix("# ")}>H1</button>
-        <button type="button" className="ghost-btn" onClick=${() => prefix("## ")}>H2</button>
-        <button type="button" className="ghost-btn" onClick=${() => prefix("### ")}>H3</button>
+        <button type="button" className="ghost-btn" onClick=${() => prefix("# ")} title="Heading 1">H1</button>
+        <button type="button" className="ghost-btn" onClick=${() => prefix("## ")} title="Heading 2">H2</button>
+        <button type="button" className="ghost-btn" onClick=${() => prefix("### ")} title="Heading 3">H3</button>
         <button type="button" className="ghost-btn forum-editor-icon-btn" onClick=${() => prefix("- ")} title="Bulleted list"><${ToolIcon} name="list" /></button>
         <button type="button" className="ghost-btn forum-editor-icon-btn" onClick=${() => prefix("1. ")} title="Numbered list"><${ToolIcon} name="numbered" /></button>
         <button type="button" className="ghost-btn forum-editor-icon-btn" onClick=${() => prefix("> ")} title="Quote"><${ToolIcon} name="quote" /></button>
