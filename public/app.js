@@ -96,7 +96,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.22";
+const VERSION = "1.4.25";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -14333,6 +14333,42 @@ function Layout() {
               </div>
             </div>
           ${renderUserSearchBar({ mobile: true })}
+          <${SignedIn}>
+            <section className="mobile-online-friends">
+              <div className="mobile-online-friends-head">
+                <span>Friends</span>
+                <button
+                  type="button"
+                  className="ghost-btn mobile-online-friends-view-all"
+                  onClick=${() => setFriendsModalOpen(true)}
+                >
+                  View all
+                </button>
+              </div>
+              ${friendsLoading
+                ? html`<div className="muted mobile-online-friends-empty">Loading friends...</div>`
+                : drawerFriends.length === 0
+                ? html`<div className="muted mobile-online-friends-empty">No friends yet.</div>`
+                : html`<div className="mobile-online-friends-strip">
+                    ${drawerFriends.map((entry) => {
+                      const badge = resolveFriendBadge(entry);
+                      return html`<button
+                        key=${entry.userId}
+                        type="button"
+                        className="mobile-online-friend-chip"
+                        onClick=${() => openUserDirectoryProfile(entry)}
+                        title=${`Open ${entry.name}'s profile`}
+                      >
+                        <img src=${entry.image} alt=${entry.name} />
+                        <span>${entry.name}</span>
+                        <small className=${`mobile-online-friend-rank friend-rank-pill ${badge.className}`.trim()}>
+                          ${badge.label}
+                        </small>
+                      </button>`;
+                    })}
+                  </div>`}
+            </section>
+          <//>
           <${MobileDrawerLinks}
             navigate=${navigate}
             closeMenu=${() => setShowMobileNav(false)}
@@ -14351,40 +14387,6 @@ function Layout() {
               </div>
             <//>
             <${SignedIn}>
-              <section className="mobile-online-friends">
-                <div className="mobile-online-friends-head">
-                  <span>Friends</span>
-                  <button
-                    type="button"
-                    className="ghost-btn mobile-online-friends-view-all"
-                    onClick=${() => setFriendsModalOpen(true)}
-                  >
-                    View all
-                  </button>
-                </div>
-                ${friendsLoading
-                  ? html`<div className="muted mobile-online-friends-empty">Loading friends...</div>`
-                  : drawerFriends.length === 0
-                  ? html`<div className="muted mobile-online-friends-empty">No friends yet.</div>`
-                  : html`<div className="mobile-online-friends-strip">
-                      ${drawerFriends.map((entry) => {
-                        const badge = resolveFriendBadge(entry);
-                        return html`<button
-                          key=${entry.userId}
-                          type="button"
-                          className="mobile-online-friend-chip"
-                          onClick=${() => openUserDirectoryProfile(entry)}
-                          title=${`Open ${entry.name}'s profile`}
-                        >
-                          <img src=${entry.image} alt=${entry.name} />
-                          <span>${entry.name}</span>
-                          <small className=${`mobile-online-friend-rank friend-rank-pill ${badge.className}`.trim()}>
-                            ${badge.label}
-                          </small>
-                        </button>`;
-                      })}
-                    </div>`}
-              </section>
               <div className="drawer-user">
                 <${MobileDrawerProfilePreview}
                   className="drawer-profile-preview"

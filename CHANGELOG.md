@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-23 (v1.4.25)
+- Moved the mobile drawer `Friends` preview card block to sit directly under the mobile user-search bar so social discovery and friend access stay grouped in one place.
+- Removed the duplicated lower placement of the same mobile friends block near the drawer footer/profile area.
+
 ## 2026-02-23 (v1.4.24)
 - Fixed friend profile opening flow from Home/Friends surfaces:
   - Home hero friend chips now open the clicked user profile directly.
