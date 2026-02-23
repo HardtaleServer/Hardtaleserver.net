@@ -2,6 +2,32 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-23 (v1.4.24)
+- Fixed friend profile opening flow from Home/Friends surfaces:
+  - Home hero friend chips now open the clicked user profile directly.
+  - Friend-directory normalization no longer fails when a user has no username; falls back to a stable generated handle.
+  - Friend profile payload mapping now preserves rank/owned-rank/staff metadata for profile modal hydration.
+- Expanded friend profile data returned by `/api/friends`:
+  - Added `ownedRank`, `staffRole`, and `isStaffUser` in friend profile snapshots.
+  - Improved staff-first rank label fallback in friend profile shaping.
+- Added social achievements:
+  - `Friendship Forged` unlocks when a friend request is accepted.
+  - `Private Messenger` unlocks when a private message is sent.
+- Added notification reply flow for private messages:
+  - Notification cards now show `Reply` for private-message notifications.
+  - Reply opens the full PM modal/thread for back-and-forth conversation context.
+- Improved friend-card hover UX:
+  - Added hover profile peek card support on Home friend chips and Friends modal rows (hover-capable devices).
+  - Kept direct click/tap opening behavior for full profile modal.
+- Updated friend rank/staff pill behavior:
+  - Friend badge resolver now honors `isStaffUser` and full staff metadata.
+  - Added explicit styling support for `staff-role-staff` pill class.
+- Improved forum staff gradient coverage:
+  - Applied staff gradient classes to forum author-name rendering.
+  - Added staff-gradient markdown treatment for forum post bodies/previews when staff gradient is enabled.
+- Refined forum Past Edits modal visual feed:
+  - Upgraded edit cards/banner/detail blocks with stronger themed gradients, borders, and surface treatments.
+
 ## 2026-02-23 (v1.4.23)
 - Reworked Friends UX across mobile drawer + Friends modal:
   - Mobile drawer friends strip now shows all friends (not only online), keeps `View all`, and supports friend badge pills.

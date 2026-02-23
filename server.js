@@ -143,6 +143,18 @@ const ACHIEVEMENT_DEFS = [
     description: "@ mention another player successfully",
     icon: "@",
   },
+  {
+    key: "friendship_forged",
+    title: "Friendship Forged",
+    description: "Add a friend successfully",
+    icon: "F",
+  },
+  {
+    key: "private_messenger",
+    title: "Private Messenger",
+    description: "Send a private message",
+    icon: "M",
+  },
 ];
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI || "";
 const MONGO_DB_NAME = process.env.MONGO_DB || process.env.MONGODB_DB || "hardtaledb";
@@ -2945,8 +2957,10 @@ function toBasicFriendProfile(user = null) {
   if (!user?.id) return null;
   const metadata = user?.publicMetadata || {};
   const ownedRank = applyLinkedOwnedRankFloor(metadata?.rank, true);
+  const staffRole = resolveStaffRoleForUser(user);
   const rankLabel =
     normalizeDisplayTitle(metadata?.displayRank) ||
+    (staffRole ? "Staff" : "") ||
     normalizeOwnedRank(ownedRank) ||
     "Registered";
   return {
@@ -2955,6 +2969,9 @@ function toBasicFriendProfile(user = null) {
     name: getUserDisplayName(user),
     image: String(user?.imageUrl || ""),
     rankLabel,
+    ownedRank: normalizeOwnedRank(ownedRank) || "Unregistered",
+    staffRole: staffRole || "",
+    isStaffUser: Boolean(staffRole),
     online: (() => {
       const last = Number(user?.lastActiveAt || 0);
       if (!Number.isFinite(last) || last <= 0) return false;
@@ -4892,6 +4909,12 @@ app.post("/api/friends/respond", async (req, res) => {
           acceptedByUser: acceptedBy,
         });
       }
+      await Promise.all([
+        unlockAchievement(userId, "friendship_forged", { notify: true }).catch(() => {}),
+        fromUserId
+          ? unlockAchievement(fromUserId, "friendship_forged", { notify: true }).catch(() => {})
+          : Promise.resolve(),
+      ]);
     }
 
     return res.json({ ok: true, requestId, status: nextStatus });
@@ -7840,6 +7863,7 @@ app.post("/api/private-messages", async (req, res) => {
       updatedAt: now,
     };
     await privateMessagesCollection.insertOne(record);
+    await unlockAchievement(auth.userId, "private_messenger", { notify: true }).catch(() => {});
 
     const senderLabel =
       formatUsernameForDisplay(senderUser?.username, 80) ||
@@ -7871,6 +7895,7 @@ app.post("/api/private-messages", async (req, res) => {
       createdAt: now,
       updatedAt: now,
     });
+    await unlockAchievement(auth.userId, "private_messenger", { notify: true }).catch(() => {});
     await pruneCollection(notificationsCollection, 120);
     return res.json({ message: normalizePrivateMessageDoc(record) });
   } catch (error) {

@@ -25,6 +25,7 @@ export default function NotificationsPanel({
   notifications = [],
   onView,
   onOpenProfile,
+  onReplyPrivateMessage,
   onDelete,
   onFriendAction,
   deletingId = "",
@@ -79,6 +80,14 @@ export default function NotificationsPanel({
           friendActionStatus === "PENDING" &&
           typeof onFriendAction === "function";
         const friendBusy = String(friendActionBusyId || "") === friendRequestId;
+        const isPrivateMessageNotification =
+          String(item?.type || "") === "private_message" ||
+          String(item?.type || "") === "private_message_lite";
+        const canReplyPrivateMessage =
+          isPrivateMessageNotification &&
+          typeof onReplyPrivateMessage === "function" &&
+          Boolean(authorUserId) &&
+          !isSystemAuthor;
         return html`<div key=${item.id} className="notif-card">
           <div className="notif-title">
             <span className="notif-title-main">
@@ -177,6 +186,13 @@ export default function NotificationsPanel({
                   onClick=${() => onFriendAction(item, "decline")}
                 >
                   Decline
+                </button>
+              </div>`
+            : html``}
+          ${canReplyPrivateMessage
+            ? html`<div className="notif-actions">
+                <button className="ghost-btn" type="button" onClick=${() => onReplyPrivateMessage(item)}>
+                  Reply
                 </button>
               </div>`
             : html``}

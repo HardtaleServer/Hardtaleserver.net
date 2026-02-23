@@ -1973,6 +1973,7 @@ function resolveStaffPillTitle(entry) {
 function resolveFriendBadge(entry = null) {
   const rawRank = String(entry?.rankLabel || entry?.ownedRank || "Registered").trim();
   const hasStaffBadge =
+    Boolean(entry?.isStaffUser || entry?.authorIsStaff) ||
     isStaffLabel(entry?.staffRole || "") ||
     isStaffLabel(rawRank);
   if (hasStaffBadge) {
@@ -6661,6 +6662,22 @@ function ForumPage({ isAdmin = false }) {
     </span>`;
   }
 
+  function forumStaffTextClass(entry) {
+    if (!entry) return "";
+    const showStaffBadge = entry?.authorShowStaffBadge !== false;
+    const staffIdentity =
+      Boolean(entry?.authorIsStaff) ||
+      isStaffLabel(entry?.authorName || "") ||
+      isStaffLabel(entry?.authorUsername || "") ||
+      isStaffLabel(entry?.authorRank || "");
+    const selectedIsStaff = isStaffLabel(entry?.authorRank || "");
+    if (!showStaffBadge || !staffIdentity || !selectedIsStaff) return "";
+    const roleClass = resolveStaffRoleClass(entry);
+    return entry?.authorShowStaffGradient === false
+      ? `staff staff-static ${roleClass}`.trim()
+      : `staff ${roleClass}`.trim();
+  }
+
   function getForumPostAuthorUserId(post) {
     return String(post?.authorUserId || post?.createdBy || "");
   }
@@ -8527,7 +8544,7 @@ function ForumPage({ isAdmin = false }) {
                       <${AuthorName}
                         value=${selectedPost.authorName || "User"}
                         isStaffLabel=${isStaffLabel}
-                        className=${`author-name ${selectedPost?.authorUseRankFont === true ? "rank-font-on" : "rank-font-off"} rank-${rankSlug(selectedPost?.authorRank || "Unregistered")}`.trim()}
+                        className=${`author-name ${forumStaffTextClass(selectedPost)} ${selectedPost?.authorUseRankFont === true ? "rank-font-on" : "rank-font-off"} rank-${rankSlug(selectedPost?.authorRank || "Unregistered")}`.trim()}
                       />
                     </button>
                     <span className=${forumRankClassName(selectedPost)}>
@@ -8586,7 +8603,11 @@ function ForumPage({ isAdmin = false }) {
                         onMentionClick=${openForumMentionProfile}
                         onMentionHover=${handleForumMentionHover}
                         onMentionLeave=${handleForumMentionLeave}
-                        className="news-body-paragraph"
+                        className=${`news-body-paragraph ${
+                          forumStaffTextClass(selectedPost) && selectedPost?.authorShowStaffGradient !== false
+                            ? "forum-post-staff-gradient"
+                            : ""
+                        }`.trim()}
                       />`}
                   ${(canManageForumPost(selectedPost) || (selectedPost.editCount || 0) > 0)
                     ? html`<div className="forum-post-actions-row">
@@ -8768,7 +8789,7 @@ function ForumPage({ isAdmin = false }) {
                         <${AuthorName}
                           value=${post.authorName || "User"}
                           isStaffLabel=${isStaffLabel}
-                          className=${`author-name ${post?.authorUseRankFont === true ? "rank-font-on" : "rank-font-off"} rank-${rankSlug(post?.authorRank || "Unregistered")}`.trim()}
+                          className=${`author-name ${forumStaffTextClass(post)} ${post?.authorUseRankFont === true ? "rank-font-on" : "rank-font-off"} rank-${rankSlug(post?.authorRank || "Unregistered")}`.trim()}
                         />
                       </button>
                       <span className=${forumRankClassName(post)}>
@@ -8797,7 +8818,11 @@ function ForumPage({ isAdmin = false }) {
                       <div className="news-body-paragraph forum-post-preview">
                         <${ForumRenderedMarkdown}
                           value=${post.body || ""}
-                          className="forum-post-preview-markdown"
+                          className=${`forum-post-preview-markdown ${
+                            forumStaffTextClass(post) && post?.authorShowStaffGradient !== false
+                              ? "forum-post-staff-gradient"
+                              : ""
+                          }`.trim()}
                           onMentionClick=${openForumMentionProfile}
                           onMentionHover=${handleForumMentionHover}
                           onMentionLeave=${handleForumMentionLeave}
@@ -9865,6 +9890,9 @@ function HomePage({
   isSignedIn,
   friendsPreview = [],
   onOpenFriendsModal,
+  onOpenFriendProfile,
+  onFriendHoverOpen,
+  onFriendHoverClose,
 }) {
   const navigate = useNavigate();
   const { openSignIn } = useClerk();
@@ -10010,7 +10038,14 @@ function HomePage({
                             key=${entry.userId}
                             type="button"
                             className="home-hero-friend-chip"
-                            onClick=${() => onOpenFriendsModal && onOpenFriendsModal()}
+                            onClick=${() =>
+                              (typeof onOpenFriendProfile === "function"
+                                ? onOpenFriendProfile(entry)
+                                : onOpenFriendsModal && onOpenFriendsModal())}
+                            onMouseEnter=${(event) =>
+                              typeof onFriendHoverOpen === "function" && onFriendHoverOpen(entry, event.currentTarget)}
+                            onMouseLeave=${() =>
+                              typeof onFriendHoverClose === "function" && onFriendHoverClose()}
                             title=${entry.name || "Friend"}
                           >
                             <img src=${entry.image || "/assets/HardTale_H_GreyScale.png"} alt=${entry.name || "Friend"} />
@@ -11140,6 +11175,7 @@ function Layout() {
   const [ignoreActionBusyUserId, setIgnoreActionBusyUserId] = useState("");
   const [friendActionBusyUserId, setFriendActionBusyUserId] = useState("");
   const [friendRequestActionBusyId, setFriendRequestActionBusyId] = useState("");
+  const [friendHoverProfile, setFriendHoverProfile] = useState(null);
   const [profileTitleSaving, setProfileTitleSaving] = useState(false);
   const [drawerProfileSummary, setDrawerProfileSummary] = useState({
     rankLabel: "Unregistered",
@@ -11191,6 +11227,8 @@ function Layout() {
   const previousCartCountRef = useRef(null);
   const initialLoaderStartRef = useRef(Date.now());
   const previousSignedInRef = useRef(null);
+  const friendHoverOpenTimerRef = useRef(0);
+  const friendHoverCloseTimerRef = useRef(0);
   const toastTimersRef = useRef(new Map());
   const seenAchievementToastIdsRef = useRef(new Set());
   const liveNotificationBaselineReadyRef = useRef(false);
@@ -12163,6 +12201,21 @@ function Layout() {
     navigate(url);
   }
 
+  function handleNotificationReply(item) {
+    if (!item) return;
+    setShowNotifications(false);
+    openPrivateMessageModal({
+      userId: item?.authorUserId || "",
+      authorUserId: item?.authorUserId || "",
+      name: item?.authorName || item?.author || "User",
+      authorName: item?.authorName || item?.author || "User",
+      username: item?.authorUsername || "",
+      authorUsername: item?.authorUsername || "",
+      image: item?.authorImage || "/assets/HardTale_H_GreyScale.png",
+      authorImage: item?.authorImage || "/assets/HardTale_H_GreyScale.png",
+    });
+  }
+
   async function handleNotificationFriendAction(item, action) {
     const requestId = String(item?.friendRequestId || "").trim();
     if (!requestId) return;
@@ -12487,6 +12540,24 @@ function Layout() {
     },
     [],
   );
+
+  useEffect(
+    () => () => {
+      clearFriendHoverTimers();
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!friendHoverProfile || typeof window === "undefined") return undefined;
+    const hide = () => setFriendHoverProfile(null);
+    window.addEventListener("scroll", hide, { passive: true });
+    window.addEventListener("wheel", hide, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", hide);
+      window.removeEventListener("wheel", hide);
+    };
+  }, [friendHoverProfile]);
 
   async function loadLayoutProfileLinkStatus(targetUserId) {
     const safeUserId = String(targetUserId || "").trim();
@@ -13359,14 +13430,19 @@ function Layout() {
 
   function normalizeDirectoryUser(entry) {
     const normalizedUserId = String(entry?.userId || entry?.authorUserId || "").trim();
-    const normalizedUsername = formatUsernameForDisplay(entry?.username || entry?.authorUsername, 80);
+    const fallbackUsername = normalizedUserId ? `user-${normalizedUserId.slice(-6)}` : "user";
+    const normalizedUsername = formatUsernameForDisplay(entry?.username || entry?.authorUsername || fallbackUsername, 80);
     const normalizedName = String(entry?.name || entry?.authorName || normalizedUsername || "User").trim();
-    if (!normalizedUserId || !normalizedUsername) return null;
+    if (!normalizedUserId) return null;
     return {
       userId: normalizedUserId,
       username: normalizedUsername,
       name: normalizedName || normalizedUsername,
       image: String(entry?.image || entry?.authorImage || "/assets/HardTale_H_GreyScale.png"),
+      rankLabel: String(entry?.rankLabel || entry?.authorRank || "Unregistered"),
+      ownedRank: String(entry?.ownedRank || entry?.authorOwnedRank || entry?.rankLabel || "Unregistered"),
+      staffRole: String(entry?.staffRole || entry?.authorStaffRole || ""),
+      isStaffUser: Boolean(entry?.isStaffUser || entry?.authorIsStaff || isStaffLabel(entry?.staffRole || "")),
     };
   }
 
@@ -13379,11 +13455,86 @@ function Layout() {
       authorUsername: normalized.username,
       authorUserId: normalized.userId,
       authorImage: normalized.image,
-      authorRank: "Unregistered",
+      authorRank: normalized.rankLabel || "Unregistered",
+      authorOwnedRank: normalized.ownedRank || normalized.rankLabel || "Unregistered",
+      authorStaffRole: normalized.staffRole || "",
+      authorIsStaff: Boolean(normalized.isStaffUser),
     };
   }
 
+  function clearFriendHoverTimers() {
+    if (friendHoverOpenTimerRef.current) {
+      clearTimeout(friendHoverOpenTimerRef.current);
+      friendHoverOpenTimerRef.current = 0;
+    }
+    if (friendHoverCloseTimerRef.current) {
+      clearTimeout(friendHoverCloseTimerRef.current);
+      friendHoverCloseTimerRef.current = 0;
+    }
+  }
+
+  function openFriendHoverProfile(entry, anchorEl = null) {
+    const normalized = normalizeDirectoryUser(entry);
+    if (!normalized || typeof window === "undefined") return;
+    const rect = anchorEl?.getBoundingClientRect?.() || null;
+    const fallbackX = Math.max(10, Math.min(Math.round((window.innerWidth - 320) / 2), window.innerWidth - 340));
+    const x = rect
+      ? Math.max(10, Math.min(Math.round(rect.left + rect.width / 2 - 156), window.innerWidth - 330))
+      : fallbackX;
+    const y = rect
+      ? Math.max(84, Math.round(rect.bottom + 10))
+      : 112;
+    setFriendHoverProfile({ ...normalized, x, y });
+  }
+
+  function scheduleFriendHoverOpen(entry, anchorEl = null) {
+    if (typeof window !== "undefined" && window.matchMedia("(hover: none)").matches) return;
+    clearFriendHoverTimers();
+    friendHoverOpenTimerRef.current = setTimeout(() => {
+      openFriendHoverProfile(entry, anchorEl);
+      friendHoverOpenTimerRef.current = 0;
+    }, 380);
+  }
+
+  function scheduleFriendHoverClose() {
+    if (typeof window !== "undefined" && window.matchMedia("(hover: none)").matches) return;
+    if (friendHoverCloseTimerRef.current) clearTimeout(friendHoverCloseTimerRef.current);
+    friendHoverCloseTimerRef.current = setTimeout(() => {
+      setFriendHoverProfile(null);
+      friendHoverCloseTimerRef.current = 0;
+    }, 180);
+  }
+
+  function renderFriendHoverProfileCard() {
+    if (!friendHoverProfile) return html``;
+    const badge = resolveFriendBadge(friendHoverProfile);
+    const node = html`<div
+      className="forum-profile-peek-shell friend-profile-peek-shell"
+      style=${{ left: `${friendHoverProfile.x}px`, top: `${friendHoverProfile.y}px` }}
+      onMouseEnter=${() => clearFriendHoverTimers()}
+      onMouseLeave=${scheduleFriendHoverClose}
+    >
+      <${MobileDrawerProfilePreview}
+        className="drawer-profile-preview forum-profile-peek-card"
+        onClick=${() => openUserDirectoryProfile(friendHoverProfile)}
+        title=${`Open ${friendHoverProfile.name || "User"} profile`}
+        avatar=${friendHoverProfile.image || "/assets/HardTale_H_GreyScale.png"}
+        name=${friendHoverProfile.name || "User"}
+        username=${friendHoverProfile.username || ""}
+        linkedLabel="Linked"
+        displayedBadge=${badge.label}
+        showStaffBadge=${badge.className.includes("staff")}
+        staffLabel=${badge.label}
+        staffRoleClass=${badge.className.includes("staff") ? badge.className.replace("staff", "").trim() : ""}
+      />
+    </div>`;
+    if (typeof document === "undefined" || !document.body) return node;
+    return createPortal(node, document.body);
+  }
+
   function openUserDirectoryProfile(entry) {
+    clearFriendHoverTimers();
+    setFriendHoverProfile(null);
     const target = mapUserToProfileTarget(entry);
     if (!target) return;
     setUserSearchOpen(false);
@@ -14125,6 +14276,9 @@ function Layout() {
           onOpenNewsAuthorProfile=${openNotificationProfile}
           homeFriendsPreview=${allFriends}
           onOpenFriendsModal=${() => setFriendsModalOpen(true)}
+          onOpenFriendProfile=${(entry) => openUserDirectoryProfile(entry)}
+          onFriendHoverOpen=${scheduleFriendHoverOpen}
+          onFriendHoverClose=${scheduleFriendHoverClose}
         />
 
         <${SiteFooter}
@@ -14366,6 +14520,7 @@ function Layout() {
           ${STRIPE_PUBLISHABLE_KEY ? "Pay now" : "Checkout"}
         </button>
       <//>
+      ${renderFriendHoverProfileCard()}
 
       <${PopUp}
         show=${showNotifications}
@@ -14378,6 +14533,7 @@ function Layout() {
           onDelete=${deleteNotificationForMe}
           deletingId=${notificationDeletingId}
           onOpenProfile=${openNotificationProfile}
+          onReplyPrivateMessage=${handleNotificationReply}
           onFriendAction=${handleNotificationFriendAction}
           friendActionBusyId=${friendRequestActionBusyId}
           currentUserId=${userId}
@@ -14667,6 +14823,8 @@ function Layout() {
                             type="button"
                             className="friends-modal-row-main"
                             onClick=${() => openUserDirectoryProfile(entry)}
+                            onMouseEnter=${(event) => scheduleFriendHoverOpen(entry, event.currentTarget)}
+                            onMouseLeave=${scheduleFriendHoverClose}
                           >
                             <img src=${entry.image || "/assets/HardTale_H_GreyScale.png"} alt=${entry.name || "User"} />
                             <span>
@@ -14713,6 +14871,8 @@ function Layout() {
                             type="button"
                             className="friends-modal-row-main"
                             onClick=${() => openUserDirectoryProfile(entry)}
+                            onMouseEnter=${(event) => scheduleFriendHoverOpen(entry, event.currentTarget)}
+                            onMouseLeave=${scheduleFriendHoverClose}
                           >
                             <span className="friends-modal-row-avatar-wrap">
                               <img src=${entry.image || "/assets/HardTale_H_GreyScale.png"} alt=${entry.name || "User"} />
