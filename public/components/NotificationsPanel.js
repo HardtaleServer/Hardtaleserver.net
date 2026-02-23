@@ -29,6 +29,7 @@ export default function NotificationsPanel({
   onFriendAction,
   deletingId = "",
   friendActionBusyId = "",
+  currentUserId = "",
   formatTimestamp,
   isStaffLabel,
   featuredIconSrc = "/Images/SVGs/ui/Featured.svg",
@@ -74,6 +75,7 @@ export default function NotificationsPanel({
         const canFriendAct =
           isFriendRequest &&
           friendRequestId &&
+          String(item?.targetUserId || "").trim() === String(currentUserId || "").trim() &&
           friendActionStatus === "PENDING" &&
           typeof onFriendAction === "function";
         const friendBusy = String(friendActionBusyId || "") === friendRequestId;

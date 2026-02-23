@@ -12112,6 +12112,24 @@ function Layout() {
   async function handleNotificationFriendAction(item, action) {
     const requestId = String(item?.friendRequestId || "").trim();
     if (!requestId) return;
+    const targetUserId = String(item?.targetUserId || "").trim();
+    const ownUserId = String(userId || "").trim();
+    if (!ownUserId || !isSignedIn) {
+      emitAppToast({
+        kind: "error",
+        title: "Sign in required",
+        message: "Sign in to respond to friend requests.",
+      });
+      return;
+    }
+    if (targetUserId && targetUserId !== ownUserId) {
+      emitAppToast({
+        kind: "info",
+        title: "Request already handled",
+        message: "This friend request is not assigned to your account.",
+      });
+      return;
+    }
     await respondFriendRequest({ requestId, action });
   }
 
@@ -13176,6 +13194,24 @@ function Layout() {
         body: JSON.stringify({ requestId: safeRequestId, action: safeAction }),
       });
       const data = await response.json().catch(() => ({}));
+      if (!response.ok && String(data?.error || "") === "not_request_target") {
+        await Promise.all([
+          refreshFriendsSnapshot(),
+          (async () => {
+            const refreshResponse = await apiFetchWithToken(getToken, true, "/api/notifications");
+            const refreshData = await refreshResponse.json().catch(() => ({}));
+            if (refreshResponse.ok && Array.isArray(refreshData?.notifications)) {
+              setNotifications(refreshData.notifications);
+            }
+          })(),
+        ]);
+        emitAppToast({
+          kind: "info",
+          title: "Request already handled",
+          message: "This friend request is no longer actionable on your account.",
+        });
+        return;
+      }
       if (!response.ok) throw new Error(String(data?.error || "Failed to update friend request."));
       emitAppToast({
         kind: "success",
@@ -14063,6 +14099,7 @@ function Layout() {
           onOpenProfile=${openNotificationProfile}
           onFriendAction=${handleNotificationFriendAction}
           friendActionBusyId=${friendRequestActionBusyId}
+          currentUserId=${userId}
           formatTimestamp=${formatTimestamp}
           isStaffLabel=${isStaffLabel}
           featuredIconSrc=${FEATURED_BADGE_ICON_SVG}
