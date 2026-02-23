@@ -7,6 +7,7 @@ All notable changes to this project are documented here.
 - Added race-safe hover hydration guards to prevent delayed metadata fetches from overwriting the active preview card after pointer movement.
 - Reworked mobile profile modal sizing to a bounded popup with internal profile-content scrolling (instead of full-screen modal takeover) and applied existing custom scrollbar theming to that internal scroll region.
 - Updated profile badge settings dropdown defaults so Donor Tab and Staff Tab now start collapsed.
+- Redesigned mobile profile info tabs into a 2x2 layout with larger tap targets so the Achievements tab is no longer compressed.
 - Removed temporary root-level response/handoff `.txt` artifacts to keep repository contents focused on code and durable project docs.
 
 ## 2026-02-23 (v1.4.12)

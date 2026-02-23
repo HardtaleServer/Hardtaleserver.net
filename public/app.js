@@ -207,6 +207,7 @@ const CHANGELOG_ENTRIES = [
       "Added race-safe hover hydration guards so delayed profile fetch responses cannot overwrite the current hover card with outdated data after pointer movement.",
       "Reworked mobile profile-card modal sizing to use a bounded popup with internal profile-content scrolling instead of full-height takeover, and routed that internal scroll region through the custom scrollbar theme.",
       "Updated profile badge settings dropdown behavior so Donor Tab and Staff Tab now default collapsed instead of auto-open.",
+      "Redesigned mobile profile info tabs into a 2x2 layout with larger touch targets so labels like `Achievements` no longer appear squished.",
       "Removed temporary root-level response/handoff `.txt` artifacts from the repository to keep project files focused on runtime code and durable documentation.",
     ],
   },
