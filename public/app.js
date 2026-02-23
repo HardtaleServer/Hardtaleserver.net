@@ -9320,10 +9320,11 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
     fetchedAt: "",
   });
   const fullCode = digits.join("");
-  const isComplete = fullCode.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(fullCode);
+  const effectiveInputCode = linkedInfo.linked ? LINKED_INPUT_DISPLAY : fullCode;
+  const isComplete = effectiveInputCode.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(effectiveInputCode);
   const urlCode = strictQuery.code;
   const isCooldownActive = cooldownLeft > 0;
-  const debugCode = isComplete ? fullCode : urlCode;
+  const debugCode = linkedInfo.linked ? LINKED_INPUT_DISPLAY : isComplete ? fullCode : urlCode;
   const clerkUsername = formatUsernameForDisplay(user?.username, 80) || "unknown";
   const clerkEmail = String(user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress || "");
   const linkedDebugSummary = linkedInfo.linked
@@ -9409,6 +9410,24 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
     let cancelled = false;
     let abortController = null;
     let debounceTimer = null;
+    if (linkedInfo.linked) {
+      linkInfoLastRejected4xxCodeRef.current = "";
+      linkInfoLastRequestedCodeRef.current = "";
+      setLinkDebugInfo((prev) => ({
+        ...prev,
+        loading: false,
+        error: "",
+        code: LINKED_INPUT_DISPLAY,
+        status: "linked_placeholder",
+        valid: true,
+        isClaimed: true,
+        isExpired: false,
+        fetchedAt: new Date().toISOString(),
+      }));
+      return () => {
+        cancelled = true;
+      };
+    }
     if (!debugCode || !LINK_CODE_REGEX.test(debugCode)) {
       linkInfoLastRejected4xxCodeRef.current = "";
       linkInfoLastRequestedCodeRef.current = "";
@@ -9524,7 +9543,7 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
         abortController.abort();
       }
     };
-  }, [debugCode, LINK_CODE_REGEX]);
+  }, [debugCode, LINK_CODE_REGEX, linkedInfo.linked, LINKED_INPUT_DISPLAY]);
 
   useEffect(() => {
     if (!showComparison) return;
@@ -9781,6 +9800,11 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
             />`,
           )}
         </div>
+        ${linkedInfo.linked
+          ? html`<div className="link-status link-status-info">
+              HARDTALE is the linked-account placeholder input. No code verification is required.
+            </div>`
+          : html``}
         <div className="link-actions">
           ${isCooldownActive
             ? html`<div className="link-status link-status-error">
