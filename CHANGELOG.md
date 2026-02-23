@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-23 (v1.4.15)
+- Added a desktop navbar user-search bar with `Person_Search.svg` icon and live `/api/forum/members` lookup.
+- Search results now render as avatar-first, scrollable profile rows; selecting a row opens the same profile modal flow used elsewhere in the app.
+- Added a transparent-style user-search bar at the top of the mobile drawer.
+- Added a mobile `Online Friends` horizontal strip above the drawer profile card, with quick-open friend chips and a `View all` action.
+- Added a `Friends` modal containing `Online Friends`, `All Friends`, and `Friend Requests` sections for central social browsing.
+
+## 2026-02-23 (v1.4.14)
+- Updated News & Updates author attribution so cards now render the real posting user identity (`authorName` + `authorImage`) instead of only static `By Hardtale` text.
+- Added interactive author controls on news cards: clicking/tapping the author row now opens the existing profile modal for that post author (when `authorUserId` is present), enabling direct profile access from news items.
+- Added dedicated news-meta author button/avatar styling for better visibility while preserving a non-interactive fallback label for system posts without a linked user id.
+
 ## 2026-02-23 (v1.4.13)
 - Fixed forum author hover/tap preview-card data hydration so avatar/name hover now resolves current linked status and badge metadata instead of stale post-snapshot values.
 - Added race-safe hover hydration guards to prevent delayed metadata fetches from overwriting the active preview card after pointer movement.

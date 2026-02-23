@@ -38,6 +38,7 @@ export default function AppRoutes({
   profileRankLabel,
   profileOwnedRank,
   profileStaffRole,
+  onOpenNewsAuthorProfile,
 }) {
   return html`
     <${Routes} location=${routesLocation}>
@@ -81,6 +82,7 @@ export default function AppRoutes({
           notifications=${sortedNotifications}
           onNewsUpdate=${setNews}
           onNotificationsUpdate=${setNotifications}
+          onOpenAuthorProfile=${onOpenNewsAuthorProfile}
         />`}
       />
       <${Route} path="/about-us" element=${html`<${AboutUsPage} />`} />

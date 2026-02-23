@@ -96,7 +96,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.12";
+const VERSION = "1.4.15";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -111,6 +111,7 @@ const WARNING_STATUS_ICON_SVG = "/Images/SVGs/toasts/Warning.svg";
 const SUCCESS_STATUS_ICON_SVG = "/Images/SVGs/toasts/Success.svg";
 const ERROR_STATUS_ICON_SVG = "/Images/SVGs/toasts/Error.svg";
 const INFO_STATUS_ICON_SVG = "/Images/SVGs/toasts/Info.svg";
+const PERSON_SEARCH_ICON_SVG = "/Images/SVGs/Person_Search.svg";
 const HERO_RANK_ICON_SVG = "/Images/SVGs/ranks/RANK_HERO.svg";
 const MOD_RANK_ICON_SVG = "/Images/SVGs/ranks/RANK_MOD.svg";
 const ACHIEVEMENT_STAR_ICON_SVG = "/Images/SVGs/ui/Achievement_Star.svg";
@@ -199,6 +200,25 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.4.15",
+    date: "2026-02-23",
+    items: [
+      "Added navbar user-search bar with `Person_Search.svg` icon, live member lookup, and scrollable avatar-first dropdown rows that open profile cards directly.",
+      "Added mobile drawer user-search at the top with a transparent/glass treatment and matching scrollable search-result cards.",
+      "Added mobile drawer online-friends horizontal strip above the profile card, including quick profile-open chips and a `View all` action.",
+      "Added Friends modal with `Online Friends`, `All Friends`, and `Friend Requests` sections for central social navigation.",
+    ],
+  },
+  {
+    version: "1.4.14",
+    date: "2026-02-23",
+    items: [
+      "Updated news author metadata rendering so cards now show the real posting user identity (author display name + avatar) instead of a static `By Hardtale` fallback.",
+      "Added clickable/tappable news author identity controls that open the existing profile modal flow for that author, enabling direct hover/tap profile access from News & Updates.",
+      "Added dedicated `news-meta` author button/avatar styling for clearer author attribution while preserving fallback text for system-authored posts.",
+    ],
+  },
   {
     version: "1.4.13",
     date: "2026-02-23",
@@ -1934,7 +1954,13 @@ async function apiFetchWithToken(getToken, isSignedIn, url, options = {}) {
   return response;
 }
 
-function NewsCard({ item, focusCommentId, focusReplyId, autoOpenComments }) {
+function NewsCard({
+  item,
+  focusCommentId,
+  focusReplyId,
+  autoOpenComments,
+  onOpenAuthorProfile,
+}) {
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [expandedDescription, setExpandedDescription] = useState(false);
   const descriptionText = String(item.description || "");
@@ -1944,6 +1970,10 @@ function NewsCard({ item, focusCommentId, focusReplyId, autoOpenComments }) {
     hasLongDescription && !expandedDescription
       ? `${descriptionText.slice(0, descriptionLimit).trimEnd()}...`
       : descriptionText;
+  const authorUserId = String(item?.authorUserId || "").trim();
+  const authorName = String(item?.authorName || item?.author || "Hardtale");
+  const authorAvatar = String(item?.authorImage || "/assets/HardTale_H_GreyScale.png");
+  const canOpenAuthorProfile = Boolean(authorUserId && typeof onOpenAuthorProfile === "function");
 
   return html`
     <article className="news-card" data-news-id=${item.id}>
@@ -1966,9 +1996,21 @@ function NewsCard({ item, focusCommentId, focusReplyId, autoOpenComments }) {
           <${TimestampText} value=${item.createdAt} formatTimestamp=${formatTimestamp} />
         </div>
         <div className="news-meta-right">
-          <span className="news-meta-author">
-            By <${AuthorName} value=${item.author} isStaffLabel=${isStaffLabel} />
-          </span>
+          ${canOpenAuthorProfile
+            ? html`<button
+                type="button"
+                className="news-meta-author-button"
+                title=${`Open ${authorName}'s profile`}
+                onClick=${() => onOpenAuthorProfile(item)}
+              >
+                <img className="news-meta-author-avatar" src=${authorAvatar} alt=${authorName} />
+                <span className="news-meta-author">
+                  By <${AuthorName} value=${authorName} isStaffLabel=${isStaffLabel} />
+                </span>
+              </button>`
+            : html`<span className="news-meta-author">
+                By <${AuthorName} value=${authorName} isStaffLabel=${isStaffLabel} />
+              </span>`}
           <div className="news-meta-actions">
             ${item.imageUrl
               ? html`<button
@@ -10102,6 +10144,7 @@ function NewsPage({
   notifications,
   onNewsUpdate,
   onNotificationsUpdate,
+  onOpenAuthorProfile,
 }) {
   const location = useLocation();
   const featuredItem = news.find((item) => item.featured);
@@ -10176,6 +10219,7 @@ function NewsPage({
                   focusCommentId=${item.id === focusNewsId ? focusCommentId : ""}
                   focusReplyId=${item.id === focusNewsId ? focusReplyId : ""}
                   autoOpenComments=${item.id === focusNewsId && Boolean(focusCommentId)}
+                  onOpenAuthorProfile=${onOpenAuthorProfile}
                 />`,
               )}
             </div>`}
@@ -10941,6 +10985,13 @@ function Layout() {
   const [privateMessageStatus, setPrivateMessageStatus] = useState("");
   const [privateMessageLoading, setPrivateMessageLoading] = useState(false);
   const [privateMessageSending, setPrivateMessageSending] = useState(false);
+  const [userSearchQuery, setUserSearchQuery] = useState("");
+  const [userSearchOpen, setUserSearchOpen] = useState(false);
+  const [userSearchLoading, setUserSearchLoading] = useState(false);
+  const [userSearchResults, setUserSearchResults] = useState([]);
+  const [socialDirectory, setSocialDirectory] = useState([]);
+  const [socialDirectoryLoading, setSocialDirectoryLoading] = useState(false);
+  const [friendsModalOpen, setFriendsModalOpen] = useState(false);
   const [profileTitleSaving, setProfileTitleSaving] = useState(false);
   const [drawerProfileSummary, setDrawerProfileSummary] = useState({
     rankLabel: "Unregistered",
@@ -10978,6 +11029,8 @@ function Layout() {
   const [avatarPanelOpen, setAvatarPanelOpen] = useState(false);
   const [avatarPanelStatus, setAvatarPanelStatus] = useState("");
   const avatarFileInputRef = useRef(null);
+  const userSearchRootRef = useRef(null);
+  const userSearchMobileRootRef = useRef(null);
   const shellRef = useRef(null);
   const topbarRef = useRef(null);
   const playRef = useRef(null);
@@ -12877,6 +12930,119 @@ function Layout() {
     setShowCart(true);
   }
 
+  function normalizeDirectoryUser(entry) {
+    const normalizedUserId = String(entry?.userId || entry?.authorUserId || "").trim();
+    const normalizedUsername = formatUsernameForDisplay(entry?.username || entry?.authorUsername, 80);
+    const normalizedName = String(entry?.name || entry?.authorName || normalizedUsername || "User").trim();
+    if (!normalizedUserId || !normalizedUsername) return null;
+    return {
+      userId: normalizedUserId,
+      username: normalizedUsername,
+      name: normalizedName || normalizedUsername,
+      image: String(entry?.image || entry?.authorImage || "/assets/HardTale_H_GreyScale.png"),
+    };
+  }
+
+  function mapUserToProfileTarget(entry) {
+    const normalized = normalizeDirectoryUser(entry);
+    if (!normalized) return null;
+    return {
+      author: normalized.name || normalized.username,
+      authorName: normalized.name || normalized.username,
+      authorUsername: normalized.username,
+      authorUserId: normalized.userId,
+      authorImage: normalized.image,
+      authorRank: "Unregistered",
+    };
+  }
+
+  function openUserDirectoryProfile(entry) {
+    const target = mapUserToProfileTarget(entry);
+    if (!target) return;
+    setUserSearchOpen(false);
+    setShowMobileNav(false);
+    setFriendsModalOpen(false);
+    openNotificationProfile(target);
+  }
+
+  useEffect(() => {
+    let alive = true;
+    async function loadSocialDirectory() {
+      setSocialDirectoryLoading(true);
+      try {
+        const response = await fetch("/api/forum/members?limit=120");
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(String(data?.error || "Failed to load members."));
+        if (!alive) return;
+        const rows = Array.isArray(data?.members) ? data.members : [];
+        const mapped = rows.map(normalizeDirectoryUser).filter(Boolean);
+        setSocialDirectory(mapped);
+      } catch {
+        if (!alive) return;
+        setSocialDirectory([]);
+      } finally {
+        if (alive) setSocialDirectoryLoading(false);
+      }
+    }
+    loadSocialDirectory();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const query = String(userSearchQuery || "").trim();
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      if (!query) {
+        const fallback = socialDirectory.slice(0, 16);
+        setUserSearchResults(fallback);
+        setUserSearchLoading(false);
+        return;
+      }
+      setUserSearchLoading(true);
+      try {
+        const response = await fetch(
+          `/api/forum/members?q=${encodeURIComponent(query)}&limit=60`,
+          { signal: controller.signal },
+        );
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(String(data?.error || "Failed to load members."));
+        const rows = Array.isArray(data?.members) ? data.members : [];
+        const mapped = rows.map(normalizeDirectoryUser).filter(Boolean);
+        setUserSearchResults(mapped);
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+        setUserSearchResults([]);
+      } finally {
+        setUserSearchLoading(false);
+      }
+    }, 180);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [userSearchQuery, socialDirectory]);
+
+  useEffect(() => {
+    function handleOutside(event) {
+      const target = event?.target;
+      const inDesktop = userSearchRootRef.current?.contains?.(target);
+      const inMobile = userSearchMobileRootRef.current?.contains?.(target);
+      if (inDesktop || inMobile) return;
+      setUserSearchOpen(false);
+    }
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, []);
+
+  const allFriends = useMemo(() => {
+    const ownUserId = String(userId || "").trim();
+    return socialDirectory.filter((entry) => String(entry?.userId || "").trim() !== ownUserId);
+  }, [socialDirectory, userId]);
+
+  const onlineFriends = useMemo(() => allFriends.slice(0, 12), [allFriends]);
+
   const notificationCount = isSignedIn ? unread : sortedNotifications.length;
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -12986,6 +13152,54 @@ function Layout() {
     };
   }
 
+  function renderUserSearchBar({ mobile = false } = {}) {
+    const containerClass = mobile ? "user-search user-search-mobile" : "user-search";
+    const rootRef = mobile ? userSearchMobileRootRef : userSearchRootRef;
+    const rows = userSearchResults.slice(0, 30);
+    return html`
+      <div className=${containerClass} ref=${rootRef}>
+        <div className="user-search-input-shell">
+          <img className="user-search-icon" src=${PERSON_SEARCH_ICON_SVG} alt="" aria-hidden="true" />
+          <input
+            className="user-search-input"
+            type="search"
+            placeholder="Search users"
+            value=${userSearchQuery}
+            onFocus=${() => setUserSearchOpen(true)}
+            onChange=${(event) => {
+              setUserSearchQuery(event.target.value);
+              setUserSearchOpen(true);
+            }}
+          />
+        </div>
+        ${userSearchOpen
+          ? html`<div className="user-search-dropdown">
+              ${userSearchLoading
+                ? html`<div className="user-search-state muted">Searching users...</div>`
+                : rows.length === 0
+                ? html`<div className="user-search-state muted">No users found.</div>`
+                : html`<div className="user-search-list">
+                    ${rows.map(
+                      (entry) => html`<button
+                        key=${entry.userId}
+                        type="button"
+                        className="user-search-row"
+                        onClick=${() => openUserDirectoryProfile(entry)}
+                      >
+                        <img className="user-search-row-avatar" src=${entry.image} alt=${entry.name} />
+                        <span className="user-search-row-meta">
+                          <span className="user-search-row-name">${entry.name}</span>
+                          <span className="user-search-row-username">@${entry.username}</span>
+                        </span>
+                      </button>`,
+                    )}
+                  </div>`}
+            </div>`
+          : html``}
+      </div>
+    `;
+  }
+
   function DesktopNavShell() {
     const navItems = [
       { id: "home", label: "Home", onClick: () => navigate("/") },
@@ -12997,23 +13211,26 @@ function Layout() {
     ];
     return html`
       <div className=${`nav-shell ${placement === "left" ? "left" : placement === "right" ? "right" : ""}`}>
-        <nav className="nav">
-          ${navItems.map(
-            (item) => html`<${DesktopNavLinkButton}
-              key=${item.id}
-              id=${item.id}
-              label=${item.label}
-              navActive=${navActive}
-              lockedNavHover=${lockedNavHover}
-              hoveredNav=${hoveredNav}
-              onClick=${item.onClick}
-              onEnter=${() => handleDesktopNavEnter(item.id)}
-              onLeave=${() => {
-                if (lockedNavHover) setHoveredNav(navActive);
-              }}
-            />`,
-          )}
-        </nav>
+        <div className="nav-cluster">
+          <nav className="nav">
+            ${navItems.map(
+              (item) => html`<${DesktopNavLinkButton}
+                key=${item.id}
+                id=${item.id}
+                label=${item.label}
+                navActive=${navActive}
+                lockedNavHover=${lockedNavHover}
+                hoveredNav=${hoveredNav}
+                onClick=${item.onClick}
+                onEnter=${() => handleDesktopNavEnter(item.id)}
+                onLeave=${() => {
+                  if (lockedNavHover) setHoveredNav(navActive);
+                }}
+              />`,
+            )}
+          </nav>
+          ${renderUserSearchBar({ mobile: false })}
+        </div>
       </div>
     `;
   }
@@ -13253,6 +13470,7 @@ function Layout() {
           profileRankLabel=${drawerProfileSummary.rankLabel}
           profileOwnedRank=${normalizedDrawerOwnedRank}
           profileStaffRole=${drawerProfileSummary.staffRole}
+          onOpenNewsAuthorProfile=${openNotificationProfile}
         />
 
         <${SiteFooter}
@@ -13304,8 +13522,9 @@ function Layout() {
                       X
                     </button>
                   `}
+              </div>
             </div>
-          </div>
+          ${renderUserSearchBar({ mobile: true })}
           <${MobileDrawerLinks}
             navigate=${navigate}
             closeMenu=${() => setShowMobileNav(false)}
@@ -13324,6 +13543,36 @@ function Layout() {
               </div>
             <//>
             <${SignedIn}>
+              <section className="mobile-online-friends">
+                <div className="mobile-online-friends-head">
+                  <span>Online Friends</span>
+                  <button
+                    type="button"
+                    className="ghost-btn mobile-online-friends-view-all"
+                    onClick=${() => setFriendsModalOpen(true)}
+                  >
+                    View all
+                  </button>
+                </div>
+                ${socialDirectoryLoading
+                  ? html`<div className="muted mobile-online-friends-empty">Loading friends...</div>`
+                  : onlineFriends.length === 0
+                  ? html`<div className="muted mobile-online-friends-empty">No online friends yet.</div>`
+                  : html`<div className="mobile-online-friends-strip">
+                      ${onlineFriends.map(
+                        (entry) => html`<button
+                          key=${entry.userId}
+                          type="button"
+                          className="mobile-online-friend-chip"
+                          onClick=${() => openUserDirectoryProfile(entry)}
+                          title=${`Open ${entry.name}'s profile`}
+                        >
+                          <img src=${entry.image} alt=${entry.name} />
+                          <span>${entry.name}</span>
+                        </button>`,
+                      )}
+                    </div>`}
+              </section>
               <div className="drawer-user">
                 <${MobileDrawerProfilePreview}
                   className="drawer-profile-preview"
@@ -13681,6 +13930,61 @@ function Layout() {
                 : html``}
             <//>`
           : html``}
+      <//>
+      <${PopUp}
+        show=${friendsModalOpen}
+        onClose=${() => setFriendsModalOpen(false)}
+        title="Friends"
+        className="friends-modal-overlay"
+      >
+        <div className="friends-modal-body">
+          <section className="friends-modal-section">
+            <h4>Online Friends</h4>
+            ${onlineFriends.length === 0
+              ? html`<p className="muted">No online friends right now.</p>`
+              : html`<div className="friends-modal-list">
+                  ${onlineFriends.map(
+                    (entry) => html`<button
+                      key=${`online-${entry.userId}`}
+                      type="button"
+                      className="friends-modal-row"
+                      onClick=${() => openUserDirectoryProfile(entry)}
+                    >
+                      <img src=${entry.image} alt=${entry.name} />
+                      <span>
+                        <strong>${entry.name}</strong>
+                        <small>@${entry.username}</small>
+                      </span>
+                    </button>`,
+                  )}
+                </div>`}
+          </section>
+          <section className="friends-modal-section">
+            <h4>All Friends</h4>
+            ${allFriends.length === 0
+              ? html`<p className="muted">No friends added yet.</p>`
+              : html`<div className="friends-modal-list">
+                  ${allFriends.slice(0, 120).map(
+                    (entry) => html`<button
+                      key=${`all-${entry.userId}`}
+                      type="button"
+                      className="friends-modal-row"
+                      onClick=${() => openUserDirectoryProfile(entry)}
+                    >
+                      <img src=${entry.image} alt=${entry.name} />
+                      <span>
+                        <strong>${entry.name}</strong>
+                        <small>@${entry.username}</small>
+                      </span>
+                    </button>`,
+                  )}
+                </div>`}
+          </section>
+          <section className="friends-modal-section">
+            <h4>Friend Requests</h4>
+            <p className="muted">No friend requests right now.</p>
+          </section>
+        </div>
       <//>
       <${PopUp}
         show=${privateMessageOpen}
