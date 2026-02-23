@@ -1,5 +1,6 @@
-﻿import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom/client";
+import { createPortal } from "react-dom";
 import htm from "htm";
 import HardtaleLoader from "./components/HardtaleLoader.js";
 import AuthorName from "./components/AuthorName.js";
@@ -6640,7 +6641,7 @@ function ForumPage({ isAdmin = false }) {
         offsetY: 10,
         anchorRect,
         anchorPoint,
-        preferAnchorPoint: false,
+        preferAnchorPoint: Boolean(anchorPoint),
       });
       return;
     }
@@ -6712,7 +6713,7 @@ function ForumPage({ isAdmin = false }) {
         : String(preview.authorRank || "Unregistered");
     const showStaff = preview?.authorShowStaffBadge !== false &&
       Boolean(preview.authorIsStaff || isStaffLabel(preview.authorRank || ""));
-    return html`<div
+    const node = html`<div
       className="forum-profile-peek-shell"
       style=${{ left: `${forumHoverProfile.x}px`, top: `${forumHoverProfile.y}px` }}
       onMouseEnter=${() => clearForumHoverTimers()}
@@ -6735,6 +6736,8 @@ function ForumPage({ isAdmin = false }) {
         })}
       />
     </div>`;
+    if (typeof document === "undefined" || !document.body) return node;
+    return createPortal(node, document.body);
   }
 
   async function openForumMentionProfile(username, triggerEl = null, options = {}) {

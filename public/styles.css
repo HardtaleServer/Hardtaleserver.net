@@ -78,6 +78,7 @@ body {
   color: var(--text);
   background: var(--bg);
   font-family: "Space Grotesk", sans-serif;
+  overflow-x: hidden;
 }
 
 body[data-theme="light"] {
@@ -116,11 +117,13 @@ body[data-theme="dark"] {
 
 #root {
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 .page {
   position: relative;
   overflow: visible;
+  overflow-x: hidden;
 }
 
 .glow {
@@ -8640,6 +8643,10 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 
   .shell {
     margin-top: 0;
+    width: 100%;
+    max-width: 100%;
+    padding-left: 14px;
+    padding-right: 14px;
   }
 
   .home-split {
