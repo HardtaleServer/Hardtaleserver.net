@@ -11,8 +11,11 @@ All notable changes to this project are documented here.
 - Fixed forum `@mention` profile preview avatar freshness by using short-lived profile metadata caching and avoiding permanent failed-fetch cache writes, so updated user-selected profile images are pulled in on subsequent opens.
 - Added notification lifecycle controls:
   - Notification cards now display a live 7-day expiry countdown.
-  - Added per-user `Bin` dismiss action (after read) to hide/delete that notification for the current user only.
+  - Added per-user emoji-bin dismiss action (`🗑`, after read) to hide/delete that notification for the current user only.
   - Added backend weekly-expiry pruning for old notifications and related read-state rows.
+- Retuned `/store/ranks` comparison table status icon contrast so warning/cross indicators are stronger red and success/tick indicators are stronger green.
+- Updated forum post deletion to hard-delete associated MongoDB thread data (forum post + thread comments + post revisions + comment revisions) instead of soft-delete-only retention.
+- Fixed notification profile modal account-management action runtime error (`openUserProfile is not defined`) by restoring Layout scope wiring.
 - Removed temporary root-level response/handoff `.txt` artifacts to keep repository contents focused on code and durable project docs.
 
 ## 2026-02-23 (v1.4.12)

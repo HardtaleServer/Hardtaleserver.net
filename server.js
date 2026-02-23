@@ -6964,17 +6964,21 @@ app.delete("/api/forum/posts/:id", async (req, res) => {
     }
 
     const now = new Date().toISOString();
-    await forumPostsCollection.updateOne(
-      { id: postId, isDeleted: false },
-      {
-        $set: {
-          isDeleted: true,
-          deletedAt: now,
-          deletedBy: auth.userId,
-          updatedAt: now,
-        },
-      },
-    );
+    const threadNewsId = `forum:${postId}`;
+    const threadComments = await commentsCollection
+      .find({ newsId: threadNewsId })
+      .project({ _id: 1 })
+      .toArray();
+    const threadCommentIds = threadComments
+      .map((entry) => entry?._id)
+      .filter((value) => value instanceof ObjectId);
+
+    await forumPostsCollection.deleteOne({ id: postId });
+    await forumPostRevisionsCollection.deleteMany({ postId });
+    await commentsCollection.deleteMany({ newsId: threadNewsId });
+    if (threadCommentIds.length > 0) {
+      await commentRevisionsCollection.deleteMany({ commentId: { $in: threadCommentIds } });
+    }
 
     if (isStaff && !isOwner && doc.createdBy) {
       const editorName = getUserDisplayName(user);

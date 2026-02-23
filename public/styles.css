@@ -6155,14 +6155,27 @@ body[data-theme="dark"] .store-cta {
   height: 18px;
   display: inline-block;
   object-fit: contain;
+  filter: grayscale(0.28) contrast(1.08);
 }
 
 .store-comparison-status-icon.is-success {
-  filter: hue-rotate(70deg) saturate(1.8) brightness(1.08);
+  filter:
+    grayscale(0.22)
+    hue-rotate(76deg)
+    saturate(3)
+    brightness(1.14)
+    contrast(1.12)
+    drop-shadow(0 0 3px color-mix(in srgb, #42ff8a 55%, transparent));
 }
 
 .store-comparison-status-icon.is-error {
-  filter: hue-rotate(-35deg) saturate(2.2) brightness(0.95);
+  filter:
+    grayscale(0.2)
+    hue-rotate(-48deg)
+    saturate(3.2)
+    brightness(1.06)
+    contrast(1.16)
+    drop-shadow(0 0 3px color-mix(in srgb, #ff5151 55%, transparent));
 }
 
 .store-comparison-name-color {

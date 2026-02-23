@@ -125,7 +125,7 @@ export default function NotificationsPanel({
                       title="Delete this notification for me"
                       aria-label="Delete this notification"
                     >
-                      ${deleting ? "..." : "Bin"}
+                      ${deleting ? "..." : "🗑"}
                     </button>`
                   : html``}
               </div>

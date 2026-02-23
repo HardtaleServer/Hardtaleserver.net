@@ -209,7 +209,10 @@ const CHANGELOG_ENTRIES = [
       "Updated profile badge settings dropdown behavior so Donor Tab and Staff Tab now default collapsed instead of auto-open.",
       "Redesigned mobile profile info tabs into a 2x2 layout with larger touch targets so labels like `Achievements` no longer appear squished.",
       "Fixed forum `@mention` profile preview avatar freshness by switching metadata caching to a short TTL and removing permanent failed-fetch cache entries, so updated user-selected profile images are picked up on subsequent opens.",
-      "Added notification retention UX: notification cards now show a live 7-day expiry countdown and a per-user `Bin` action (available after read) to dismiss individual notifications without admin deletion.",
+      "Added notification retention UX: notification cards now show a live 7-day expiry countdown and a per-user emoji bin action (`🗑`, available after read) to dismiss individual notifications without admin deletion.",
+      "Retuned `/store/ranks` comparison status icon treatment so warning/cross indicators read as stronger red and success/tick indicators read as stronger green with higher contrast.",
+      "Updated forum post deletion route to perform hard-delete cleanup in MongoDB (post + thread comments + post revisions + comment revisions) to reduce residual data retention risk.",
+      "Fixed account-management action in notification profile modal by restoring `openUserProfile` scope in Layout so the button no longer throws a runtime `ReferenceError`.",
       "Removed temporary root-level response/handoff `.txt` artifacts from the repository to keep project files focused on runtime code and durable documentation.",
     ],
   },
@@ -10811,7 +10814,7 @@ function Layout() {
   const [showMobileNav, setShowMobileNav] = useState(false);
   const { user } = useUser();
   const { getToken, isSignedIn, userId, isLoaded: isAuthLoaded } = useAuth();
-  const { openSignIn, signOut } = useClerk();
+  const { openSignIn, openUserProfile, signOut } = useClerk();
   const [isAdmin, setIsAdmin] = useState(false);
   const [isStaff, setIsStaff] = useState(false);
   const [unread, setUnread] = useState(0);
