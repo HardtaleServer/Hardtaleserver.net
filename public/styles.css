@@ -1516,7 +1516,24 @@ body[data-theme="dark"] {
 .forum-post-preview {
   margin: 0;
   color: var(--text);
-  white-space: pre-wrap;
+  white-space: normal;
+}
+
+.forum-post-preview .forum-post-preview-markdown {
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.forum-post-preview .forum-post-preview-markdown h1,
+.forum-post-preview .forum-post-preview-markdown h2,
+.forum-post-preview .forum-post-preview-markdown h3 {
+  font-size: 1em;
+  line-height: 1.35;
+  margin: 0 0 8px;
+  font-family: inherit;
+  letter-spacing: 0;
 }
 
 .forum-post-forced-body strong {
@@ -8008,6 +8025,65 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 .drawer-profile-preview {
   width: 100%;
   transform: translateY(-2px);
+}
+
+.mobile-drawer-profile-preview {
+  width: 100%;
+  border: 1px solid var(--stroke);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.08));
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  align-items: center;
+  text-align: left;
+  padding: 10px;
+  color: inherit;
+  cursor: pointer;
+}
+
+.mobile-drawer-profile-preview:hover {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--stroke));
+}
+
+.mobile-drawer-profile-avatar {
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  object-fit: cover;
+  border: 1px solid var(--stroke);
+}
+
+.mobile-drawer-profile-meta {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.mobile-drawer-profile-name {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.mobile-drawer-profile-username {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.mobile-drawer-profile-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 5px;
+}
+
+.profile-modal-inline-loader {
+  min-height: 280px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-soft) 86%, transparent);
 }
 
 .mobile-drawer .settings-button {

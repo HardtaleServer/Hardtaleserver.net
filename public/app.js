@@ -18,6 +18,7 @@ import SupportTicketThread from "./components/SupportTicketThread.js";
 import AppRoutes from "./components/AppRoutes.js";
 import RankBadge from "./components/RankBadge.js";
 import ProfilePreviewButton from "./components/ProfilePreviewButton.js";
+import MobileDrawerProfilePreview from "./components/MobileDrawerProfilePreview.js";
 import ProfileCardLayout from "./components/ProfileCardLayout.js";
 import ProfileAchievementsCard from "./components/ProfileAchievementsCard.js";
 import ProfileAchievementsPanel from "./components/ProfileAchievementsPanel.js";
@@ -94,7 +95,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.05";
+const VERSION = "1.4.07";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -196,6 +197,27 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.4.07",
+    date: "2026-02-23",
+    items: [
+      "Updated `/store/ranks` profile preview badges so each rank card now shows its own appropriate donor badge (Hero/Legend/Mythic) instead of shared account badge stacks.",
+      "Added a dedicated mobile drawer profile preview component with separate logic from `store-profile-preview`, including linked state + displayed donor badge + optional staff tier badge in one compact row.",
+      "Moved account-panel loading feedback into the profile modal body so background pages remain interactive while profile data resolves.",
+      "Fixed forum post preview rendering to apply rich-text markdown output (`h1/h2/h3`, bold, italic, mentions) instead of plain text-only excerpts in `news-body-paragraph forum-post-preview`.",
+    ],
+  },
+  {
+    version: "1.4.06",
+    date: "2026-02-23",
+    items: [
+      "Separated profile badge presentation into explicit sections: Link Status, Donor Badges, Staff Tier, and Groups / Guilds / Clans.",
+      "Updated donor badge ownership logic so staff no longer implicitly unlock donor rank badges without owned donor tiers.",
+      "Synced mobile drawer profile preview to selected donor/staff badge display settings and enabled dual badge display (staff + donor) when applicable.",
+      "Added a planned `Add Friend` quick action in profile-card header actions (under modal close) for signed-in users viewing other profiles.",
+      "Increased profile-card modal scrolling headroom and mobile overflow behavior to prevent badge title clipping in tall badge stacks.",
+    ],
+  },
   {
     version: "1.4.05",
     date: "2026-02-23",
@@ -5315,21 +5337,9 @@ function StorePage({
     return getStoreRankLabel(item).toLowerCase().replace(/[^a-z0-9]+/g, "-");
   }
 
-  function getStoreCardBadges() {
-    const showAllOwnedRankBadges = user?.publicMetadata?.showAllOwnedRankBadges !== false;
-    const selectedOwnedBadge = normalizeOwnedRankLabel(user?.publicMetadata?.selectedOwnedBadge || "");
-    const ownedBadges = buildOwnedRankBadges(storePreviewOwnedRank, false, {
-      showAllOwnedRankBadges,
-      selectedOwnedBadge,
-    });
-    const featuredBadge = normalizeOwnedRankLabel(profileRankLabel || "");
-    const linkedBadge = isLinkedAccount ? "Linked" : "Unlinked";
-    const candidates = [
-      featuredBadge !== "Unregistered" ? featuredBadge : linkedBadge,
-      linkedBadge,
-      ...ownedBadges,
-    ];
-    return Array.from(new Set(candidates.filter(Boolean))).slice(0, 3);
+  function getStoreCardBadges(item) {
+    const rankLabel = getStoreRankLabel(item);
+    return [rankLabel];
   }
 
   function getStorePreviewBadges(item) {
@@ -5584,7 +5594,7 @@ function StorePage({
                   name=${storePreviewName}
                   username=${storePreviewUsername}
                 >
-                  ${getStoreCardBadges().map(
+                  ${getStoreCardBadges(item).map(
                     (label) => html`<${RankBadge} label=${label} className="store-owned-badge" />`,
                   )}
                   ${storePreviewHasStaff
@@ -8034,9 +8044,13 @@ function ForumPage({ isAdmin = false }) {
                           <h3>${post.title}</h3>
                         </div>
                       </div>
-                      <p className=${`news-body-paragraph forum-post-preview ${isForumPostForcedEdit(post) ? "forum-post-forced-body" : ""}`.trim()}>
-                        ${getForumPreviewText(post.body)}
-                      </p>
+                      <div className=${`news-body-paragraph forum-post-preview ${isForumPostForcedEdit(post) ? "forum-post-forced-body" : ""}`.trim()}>
+                        <${ForumRenderedMarkdown}
+                          value=${post.body || ""}
+                          className="forum-post-preview-markdown"
+                          onMentionClick=${openForumMentionProfile}
+                        />
+                      </div>
                     </${Link}>
                     <div className="forum-post-status-row">
                       ${(post.editCount || 0) > 0 && isForumPostForcedEdit(post)
@@ -11644,6 +11658,8 @@ function Layout() {
 
   async function openNotificationProfile(item) {
     if (!item) return;
+    setNotificationProfileOpen(true);
+    setNotificationProfileUser(null);
     setNotificationProfileLoading(true);
     try {
     const name = String(item.authorName || item.author || "User");
@@ -11730,7 +11746,6 @@ function Layout() {
       groups,
       forumActivity,
     });
-    setNotificationProfileOpen(true);
     } finally {
       setNotificationProfileLoading(false);
     }
@@ -12136,7 +12151,7 @@ function Layout() {
   const notificationCount = isSignedIn ? unread : sortedNotifications.length;
   const year = new Date().getFullYear();
   const displayName = getUserDisplayName(user);
-  const showLoader = !appHydrated || authTransitionLoading || notificationProfileLoading;
+  const showLoader = !appHydrated || authTransitionLoading;
   const desktopStickyVisible = !isMobile && hideLogo;
   const stickyTransparentActive =
     desktopStickyVisible && desktopStickyStyle === "transparent" && !isMobile;
@@ -12529,36 +12544,21 @@ function Layout() {
             <//>
             <${SignedIn}>
               <div className="drawer-user">
-                <${ProfilePreviewButton}
+                <${MobileDrawerProfilePreview}
                   className="drawer-profile-preview"
                   onClick=${openDrawerSelfProfileCard}
                   title="Open profile card"
                   avatar=${resolvedOwnAvatar}
                   name=${displayName}
                   username=${formatUsernameForDisplay(user?.username)}
-                >
-                  ${isStaffAccount && drawerProfileSummary.showStaffBadge !== false
-                    ? html`<span
-                        className=${`profile-owned-badge staff-owned-badge ${resolveStaffRoleClass({
-                          staffRole: drawerProfileSummary.staffRole || "",
-                        })}`.trim()}
-                      >
-                        ${drawerProfileSummary.showStaffBadgeIcon === false
-                          ? html``
-                          : html`<span className="rank-icon">${renderRankIcon("staff")}</span>`}
-                        <span>${toStaffPillTitle(drawerProfileSummary.staffRole || "") || "Staff"}</span>
-                      </span>`
-                    : html``}
-                  ${drawerPrimaryOwnedBadge !== "Unregistered"
-                    ? html`<${RankBadge}
-                        label=${drawerPrimaryOwnedBadge}
-                        className="store-owned-badge"
-                      />`
-                    : html`<${RankBadge}
-                        label=${drawerRankBadgeLabel}
-                        className="store-owned-badge"
-                      />`}
-                <//>
+                  linkedLabel=${isLinkedAccount ? "Linked" : "Unlinked"}
+                  displayedBadge=${drawerPrimaryOwnedBadge !== "Unregistered" ? drawerPrimaryOwnedBadge : drawerRankBadgeLabel}
+                  showStaffBadge=${isStaffAccount && drawerProfileSummary.showStaffBadge !== false}
+                  staffLabel=${toStaffPillTitle(drawerProfileSummary.staffRole || "") || "Staff"}
+                  staffRoleClass=${resolveStaffRoleClass({
+                    staffRole: drawerProfileSummary.staffRole || "",
+                  })}
+                />
               </div>
               <div className=${`drawer-settings-row ${menuSide === "left" ? "left" : "right"}`.trim()}>
                 <${MobileSettingsButton} />
@@ -12729,7 +12729,11 @@ function Layout() {
             </div>`
           : html``}
       >
-        ${notificationProfileUser
+        ${notificationProfileLoading
+          ? html`<div className="profile-modal-inline-loader" role="status" aria-live="polite">
+              <${HardtaleLoader} variant=${loaderVariant} />
+            </div>`
+          : notificationProfileUser
           ? html`<${ProfileCardLayout}
               avatarClassName=${`profile-card-avatar avatar-rank-${String(
                 notificationProfileUser.rankLabel || "Unregistered",
