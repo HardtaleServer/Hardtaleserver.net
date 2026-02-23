@@ -4,7 +4,7 @@ import htm from "htm";
 
 const html = htm.bind(React.createElement);
 
-function PopUp({ show, onClose, title, children, className = "" }) {
+function PopUp({ show, onClose, title, children, className = "", headerBelow = null }) {
   if (!show) return null;
   return createPortal(html`
     <div className=${`popup-overlay ${className}`} onClick=${onClose}>
@@ -15,6 +15,7 @@ function PopUp({ show, onClose, title, children, className = "" }) {
             X
           </button>
         </div>
+        ${headerBelow}
         ${children}
       </div>
     </div>

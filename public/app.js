@@ -94,7 +94,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.04";
+const VERSION = "1.4.05";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -196,6 +196,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.4.05",
+    date: "2026-02-23",
+    items: [
+      "Added richer profile badge toasts: donor badge selection and staff badge mode changes now emit clear success/error feedback instead of silent saves.",
+      "Normalized badge-control toast behavior across comment-thread, forum, and notification profile cards for consistent UX.",
+      "Updated profile card modal header action layout so `Account Management` remains available directly under the modal close row for own-profile cards.",
+    ],
+  },
   {
     version: "1.4.04",
     date: "2026-02-23",
@@ -2915,7 +2924,7 @@ function CommentThread({
   }
 
   async function updateOwnStaffBadgeVisibility(nextVisible) {
-    if (!profileUser?.isOwn || !profileUser?.canToggleStaffBadge || profileStaffBadgeSaving) return;
+    if (!profileUser?.isOwn || !profileUser?.canToggleStaffBadge || profileStaffBadgeSaving) return false;
     setProfileStaffBadgeSaving(true);
     setProfileTitleStatus("Saving...");
     try {
@@ -2966,15 +2975,17 @@ function CommentThread({
       );
       setProfileTitleStatus("Saved.");
       setTimeout(() => setProfileTitleStatus(""), 1200);
+      return true;
     } catch (error) {
       setProfileTitleStatus(error?.message || "Failed to save staff badge.");
+      return false;
     } finally {
       setProfileStaffBadgeSaving(false);
     }
   }
 
   async function updateOwnStaffBadgeIconVisibility(nextVisible) {
-    if (!profileUser?.isOwn || !profileUser?.canToggleStaffBadge || profileStaffBadgeIconSaving) return;
+    if (!profileUser?.isOwn || !profileUser?.canToggleStaffBadge || profileStaffBadgeIconSaving) return false;
     setProfileStaffBadgeIconSaving(true);
     setProfileTitleStatus("Saving...");
     try {
@@ -3017,11 +3028,40 @@ function CommentThread({
       );
       setProfileTitleStatus("Saved.");
       setTimeout(() => setProfileTitleStatus(""), 1200);
+      return true;
     } catch (error) {
       setProfileTitleStatus(error?.message || "Failed to save staff badge icon.");
+      return false;
     } finally {
       setProfileStaffBadgeIconSaving(false);
     }
+  }
+
+  async function updateOwnStaffBadgeMode(nextMode) {
+    const mode = String(nextMode || "").trim().toLowerCase();
+    let success = false;
+    if (mode === "hidden") {
+      success = await updateOwnStaffBadgeVisibility(false);
+    } else if (mode === "label") {
+      const badgeSaved = await updateOwnStaffBadgeVisibility(true);
+      const iconSaved = await updateOwnStaffBadgeIconVisibility(false);
+      success = badgeSaved && iconSaved;
+    } else {
+      const badgeSaved = await updateOwnStaffBadgeVisibility(true);
+      const iconSaved = await updateOwnStaffBadgeIconVisibility(true);
+      success = badgeSaved && iconSaved;
+    }
+    emitAppToast({
+      kind: success ? "success" : "error",
+      title: success ? "Staff Badge Updated" : "Staff Badge Update Failed",
+      message: success
+        ? mode === "hidden"
+          ? "Staff badge is now hidden."
+          : mode === "label"
+          ? "Staff badge now uses text style."
+          : "Staff badge now uses icon style."
+        : "Unable to update staff badge mode right now.",
+    });
   }
 
   async function updateOwnRankEffectsVisibility(nextVisible) {
@@ -3156,7 +3196,7 @@ function CommentThread({
   }
 
   async function updateOwnOwnedBadgeDisplaySettings(nextShowAll, nextSelectedBadge = "") {
-    if (!profileUser?.isOwn || !profileUser?.canToggleOwnedBadges || profileOwnedBadgesSaving) return;
+    if (!profileUser?.isOwn || !profileUser?.canToggleOwnedBadges || profileOwnedBadgesSaving) return false;
     setProfileOwnedBadgesSaving(true);
     setProfileTitleStatus("Saving...");
     try {
@@ -3190,11 +3230,30 @@ function CommentThread({
       );
       setProfileTitleStatus("Saved.");
       setTimeout(() => setProfileTitleStatus(""), 1200);
+      return true;
     } catch (error) {
       setProfileTitleStatus(error?.message || "Failed to save badge display settings.");
+      return false;
     } finally {
       setProfileOwnedBadgesSaving(false);
     }
+  }
+
+  async function updateOwnDonorBadgeSelection(nextBadgeOrAll) {
+    const next = String(nextBadgeOrAll || "").trim();
+    const success =
+      next === "__all__"
+        ? await updateOwnOwnedBadgeDisplaySettings(true, "")
+        : await updateOwnOwnedBadgeDisplaySettings(false, next);
+    emitAppToast({
+      kind: success ? "success" : "error",
+      title: success ? "Donor Badge Updated" : "Donor Badge Update Failed",
+      message: success
+        ? next === "__all__"
+          ? "Displaying all owned donor badges."
+          : `Now displaying ${getRankDisplayLabel(next)} as your donor badge.`
+        : "Unable to update donor badge display right now.",
+    });
   }
 
   async function updateOwnAvatarVfxVisibility(nextVisible) {
@@ -3842,6 +3901,21 @@ function CommentThread({
         show=${profileOpen}
         onClose=${() => setProfileOpen(false)}
         title="Profile Card"
+        headerBelow=${profileUser?.isOwn
+          ? html`<div className="profile-modal-header-actions">
+              <button
+                type="button"
+                className="copy-action-btn subtle profile-copy-action account-management-pill"
+                onClick=${() => {
+                  setProfileOpen(false);
+                  if (openUserProfile) openUserProfile({});
+                }}
+                title="Account Management"
+              >
+                <span>Account Management</span>
+              </button>
+            </div>`
+          : html``}
       >
         ${profileUser
           ? html`<div className="profile-card">
@@ -3866,19 +3940,6 @@ function CommentThread({
                   title="Copy UUID"
                   onCopied=${() => copyProfileMetaValue("UUID", profileUser.hytalePlayerUuid || "")}
                 />
-              </div>
-              <div className="profile-card-link-meta">
-                <button
-                  type="button"
-                  className="copy-action-btn subtle profile-copy-action account-management-pill"
-                  onClick=${() => {
-                    setProfileOpen(false);
-                    if (openUserProfile) openUserProfile({});
-                  }}
-                  title="Account Management"
-                >
-                  <span>Account Management</span>
-                </button>
               </div>
               <img
                 className=${`profile-card-avatar avatar-rank-${rankClassSlug(
@@ -3936,8 +3997,13 @@ function CommentThread({
               <${ProfileInfoTabs}
                 activeTab=${profileInfoTab}
                 onTabChange=${setProfileInfoTab}
-                renderBadges=${() => html`${renderOwnedRankBadges(profileUser)}`}
-                renderRanks=${() => html`${renderProfileRanksCard(profileUser)}`}
+                renderBadges=${() =>
+                  html`${renderOwnedRankBadges(profileUser, {
+                    onSelectDonorBadge: updateOwnDonorBadgeSelection,
+                    onSelectStaffBadgeMode: updateOwnStaffBadgeMode,
+                    donorSaving: profileOwnedBadgesSaving,
+                    staffSaving: profileStaffBadgeSaving || profileStaffBadgeIconSaving,
+                  })}`}
                 renderGroups=${() =>
                   html`${renderProfileGroupsCard(profileUser, {
                     isSaving: profileTitleSaving,
@@ -3962,43 +4028,6 @@ function CommentThread({
                         ? profileUser.availableTitles
                         : ["Unregistered"]
                       ).map((title) => html`<option value=${title}>${getRankDisplayLabel(title)}</option>`)}
-                    </select>
-                  </label>`
-                : html``}
-              ${profileUser.isOwn && profileUser.canToggleOwnedBadges
-                ? html`<label className="profile-card-toggle">
-                    <input
-                      type="checkbox"
-                      checked=${profileUser.showAllOwnedRankBadges !== false}
-                      disabled=${profileOwnedBadgesSaving}
-                      onChange=${(event) =>
-                        updateOwnOwnedBadgeDisplaySettings(
-                          event.target.checked,
-                          profileUser.selectedOwnedBadge || "",
-                        )}
-                    />
-                    <span>Show all owned rank badges</span>
-                  </label>`
-                : html``}
-              ${profileUser.isOwn &&
-              profileUser.canToggleOwnedBadges &&
-              profileUser.showAllOwnedRankBadges === false &&
-              Array.isArray(profileUser.ownedBadgeOptions) &&
-              profileUser.ownedBadgeOptions.length > 1
-                ? html`<label className="profile-card-title-picker">
-                    <span className="muted">Primary owned badge</span>
-                    <select
-                      value=${profileUser.selectedOwnedBadge || profileUser.ownedBadgeOptions[profileUser.ownedBadgeOptions.length - 1]}
-                      disabled=${profileOwnedBadgesSaving}
-                      onChange=${(event) =>
-                        updateOwnOwnedBadgeDisplaySettings(
-                          profileUser.showAllOwnedRankBadges !== false,
-                          event.target.value,
-                        )}
-                    >
-                      ${profileUser.ownedBadgeOptions.map(
-                        (badge) => html`<option value=${badge}>${badge}</option>`,
-                      )}
                     </select>
                   </label>`
                 : html``}
@@ -4044,28 +4073,6 @@ function CommentThread({
                       onChange=${(event) => updateOwnAvatarVfxVisibility(event.target.checked)}
                     />
                     <span>Enable avatar effects</span>
-                  </label>`
-                : html``}
-              ${profileUser.isOwn && profileUser.canToggleStaffBadge
-                ? html`<label className="profile-card-toggle">
-                    <input
-                      type="checkbox"
-                      checked=${profileUser.showStaffBadge !== false}
-                      disabled=${profileStaffBadgeSaving}
-                      onChange=${(event) => updateOwnStaffBadgeVisibility(event.target.checked)}
-                    />
-                    <span>Show staff badge</span>
-                  </label>`
-                : html``}
-              ${profileUser.isOwn && profileUser.canToggleStaffBadge
-                ? html`<label className="profile-card-toggle">
-                    <input
-                      type="checkbox"
-                      checked=${profileUser.showStaffBadgeIcon !== false}
-                      disabled=${profileStaffBadgeIconSaving}
-                      onChange=${(event) => updateOwnStaffBadgeIconVisibility(event.target.checked)}
-                    />
-                    <span>Use icon staff badge style</span>
                   </label>`
                 : html``}
               ${profileUser.isOwn &&
@@ -6970,7 +6977,7 @@ function ForumPage({ isAdmin = false }) {
   }
 
   async function updateOwnForumStaffBadgeVisibility(nextVisible) {
-    if (!forumProfileUser?.isOwn || !forumProfileUser?.canToggleStaffBadge || forumProfileStaffBadgeSaving) return;
+    if (!forumProfileUser?.isOwn || !forumProfileUser?.canToggleStaffBadge || forumProfileStaffBadgeSaving) return false;
     setForumProfileStaffBadgeSaving(true);
     setForumProfileTitleStatus("Saving...");
     try {
@@ -7011,15 +7018,17 @@ function ForumPage({ isAdmin = false }) {
       });
       setForumProfileTitleStatus("Saved.");
       setTimeout(() => setForumProfileTitleStatus(""), 1200);
+      return true;
     } catch (error) {
       setForumProfileTitleStatus(error?.message || "Failed to save staff badge.");
+      return false;
     } finally {
       setForumProfileStaffBadgeSaving(false);
     }
   }
 
   async function updateOwnForumStaffBadgeIconVisibility(nextVisible) {
-    if (!forumProfileUser?.isOwn || !forumProfileUser?.canToggleStaffBadge || forumProfileStaffBadgeIconSaving) return;
+    if (!forumProfileUser?.isOwn || !forumProfileUser?.canToggleStaffBadge || forumProfileStaffBadgeIconSaving) return false;
     setForumProfileStaffBadgeIconSaving(true);
     setForumProfileTitleStatus("Saving...");
     try {
@@ -7052,11 +7061,101 @@ function ForumPage({ isAdmin = false }) {
       });
       setForumProfileTitleStatus("Saved.");
       setTimeout(() => setForumProfileTitleStatus(""), 1200);
+      return true;
     } catch (error) {
       setForumProfileTitleStatus(error?.message || "Failed to save staff badge icon.");
+      return false;
     } finally {
       setForumProfileStaffBadgeIconSaving(false);
     }
+  }
+
+  async function updateOwnForumStaffBadgeMode(nextMode) {
+    const mode = String(nextMode || "").trim().toLowerCase();
+    let success = false;
+    if (mode === "hidden") {
+      success = await updateOwnForumStaffBadgeVisibility(false);
+    } else if (mode === "label") {
+      const badgeSaved = await updateOwnForumStaffBadgeVisibility(true);
+      const iconSaved = await updateOwnForumStaffBadgeIconVisibility(false);
+      success = badgeSaved && iconSaved;
+    } else {
+      const badgeSaved = await updateOwnForumStaffBadgeVisibility(true);
+      const iconSaved = await updateOwnForumStaffBadgeIconVisibility(true);
+      success = badgeSaved && iconSaved;
+    }
+    emitAppToast({
+      kind: success ? "success" : "error",
+      title: success ? "Staff Badge Updated" : "Staff Badge Update Failed",
+      message: success
+        ? mode === "hidden"
+          ? "Staff badge is now hidden."
+          : mode === "label"
+          ? "Staff badge now uses text style."
+          : "Staff badge now uses icon style."
+        : "Unable to update staff badge mode right now.",
+    });
+  }
+
+  async function updateOwnForumOwnedBadgeDisplaySettings(nextShowAll, nextSelectedBadge = "") {
+    if (!forumProfileUser?.isOwn || !forumProfileUser?.canToggleOwnedBadges || forumProfileOwnedBadgesSaving) return false;
+    setForumProfileOwnedBadgesSaving(true);
+    setForumProfileTitleStatus("Saving...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/owned-badges", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          showAllOwnedRankBadges: Boolean(nextShowAll),
+          selectedOwnedBadge: String(nextSelectedBadge || ""),
+        }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save owned badge display.");
+      }
+      const data = await response.json();
+      const selectedOwnedBadge = String(data?.selectedOwnedBadge || "");
+      const showAllOwnedRankBadges = data?.showAllOwnedRankBadges !== false;
+      const options = Array.isArray(data?.ownedBadgeOptions)
+        ? data.ownedBadgeOptions.filter((rank) => OWNED_RANK_ORDER.includes(String(rank)))
+        : [];
+      setForumProfileUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              selectedOwnedBadge,
+              showAllOwnedRankBadges,
+              ownedBadgeOptions: options.length > 0 ? options : prev.ownedBadgeOptions,
+            }
+          : prev,
+      );
+      setForumProfileTitleStatus("Saved.");
+      setTimeout(() => setForumProfileTitleStatus(""), 1200);
+      return true;
+    } catch (error) {
+      setForumProfileTitleStatus(error?.message || "Failed to save owned badge display.");
+      return false;
+    } finally {
+      setForumProfileOwnedBadgesSaving(false);
+    }
+  }
+
+  async function updateOwnForumDonorBadgeSelection(nextBadgeOrAll) {
+    const next = String(nextBadgeOrAll || "").trim();
+    const success =
+      next === "__all__"
+        ? await updateOwnForumOwnedBadgeDisplaySettings(true, "")
+        : await updateOwnForumOwnedBadgeDisplaySettings(false, next);
+    emitAppToast({
+      kind: success ? "success" : "error",
+      title: success ? "Donor Badge Updated" : "Donor Badge Update Failed",
+      message: success
+        ? next === "__all__"
+          ? "Displaying all owned donor badges."
+          : `Now displaying ${getRankDisplayLabel(next)} as your donor badge.`
+        : "Unable to update donor badge display right now.",
+    });
   }
 
   async function updateOwnForumRankEffectsVisibility(nextVisible) {
@@ -7216,19 +7315,6 @@ function ForumPage({ isAdmin = false }) {
           onCopied=${() => copyForumProfileMetaValue("UUID", forumProfileUser.hytalePlayerUuid || "")}
         />
       </div>
-      <div className="profile-card-link-meta">
-        <button
-          type="button"
-          className="copy-action-btn subtle profile-copy-action account-management-pill"
-          onClick=${() => {
-            setForumProfileOpen(false);
-            if (openUserProfile) openUserProfile({});
-          }}
-          title="Account Management"
-        >
-          <span>Account Management</span>
-        </button>
-      </div>
       <img
         className=${`profile-card-avatar avatar-rank-${rankSlug(
           forumProfileUser.rankLabel || "Unregistered",
@@ -7277,8 +7363,13 @@ function ForumPage({ isAdmin = false }) {
       <${ProfileInfoTabs}
         activeTab=${forumProfileInfoTab}
         onTabChange=${setForumProfileInfoTab}
-        renderBadges=${() => html`${renderOwnedRankBadges(forumProfileUser)}`}
-        renderRanks=${() => html`${renderProfileRanksCard(forumProfileUser)}`}
+        renderBadges=${() =>
+          html`${renderOwnedRankBadges(forumProfileUser, {
+            onSelectDonorBadge: updateOwnForumDonorBadgeSelection,
+            onSelectStaffBadgeMode: updateOwnForumStaffBadgeMode,
+            donorSaving: forumProfileOwnedBadgesSaving,
+            staffSaving: forumProfileStaffBadgeSaving || forumProfileStaffBadgeIconSaving,
+          })}`}
         renderGroups=${() =>
           html`${renderProfileGroupsCard(forumProfileUser, {
             isSaving: forumProfileTitleSaving,
@@ -7348,28 +7439,6 @@ function ForumPage({ isAdmin = false }) {
               onChange=${(event) => updateOwnForumAvatarVfxVisibility(event.target.checked)}
             />
             <span>Enable avatar effects</span>
-          </label>`
-        : html``}
-      ${forumProfileUser.isOwn && forumProfileUser.canToggleStaffBadge
-        ? html`<label className="profile-card-toggle">
-            <input
-              type="checkbox"
-              checked=${forumProfileUser.showStaffBadge !== false}
-              disabled=${forumProfileStaffBadgeSaving}
-              onChange=${(event) => updateOwnForumStaffBadgeVisibility(event.target.checked)}
-            />
-            <span>Show staff badge</span>
-          </label>`
-        : html``}
-      ${forumProfileUser.isOwn && forumProfileUser.canToggleStaffBadge
-        ? html`<label className="profile-card-toggle">
-            <input
-              type="checkbox"
-              checked=${forumProfileUser.showStaffBadgeIcon !== false}
-              disabled=${forumProfileStaffBadgeIconSaving}
-              onChange=${(event) => updateOwnForumStaffBadgeIconVisibility(event.target.checked)}
-            />
-            <span>Use icon staff badge style</span>
           </label>`
         : html``}
       ${forumProfileUser.isOwn &&
@@ -7798,6 +7867,21 @@ function ForumPage({ isAdmin = false }) {
             show=${forumProfileOpen}
             onClose=${() => setForumProfileOpen(false)}
             title="Profile Card"
+            headerBelow=${forumProfileUser?.isOwn
+              ? html`<div className="profile-modal-header-actions">
+                  <button
+                    type="button"
+                    className="copy-action-btn subtle profile-copy-action account-management-pill"
+                    onClick=${() => {
+                      setForumProfileOpen(false);
+                      if (openUserProfile) openUserProfile({});
+                    }}
+                    title="Account Management"
+                  >
+                    <span>Account Management</span>
+                  </button>
+                </div>`
+              : html``}
           >
             ${renderForumProfileCard()}
           <//>
@@ -8010,6 +8094,21 @@ function ForumPage({ isAdmin = false }) {
           show=${forumProfileOpen}
           onClose=${() => setForumProfileOpen(false)}
           title="Profile Card"
+          headerBelow=${forumProfileUser?.isOwn
+            ? html`<div className="profile-modal-header-actions">
+                <button
+                  type="button"
+                  className="copy-action-btn subtle profile-copy-action account-management-pill"
+                  onClick=${() => {
+                    setForumProfileOpen(false);
+                    if (openUserProfile) openUserProfile({});
+                  }}
+                  title="Account Management"
+                >
+                  <span>Account Management</span>
+                </button>
+              </div>`
+            : html``}
         >
           ${renderForumProfileCard()}
         <//>
@@ -8727,7 +8826,7 @@ function renderLinkedStatusIcon(linked = false) {
   />`;
 }
 
-function renderOwnedRankBadges(entry) {
+function renderOwnedRankBadges(entry, options = {}) {
   if (!entry) return html``;
   const isStaffUser = Boolean(entry.isStaffUser || entry.staff);
   const badges = buildOwnedRankBadges(entry.ownedRank, isStaffUser, {
@@ -8736,6 +8835,24 @@ function renderOwnedRankBadges(entry) {
   });
   const linkedResolved = Boolean(entry.linkedAccount);
   const linkedBadgeLabel = linkedResolved ? "Linked" : "Unlinked";
+  const canManageDonorBadge =
+    Boolean(entry?.isOwn) &&
+    Boolean(entry?.canToggleOwnedBadges) &&
+    typeof options?.onSelectDonorBadge === "function";
+  const canManageStaffBadge =
+    Boolean(entry?.isOwn) &&
+    Boolean(entry?.canToggleStaffBadge) &&
+    typeof options?.onSelectStaffBadgeMode === "function";
+  const donorModeValue =
+    entry?.showAllOwnedRankBadges === false
+      ? String(entry?.selectedOwnedBadge || "")
+      : "__all__";
+  const staffModeValue =
+    entry?.showStaffBadge === false
+      ? "hidden"
+      : entry?.showStaffBadgeIcon === false
+      ? "label"
+      : "icon";
   return html`<div className="profile-card-badges-stack">
     <div className="profile-card-badges-block">
       <div className="profile-card-badges-title">Badges</div>
@@ -8748,14 +8865,76 @@ function renderOwnedRankBadges(entry) {
             ${badges.map((label) => {
               const iconType = getRankIconType(label);
               const slug = String(label).trim().toLowerCase();
-              return html`<span className=${`profile-owned-badge rank-${slug}`.trim()}>
+              return html`<button
+                type="button"
+                className=${`profile-owned-badge rank-${slug} ${
+                  canManageDonorBadge ? "is-selectable" : ""
+                }`.trim()}
+                onClick=${() => {
+                  if (!canManageDonorBadge) return;
+                  options.onSelectDonorBadge(label);
+                }}
+                title=${canManageDonorBadge
+                  ? `Display ${label} as your donor badge`
+                  : `${label} badge`}
+                disabled=${!canManageDonorBadge}
+              >
                 ${iconType ? html`<span className="rank-icon">${renderRankIcon(iconType)}</span>` : html``}
                 <span>${getRankDisplayLabel(label)}</span>
-              </span>`;
+              </button>`;
             })}
           </div>`
         : html`<div className="muted profile-card-badges-empty">No store rank badges yet.</div>`}
     </div>
+    ${entry?.isOwn && (canManageDonorBadge || canManageStaffBadge)
+      ? html`<div className="profile-card-badges-block">
+          <div className="profile-card-badges-title">Badge Controls</div>
+          ${canManageDonorBadge
+            ? html`<details className="profile-badge-dropdown" open>
+                <summary>Donor</summary>
+                <label className="profile-card-title-picker">
+                  <span className="muted">Displayed donor badge</span>
+                  <select
+                    value=${donorModeValue}
+                    disabled=${options?.donorSaving === true}
+                    onChange=${(event) => {
+                      const next = String(event.target.value || "");
+                      if (next === "__all__") {
+                        options.onSelectDonorBadge("__all__");
+                        return;
+                      }
+                      options.onSelectDonorBadge(next);
+                    }}
+                  >
+                    <option value="__all__">Show all owned donor badges</option>
+                    ${badges
+                      .filter((label) => String(label || "").toLowerCase() !== "linked")
+                      .map(
+                        (badge) => html`<option value=${badge}>Show ${badge} only</option>`,
+                      )}
+                  </select>
+                </label>
+              </details>`
+            : html``}
+          ${canManageStaffBadge
+            ? html`<details className="profile-badge-dropdown" open>
+                <summary>Staff</summary>
+                <label className="profile-card-title-picker">
+                  <span className="muted">Staff badge mode</span>
+                  <select
+                    value=${staffModeValue}
+                    disabled=${options?.staffSaving === true}
+                    onChange=${(event) => options.onSelectStaffBadgeMode(event.target.value)}
+                  >
+                    <option value="icon">Icon Staff</option>
+                    <option value="label">Text Staff</option>
+                    <option value="hidden">Hidden</option>
+                  </select>
+                </label>
+              </details>`
+            : html``}
+        </div>`
+      : html``}
     <${ProfileAchievementsCard} achievements=${entry?.achievements || entry?.profileAchievements || []} />
   </div>`;
 }
@@ -10038,6 +10217,9 @@ function Layout() {
   const [notificationProfileUser, setNotificationProfileUser] = useState(null);
   const [notificationProfileInfoTab, setNotificationProfileInfoTab] = useState("badges");
   const [notificationProfileLoading, setNotificationProfileLoading] = useState(false);
+  const [notificationProfileOwnedBadgesSaving, setNotificationProfileOwnedBadgesSaving] = useState(false);
+  const [notificationProfileStaffBadgeSaving, setNotificationProfileStaffBadgeSaving] = useState(false);
+  const [notificationProfileStaffBadgeIconSaving, setNotificationProfileStaffBadgeIconSaving] = useState(false);
   const [privateMessageOpen, setPrivateMessageOpen] = useState(false);
   const [privateMessageTarget, setPrivateMessageTarget] = useState(null);
   const [privateMessageThread, setPrivateMessageThread] = useState([]);
@@ -11323,11 +11505,20 @@ function Layout() {
       if (!response.ok) throw new Error("Failed");
       const data = await response.json().catch(() => ({}));
       return {
+        staffRole: String(data?.staffRole || ""),
         canPreviewStaffRole: Boolean(data?.canPreviewStaffRole),
         staffRolePreview: String(data?.staffRolePreview || ""),
         staffRolePreviewOptions: Array.isArray(data?.staffRolePreviewOptions)
           ? data.staffRolePreviewOptions
           : [],
+        ownedRank: normalizeOwnedRankLabel(data?.ownedRank || "Unregistered"),
+        canToggleOwnedBadges: Boolean(data?.canToggleOwnedBadges),
+        showAllOwnedRankBadges: data?.showAllOwnedRankBadges !== false,
+        selectedOwnedBadge: normalizeOwnedRankLabel(data?.selectedOwnedBadge || ""),
+        ownedBadgeOptions: Array.isArray(data?.ownedBadgeOptions) ? data.ownedBadgeOptions : [],
+        canToggleStaffBadge: Boolean(data?.canToggleStaffBadge),
+        showStaffBadge: data?.showStaffBadge !== false,
+        showStaffBadgeIcon: data?.showStaffBadgeIcon !== false,
       };
     } catch {
       return null;
@@ -11352,14 +11543,34 @@ function Layout() {
     let canPreviewStaffRole = false;
     let staffRolePreview = "";
     let staffRolePreviewOptions = [];
+    let ownedRank = normalizeOwnedRankLabel(item.authorOwnedRank || rankLabel);
+    let canToggleOwnedBadges = false;
+    let showAllOwnedRankBadges = true;
+    let selectedOwnedBadge = "";
+    let ownedBadgeOptions = buildOwnedRankBadges(ownedRank, false, { showAllOwnedRankBadges: true });
+    let canToggleStaffBadge = false;
+    let showStaffBadge = item?.authorShowStaffBadge !== false;
+    let showStaffBadgeIcon = item?.authorShowStaffBadgeIcon !== false;
+    let staffRole = String(item?.authorStaffRole || "");
     if (isOwn && isSignedIn) {
       const settings = await loadOwnProfileTitleSettings();
       if (settings) {
+        staffRole = String(settings.staffRole || staffRole);
         canPreviewStaffRole = Boolean(settings.canPreviewStaffRole);
         staffRolePreview = String(settings.staffRolePreview || "");
         staffRolePreviewOptions = Array.isArray(settings.staffRolePreviewOptions)
           ? settings.staffRolePreviewOptions
           : [];
+        ownedRank = normalizeOwnedRankLabel(settings.ownedRank || ownedRank);
+        canToggleOwnedBadges = Boolean(settings.canToggleOwnedBadges);
+        showAllOwnedRankBadges = settings.showAllOwnedRankBadges !== false;
+        selectedOwnedBadge = normalizeOwnedRankLabel(settings.selectedOwnedBadge || "");
+        ownedBadgeOptions = Array.isArray(settings.ownedBadgeOptions)
+          ? settings.ownedBadgeOptions.filter((rank) => OWNED_RANK_ORDER.includes(String(rank)))
+          : ownedBadgeOptions;
+        canToggleStaffBadge = Boolean(settings.canToggleStaffBadge);
+        showStaffBadge = settings.showStaffBadge !== false;
+        showStaffBadgeIcon = settings.showStaffBadgeIcon !== false;
       }
     }
     const [linkStatus, achievements, groups, forumActivity] = await Promise.all([
@@ -11376,12 +11587,17 @@ function Layout() {
         ? resolvedOwnAvatar
         : String(item.authorImage || "/assets/HardTale_H_GreyScale.png"),
       rankLabel,
-      ownedRank: normalizeOwnedRankLabel(item.authorOwnedRank || rankLabel),
+      ownedRank,
+      canToggleOwnedBadges,
+      showAllOwnedRankBadges,
+      selectedOwnedBadge,
+      ownedBadgeOptions,
       staff,
-      staffRole: String(item?.authorStaffRole || ""),
+      staffRole,
       isStaffUser: staff,
-      showStaffBadge: item?.authorShowStaffBadge !== false,
-      showStaffBadgeIcon: item?.authorShowStaffBadgeIcon !== false,
+      canToggleStaffBadge,
+      showStaffBadge,
+      showStaffBadgeIcon,
       showStaffGradient: item?.authorShowStaffGradient !== false,
       useRankFont: item?.authorUseRankFont === true,
       showDonorGradient: item?.authorShowDonorGradient !== false,
@@ -11450,6 +11666,169 @@ function Layout() {
     } finally {
       setProfileTitleSaving(false);
     }
+  }
+
+  async function updateOwnNotificationStaffBadgeVisibility(nextVisible) {
+    if (!notificationProfileUser?.isOwn || !notificationProfileUser?.canToggleStaffBadge || notificationProfileStaffBadgeSaving) return false;
+    setNotificationProfileStaffBadgeSaving(true);
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/staff-badge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showStaffBadge: Boolean(nextVisible) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save staff badge visibility.");
+      }
+      const data = await response.json();
+      const showStaffBadge = data?.showStaffBadge !== false;
+      setNotificationProfileUser((prev) => (prev ? { ...prev, showStaffBadge } : prev));
+      setNotifications((prev) =>
+        prev.map((row) => {
+          const rowUserId = String(row?.authorUserId || "");
+          return rowUserId && rowUserId === String(userId || "")
+            ? { ...row, authorShowStaffBadge: showStaffBadge }
+            : row;
+        }),
+      );
+      return true;
+    } catch (error) {
+      emitAppToast({
+        kind: "error",
+        title: "Badge Save Failed",
+        message: error?.message || "Unable to update staff badge visibility.",
+      });
+      return false;
+    } finally {
+      setNotificationProfileStaffBadgeSaving(false);
+    }
+  }
+
+  async function updateOwnNotificationStaffBadgeIconVisibility(nextVisible) {
+    if (!notificationProfileUser?.isOwn || !notificationProfileUser?.canToggleStaffBadge || notificationProfileStaffBadgeIconSaving) return false;
+    setNotificationProfileStaffBadgeIconSaving(true);
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/staff-badge-icon", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showStaffBadgeIcon: Boolean(nextVisible) }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save staff badge icon style.");
+      }
+      const data = await response.json();
+      const showStaffBadgeIcon = data?.showStaffBadgeIcon !== false;
+      setNotificationProfileUser((prev) => (prev ? { ...prev, showStaffBadgeIcon } : prev));
+      setNotifications((prev) =>
+        prev.map((row) => {
+          const rowUserId = String(row?.authorUserId || "");
+          return rowUserId && rowUserId === String(userId || "")
+            ? { ...row, authorShowStaffBadgeIcon: showStaffBadgeIcon }
+            : row;
+        }),
+      );
+      return true;
+    } catch (error) {
+      emitAppToast({
+        kind: "error",
+        title: "Badge Save Failed",
+        message: error?.message || "Unable to update staff badge icon style.",
+      });
+      return false;
+    } finally {
+      setNotificationProfileStaffBadgeIconSaving(false);
+    }
+  }
+
+  async function updateOwnNotificationStaffBadgeMode(nextMode) {
+    const mode = String(nextMode || "").trim().toLowerCase();
+    let success = false;
+    if (mode === "hidden") {
+      success = await updateOwnNotificationStaffBadgeVisibility(false);
+    } else if (mode === "label") {
+      const badgeSaved = await updateOwnNotificationStaffBadgeVisibility(true);
+      const iconSaved = await updateOwnNotificationStaffBadgeIconVisibility(false);
+      success = badgeSaved && iconSaved;
+    } else {
+      const badgeSaved = await updateOwnNotificationStaffBadgeVisibility(true);
+      const iconSaved = await updateOwnNotificationStaffBadgeIconVisibility(true);
+      success = badgeSaved && iconSaved;
+    }
+    emitAppToast({
+      kind: success ? "success" : "error",
+      title: success ? "Staff Badge Updated" : "Staff Badge Update Failed",
+      message: success
+        ? mode === "hidden"
+          ? "Staff badge is now hidden."
+          : mode === "label"
+          ? "Staff badge now uses text style."
+          : "Staff badge now uses icon style."
+        : "Unable to update staff badge mode right now.",
+    });
+  }
+
+  async function updateOwnNotificationOwnedBadgeDisplaySettings(nextShowAll, nextSelectedBadge = "") {
+    if (!notificationProfileUser?.isOwn || !notificationProfileUser?.canToggleOwnedBadges || notificationProfileOwnedBadgesSaving) return false;
+    setNotificationProfileOwnedBadgesSaving(true);
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/owned-badges", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          showAllOwnedRankBadges: Boolean(nextShowAll),
+          selectedOwnedBadge: String(nextSelectedBadge || ""),
+        }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save badge display settings.");
+      }
+      const data = await response.json();
+      const showAllOwnedRankBadges = data?.showAllOwnedRankBadges !== false;
+      const selectedOwnedBadge = String(data?.selectedOwnedBadge || "");
+      const ownedBadgeOptions = Array.isArray(data?.ownedBadgeOptions)
+        ? data.ownedBadgeOptions.filter((rank) => OWNED_RANK_ORDER.includes(String(rank)))
+        : [];
+      setNotificationProfileUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              showAllOwnedRankBadges,
+              selectedOwnedBadge,
+              ownedBadgeOptions: ownedBadgeOptions.length ? ownedBadgeOptions : prev.ownedBadgeOptions,
+            }
+          : prev,
+      );
+      return true;
+    } catch (error) {
+      emitAppToast({
+        kind: "error",
+        title: "Badge Save Failed",
+        message: error?.message || "Unable to update donor badge display.",
+      });
+      return false;
+    } finally {
+      setNotificationProfileOwnedBadgesSaving(false);
+    }
+  }
+
+  async function updateOwnNotificationDonorBadgeSelection(nextBadgeOrAll) {
+    const next = String(nextBadgeOrAll || "").trim();
+    const success =
+      next === "__all__"
+        ? await updateOwnNotificationOwnedBadgeDisplaySettings(true, "")
+        : await updateOwnNotificationOwnedBadgeDisplaySettings(false, next);
+    emitAppToast({
+      kind: success ? "success" : "error",
+      title: success ? "Donor Badge Updated" : "Donor Badge Update Failed",
+      message: success
+        ? next === "__all__"
+          ? "Displaying all owned donor badges."
+          : `Now displaying ${getRankDisplayLabel(next)} as your donor badge.`
+        : "Unable to update donor badge display right now.",
+    });
   }
 
   useEffect(() => {
@@ -12180,6 +12559,21 @@ function Layout() {
         onClose=${() => setNotificationProfileOpen(false)}
         title="Profile Card"
         className="profile-card-overlay"
+        headerBelow=${notificationProfileUser?.isOwn
+          ? html`<div className="profile-modal-header-actions">
+              <button
+                type="button"
+                className="copy-action-btn subtle profile-copy-action account-management-pill"
+                onClick=${() => {
+                  setNotificationProfileOpen(false);
+                  if (openUserProfile) openUserProfile({});
+                }}
+                title="Account Management"
+              >
+                <span>Account Management</span>
+              </button>
+            </div>`
+          : html``}
       >
         ${notificationProfileUser
           ? html`<${ProfileCardLayout}
@@ -12239,16 +12633,6 @@ function Layout() {
                       },
                     ]
                   : []),
-                {
-                  label: "",
-                  value: "Account Management",
-                  onClick: () => {
-                    setNotificationProfileOpen(false);
-                    if (openUserProfile) openUserProfile({});
-                  },
-                  title: "Account Management",
-                  className: "account-management-pill",
-                },
               ]}
               onMetaRowClick=${copyNotificationProfileMetaValue}
               rankNode=${html`<div
@@ -12318,9 +12702,14 @@ function Layout() {
                 activeTab=${notificationProfileInfoTab}
                 onTabChange=${setNotificationProfileInfoTab}
                 renderBadges=${() =>
-                  html`${renderOwnedRankBadges(notificationProfileUser)}`}
-                renderRanks=${() =>
-                  html`${renderProfileRanksCard(notificationProfileUser)}`}
+                  html`${renderOwnedRankBadges(notificationProfileUser, {
+                    onSelectDonorBadge: updateOwnNotificationDonorBadgeSelection,
+                    onSelectStaffBadgeMode: updateOwnNotificationStaffBadgeMode,
+                    donorSaving: notificationProfileOwnedBadgesSaving,
+                    staffSaving:
+                      notificationProfileStaffBadgeSaving ||
+                      notificationProfileStaffBadgeIconSaving,
+                  })}`}
                 renderGroups=${() =>
                   html`${renderProfileGroupsCard(notificationProfileUser, {
                     isSaving: profileTitleSaving,

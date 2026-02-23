@@ -4191,6 +4191,12 @@ emoji-picker.reaction-picker-panel {
   margin-top: 4px;
 }
 
+.profile-modal-header-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin: 2px 0 8px;
+}
+
 .account-panel-logout-link {
   width: auto;
   border-color: transparent;
@@ -4393,6 +4399,27 @@ emoji-picker.reaction-picker-panel {
   letter-spacing: 0.06em;
 }
 
+button.profile-owned-badge {
+  appearance: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+button.profile-owned-badge:disabled {
+  cursor: default;
+}
+
+.profile-owned-badge.is-selectable {
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.profile-owned-badge.is-selectable:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--stroke));
+}
+
 .profile-owned-badge.rank-hero {
   color: #5db8ff;
   border-color: color-mix(in srgb, #5db8ff 52%, var(--stroke));
@@ -4511,6 +4538,28 @@ emoji-picker.reaction-picker-panel {
 
 .profile-card-badges-empty {
   font-size: 12px;
+}
+
+.profile-badge-dropdown {
+  border: 1px solid var(--stroke);
+  background: var(--bg-soft);
+  border-radius: 10px;
+  padding: 6px 8px;
+  margin-top: 6px;
+}
+
+.profile-badge-dropdown > summary {
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  list-style: none;
+}
+
+.profile-badge-dropdown > summary::-webkit-details-marker {
+  display: none;
 }
 
 .profile-groups-row {
