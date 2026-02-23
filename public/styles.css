@@ -1650,6 +1650,15 @@ body[data-theme="dark"] {
   position: fixed;
   z-index: 2147483000;
   width: min(320px, calc(100vw - 20px));
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+
+.forum-profile-peek-shell.is-closing {
+  opacity: 0;
+  transform: translateY(8px) scale(0.98);
+  pointer-events: none;
 }
 
 .forum-profile-peek-card {

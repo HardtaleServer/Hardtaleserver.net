@@ -215,6 +215,7 @@ const CHANGELOG_ENTRIES = [
       "Fixed account-management action in notification profile modal by restoring `openUserProfile` scope in Layout so the button no longer throws a runtime `ReferenceError`.",
       "Fixed forum `@` profile peek cards for own-user mentions/hover so they respect local avatar source selection (including UUID/Hytale avatar choice) instead of stale post-snapshot PNG avatars.",
       "Extended the notification-button flash interaction to broader desktop/mobile button targets and added automatic pulse triggers when unread notification count increases or cart count updates.",
+      "Updated mobile forum profile-peek popup behavior to auto-dismiss after idle, fade out on outside tap, and close on scroll/touch-move so it no longer rides with page scrolling.",
       "Removed temporary root-level response/handoff `.txt` artifacts from the repository to keep project files focused on runtime code and durable documentation.",
     ],
   },
@@ -6382,6 +6383,7 @@ function ForumPage({ isAdmin = false }) {
   const [forumProfileOpen, setForumProfileOpen] = useState(false);
   const [forumProfileUser, setForumProfileUser] = useState(null);
   const [forumHoverProfile, setForumHoverProfile] = useState(null);
+  const [forumHoverClosing, setForumHoverClosing] = useState(false);
   const [forumProfileInfoTab, setForumProfileInfoTab] = useState("badges");
   const [forumProfileTitleStatus, setForumProfileTitleStatus] = useState("");
   const [forumProfileTitleSaving, setForumProfileTitleSaving] = useState(false);
@@ -6404,6 +6406,8 @@ function ForumPage({ isAdmin = false }) {
   const [forumHistoryTitle, setForumHistoryTitle] = useState("Post Edit History");
   const forumHoverOpenTimerRef = useRef(0);
   const forumHoverCloseTimerRef = useRef(0);
+  const forumHoverAutoCloseTimerRef = useRef(0);
+  const forumHoverFadeTimerRef = useRef(0);
   const forumHoverResolveTokenRef = useRef(0);
   const forumMentionProfileMetaCacheRef = useRef(new Map());
   const FORUM_PROFILE_META_CACHE_TTL_MS = 60 * 1000;
@@ -6536,6 +6540,8 @@ function ForumPage({ isAdmin = false }) {
 
   function openForumProfileEntry(entry) {
     if (!entry) return;
+    clearForumHoverTimers();
+    setForumHoverClosing(false);
     setForumHoverProfile(null);
     openForumProfileCard(entry);
   }
@@ -6620,6 +6626,50 @@ function ForumPage({ isAdmin = false }) {
       clearTimeout(forumHoverCloseTimerRef.current);
       forumHoverCloseTimerRef.current = 0;
     }
+    if (forumHoverAutoCloseTimerRef.current) {
+      clearTimeout(forumHoverAutoCloseTimerRef.current);
+      forumHoverAutoCloseTimerRef.current = 0;
+    }
+    if (forumHoverFadeTimerRef.current) {
+      clearTimeout(forumHoverFadeTimerRef.current);
+      forumHoverFadeTimerRef.current = 0;
+    }
+  }
+
+  function isForumTouchMode() {
+    return typeof window !== "undefined" && window.matchMedia("(hover: none)").matches;
+  }
+
+  function scheduleForumHoverAutoClose(timeoutMs = 3000) {
+    if (!isForumTouchMode()) return;
+    if (forumHoverAutoCloseTimerRef.current) {
+      clearTimeout(forumHoverAutoCloseTimerRef.current);
+    }
+    forumHoverAutoCloseTimerRef.current = setTimeout(() => {
+      setForumHoverClosing(true);
+      if (forumHoverFadeTimerRef.current) clearTimeout(forumHoverFadeTimerRef.current);
+      forumHoverFadeTimerRef.current = setTimeout(() => {
+        setForumHoverProfile(null);
+        setForumHoverClosing(false);
+        forumHoverFadeTimerRef.current = 0;
+      }, 260);
+      forumHoverAutoCloseTimerRef.current = 0;
+    }, Math.max(200, Number(timeoutMs) || 3000));
+  }
+
+  function closeForumHoverWithFade(fadeMs = 220) {
+    if (!forumHoverProfile) return;
+    if (forumHoverAutoCloseTimerRef.current) {
+      clearTimeout(forumHoverAutoCloseTimerRef.current);
+      forumHoverAutoCloseTimerRef.current = 0;
+    }
+    setForumHoverClosing(true);
+    if (forumHoverFadeTimerRef.current) clearTimeout(forumHoverFadeTimerRef.current);
+    forumHoverFadeTimerRef.current = setTimeout(() => {
+      setForumHoverProfile(null);
+      setForumHoverClosing(false);
+      forumHoverFadeTimerRef.current = 0;
+    }, Math.max(120, Number(fadeMs) || 220));
   }
 
   function computeForumHoverPosition(rect, options = {}) {
@@ -6680,6 +6730,8 @@ function ForumPage({ isAdmin = false }) {
       x: position.x,
       y: position.y,
     });
+    setForumHoverClosing(false);
+    scheduleForumHoverAutoClose(3000);
   }
 
   function openForumMentionPreview(entry, triggerEl = null, anchorRect = null, anchorPoint = null) {
@@ -6705,6 +6757,8 @@ function ForumPage({ isAdmin = false }) {
       x,
       y: 112,
     });
+    setForumHoverClosing(false);
+    scheduleForumHoverAutoClose(3000);
   }
 
   function scheduleForumHoverOpen(entry, anchorEl) {
@@ -6734,7 +6788,7 @@ function ForumPage({ isAdmin = false }) {
     if (forumHoverCloseTimerRef.current) clearTimeout(forumHoverCloseTimerRef.current);
     forumHoverResolveTokenRef.current += 1;
     forumHoverCloseTimerRef.current = setTimeout(() => {
-      setForumHoverProfile(null);
+      closeForumHoverWithFade(220);
       forumHoverCloseTimerRef.current = 0;
     }, 1500);
   }
@@ -6774,6 +6828,32 @@ function ForumPage({ isAdmin = false }) {
       .catch(() => {});
   }
 
+  useEffect(() => {
+    if (!forumHoverProfile || !isForumTouchMode() || typeof document === "undefined") return undefined;
+    const onPointerDown = (event) => {
+      const target = event?.target;
+      if (target?.closest?.(".forum-profile-peek-shell")) return;
+      closeForumHoverWithFade(1000);
+    };
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown, true);
+    };
+  }, [forumHoverProfile]);
+
+  useEffect(() => {
+    if (!forumHoverProfile || typeof window === "undefined") return undefined;
+    const onScrollLike = () => closeForumHoverWithFade(220);
+    window.addEventListener("scroll", onScrollLike, { passive: true });
+    window.addEventListener("wheel", onScrollLike, { passive: true });
+    window.addEventListener("touchmove", onScrollLike, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", onScrollLike);
+      window.removeEventListener("wheel", onScrollLike);
+      window.removeEventListener("touchmove", onScrollLike);
+    };
+  }, [forumHoverProfile]);
+
   function renderForumHoverProfileCard() {
     if (!forumHoverProfile?.entry) return html``;
     const preview = forumHoverProfile.entry;
@@ -6790,7 +6870,7 @@ function ForumPage({ isAdmin = false }) {
     const showStaff = preview?.authorShowStaffBadge !== false &&
       Boolean(preview.authorIsStaff || isStaffLabel(preview.authorRank || ""));
     const node = html`<div
-      className="forum-profile-peek-shell"
+      className=${`forum-profile-peek-shell ${forumHoverClosing ? "is-closing" : ""}`.trim()}
       style=${{ left: `${forumHoverProfile.x}px`, top: `${forumHoverProfile.y}px` }}
       onMouseEnter=${() => clearForumHoverTimers()}
       onMouseLeave=${scheduleForumHoverClose}

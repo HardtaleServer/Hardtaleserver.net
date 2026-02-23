@@ -18,6 +18,10 @@ All notable changes to this project are documented here.
 - Fixed notification profile modal account-management action runtime error (`openUserProfile is not defined`) by restoring Layout scope wiring.
 - Fixed forum `@` profile peek cards for own-user mentions/hover so local avatar-source selection (including UUID/Hytale avatar) is respected instead of stale post-snapshot PNG avatars.
 - Extended the notification-button flash interaction to general button targets across desktop/mobile via a shared pointerdown flash hook, and added automatic nav-button pulse triggers when unread notification count increases or cart count changes.
+- Updated mobile forum profile-peek popup lifecycle:
+  - auto-dismisses after 3 seconds when left idle,
+  - fades out when tapping outside,
+  - and closes on page scroll/touchmove so it does not travel with scrolling content.
 - Removed temporary root-level response/handoff `.txt` artifacts to keep repository contents focused on code and durable project docs.
 
 ## 2026-02-23 (v1.4.12)
