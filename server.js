@@ -265,6 +265,7 @@ let fulfillmentJobsCollection = null;
 let grantsCollection = null;
 let friendRequestsCollection = null;
 let friendshipsCollection = null;
+let ignoredUsersCollection = null;
 let mongoConnectInFlight = null;
 let mongoReconnectTimer = null;
 let mongoReconnectDelayMs = 1000;
@@ -305,7 +306,8 @@ function isMongoReady() {
       fulfillmentJobsCollection &&
       grantsCollection &&
       friendRequestsCollection &&
-      friendshipsCollection,
+      friendshipsCollection &&
+      ignoredUsersCollection,
   );
 }
 
@@ -399,6 +401,7 @@ function resetMongoState() {
   grantsCollection = null;
   friendRequestsCollection = null;
   friendshipsCollection = null;
+  ignoredUsersCollection = null;
   mongoConnectInFlight = null;
   if (MONGO_URI) {
     setMongoState("connecting", mongoLastErrorCode || "");
@@ -470,6 +473,7 @@ async function connectMongo() {
       grantsCollection = mongoDb.collection("grants");
       friendRequestsCollection = mongoDb.collection("friend_requests");
       friendshipsCollection = mongoDb.collection("friendships");
+      ignoredUsersCollection = mongoDb.collection("ignored_users");
       await commentsCollection.createIndex({ newsId: 1, createdAt: 1 });
       await commentsCollection.createIndex({ userId: 1 });
       await commentRevisionsCollection.createIndex({ commentId: 1, createdAt: 1 });
@@ -526,6 +530,9 @@ async function connectMongo() {
       await friendshipsCollection.createIndex({ pairKey: 1 }, { unique: true });
       await friendshipsCollection.createIndex({ userLow: 1, createdAt: -1 });
       await friendshipsCollection.createIndex({ userHigh: 1, createdAt: -1 });
+      await ignoredUsersCollection.createIndex({ id: 1 }, { unique: true });
+      await ignoredUsersCollection.createIndex({ ownerUserId: 1, createdAt: -1 });
+      await ignoredUsersCollection.createIndex({ ownerUserId: 1, targetUserId: 1 }, { unique: true });
       mongoReconnectDelayMs = 1000;
       setMongoState("ready", "");
       console.log("Connected to MongoDB");
@@ -2936,12 +2943,35 @@ function requireSignedInAuth(req, res) {
 
 function toBasicFriendProfile(user = null) {
   if (!user?.id) return null;
+  const metadata = user?.publicMetadata || {};
+  const ownedRank = applyLinkedOwnedRankFloor(metadata?.rank, true);
+  const rankLabel =
+    normalizeDisplayTitle(metadata?.displayRank) ||
+    normalizeOwnedRank(ownedRank) ||
+    "Registered";
   return {
     userId: normalizeText(user.id, 128),
     username: formatUsernameForDisplay(user?.username, 80),
     name: getUserDisplayName(user),
     image: String(user?.imageUrl || ""),
+    rankLabel,
+    online: (() => {
+      const last = Number(user?.lastActiveAt || 0);
+      if (!Number.isFinite(last) || last <= 0) return false;
+      return Date.now() - last <= 5 * 60 * 1000;
+    })(),
   };
+}
+
+async function isIgnoredByOwner(ownerUserIdRaw, targetUserIdRaw) {
+  const ownerUserId = normalizeText(ownerUserIdRaw, 128);
+  const targetUserId = normalizeText(targetUserIdRaw, 128);
+  if (!ownerUserId || !targetUserId || !ignoredUsersCollection) return false;
+  const hit = await ignoredUsersCollection.findOne(
+    { ownerUserId, targetUserId },
+    { projection: { id: 1 } },
+  );
+  return Boolean(hit?.id);
 }
 
 async function loadBasicFriendProfilesByIds(ids = []) {
@@ -3059,7 +3089,14 @@ async function resolveNotificationQueryForUser(userIdRaw) {
     isAdmin = false;
   }
   if (isAdmin) {
-    query = { isDeleted: false };
+    query = {
+      isDeleted: false,
+      $or: [
+        { targetUserId: { $exists: false } },
+        { targetUserId: "" },
+        { targetUserId: userId },
+      ],
+    };
   } else {
     query = {
       isDeleted: false,
@@ -4655,7 +4692,7 @@ app.get("/api/friends", async (req, res) => {
     const signed = requireSignedInAuth(req, res);
     if (!signed) return;
     const userId = signed.userId;
-    const [friendships, incoming, outgoing] = await Promise.all([
+    const [friendships, incoming, outgoing, ignoredRows] = await Promise.all([
       friendshipsCollection
         .find({ $or: [{ userLow: userId }, { userHigh: userId }] })
         .sort({ createdAt: -1 })
@@ -4671,6 +4708,11 @@ app.get("/api/friends", async (req, res) => {
         .sort({ createdAt: -1 })
         .limit(200)
         .toArray(),
+      ignoredUsersCollection
+        .find({ ownerUserId: userId })
+        .sort({ createdAt: -1 })
+        .limit(500)
+        .toArray(),
     ]);
 
     const friendIds = friendships
@@ -4678,7 +4720,8 @@ app.get("/api/friends", async (req, res) => {
       .filter(Boolean);
     const incomingIds = incoming.map((entry) => normalizeText(entry.fromUserId, 128)).filter(Boolean);
     const outgoingIds = outgoing.map((entry) => normalizeText(entry.toUserId, 128)).filter(Boolean);
-    const profiles = await loadBasicFriendProfilesByIds([...friendIds, ...incomingIds, ...outgoingIds]);
+    const ignoredIds = ignoredRows.map((entry) => normalizeText(entry.targetUserId, 128)).filter(Boolean);
+    const profiles = await loadBasicFriendProfilesByIds([...friendIds, ...incomingIds, ...outgoingIds, ...ignoredIds]);
 
     const toProfile = (id) => profiles.get(normalizeText(id, 128)) || {
       userId: normalizeText(id, 128),
@@ -4701,6 +4744,12 @@ app.get("/api/friends", async (req, res) => {
         toUserId: normalizeText(entry.toUserId, 128),
         to: toProfile(entry.toUserId),
       })),
+      ignored: ignoredRows.map((entry) => ({
+        id: normalizeText(entry.id, 128),
+        targetUserId: normalizeText(entry.targetUserId, 128),
+        createdAt: entry.createdAt || new Date().toISOString(),
+        target: toProfile(entry.targetUserId),
+      })),
     });
   } catch (error) {
     console.error("Failed to load friends", error);
@@ -4721,6 +4770,13 @@ app.post("/api/friends/request", async (req, res) => {
     const targetExists = await clerkClient.users.getUser(targetUserId).catch(() => null);
     if (!targetExists) {
       return res.status(404).json({ error: "target_user_not_found" });
+    }
+    const [iIgnoredTarget, targetIgnoredMe] = await Promise.all([
+      isIgnoredByOwner(userId, targetUserId),
+      isIgnoredByOwner(targetUserId, userId),
+    ]);
+    if (iIgnoredTarget || targetIgnoredMe) {
+      return res.status(403).json({ error: "friend_request_blocked_by_ignore" });
     }
 
     const relation = await loadFriendStateForUserPair(userId, targetUserId);
@@ -4874,6 +4930,70 @@ app.delete("/api/friends/:targetUserId", async (req, res) => {
   } catch (error) {
     console.error("Failed to remove friend", error);
     return res.status(500).json({ error: "Failed to remove friend" });
+  }
+});
+
+app.post("/api/friends/ignore", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const signed = requireSignedInAuth(req, res);
+    if (!signed) return;
+    const userId = signed.userId;
+    const targetUserId = normalizeText(req.body?.targetUserId, 128);
+    if (!targetUserId || targetUserId === userId) {
+      return res.status(400).json({ error: "invalid_target_user" });
+    }
+    const targetExists = await clerkClient.users.getUser(targetUserId).catch(() => null);
+    if (!targetExists?.id) {
+      return res.status(404).json({ error: "target_user_not_found" });
+    }
+    const now = new Date().toISOString();
+    await ignoredUsersCollection.updateOne(
+      { ownerUserId: userId, targetUserId },
+      {
+        $setOnInsert: {
+          id: crypto.randomUUID(),
+          ownerUserId: userId,
+          targetUserId,
+          createdAt: now,
+        },
+        $set: { updatedAt: now },
+      },
+      { upsert: true },
+    );
+    await friendshipsCollection.deleteOne({ pairKey: buildFriendPairKey(userId, targetUserId) });
+    await friendRequestsCollection.updateMany(
+      {
+        status: "PENDING",
+        $or: [
+          { fromUserId: userId, toUserId: targetUserId },
+          { fromUserId: targetUserId, toUserId: userId },
+        ],
+      },
+      { $set: { status: "CANCELED", respondedByUserId: userId, respondedAt: now, updatedAt: now } },
+    );
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("Failed to ignore user", error);
+    return res.status(500).json({ error: "Failed to ignore user" });
+  }
+});
+
+app.delete("/api/friends/ignore/:targetUserId", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const signed = requireSignedInAuth(req, res);
+    if (!signed) return;
+    const userId = signed.userId;
+    const targetUserId = normalizeText(req.params?.targetUserId, 128);
+    if (!targetUserId || targetUserId === userId) {
+      return res.status(400).json({ error: "invalid_target_user" });
+    }
+    await ignoredUsersCollection.deleteOne({ ownerUserId: userId, targetUserId });
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("Failed to unignore user", error);
+    return res.status(500).json({ error: "Failed to unignore user" });
   }
 });
 
@@ -7643,6 +7763,13 @@ app.get("/api/private-messages/thread/:targetUserId", async (req, res) => {
     if (!targetUserId || targetUserId === auth.userId) {
       return res.status(400).json({ error: "Invalid private message target" });
     }
+    const [iIgnoredTarget, targetIgnoredMe] = await Promise.all([
+      isIgnoredByOwner(auth.userId, targetUserId),
+      isIgnoredByOwner(targetUserId, auth.userId),
+    ]);
+    if (iIgnoredTarget || targetIgnoredMe) {
+      return res.status(403).json({ error: "private_message_blocked_by_ignore" });
+    }
     const rows = await privateMessagesCollection
       .find({
         isDeleted: false,
@@ -7690,6 +7817,13 @@ app.post("/api/private-messages", async (req, res) => {
     const targetUser = await clerkClient.users.getUser(targetUserId).catch(() => null);
     if (!targetUser?.id) {
       return res.status(404).json({ error: "Target user not found" });
+    }
+    const [iIgnoredTarget, targetIgnoredMe] = await Promise.all([
+      isIgnoredByOwner(auth.userId, targetUserId),
+      isIgnoredByOwner(targetUserId, auth.userId),
+    ]);
+    if (iIgnoredTarget || targetIgnoredMe) {
+      return res.status(403).json({ error: "private_message_blocked_by_ignore" });
     }
 
     const now = new Date().toISOString();
@@ -7741,6 +7875,92 @@ app.post("/api/private-messages", async (req, res) => {
     return res.json({ message: normalizePrivateMessageDoc(record) });
   } catch (error) {
     console.error("Failed to send private message", error);
+    return res.status(500).json({ error: "Failed to send private message" });
+  }
+});
+
+app.post("/api/private-messages/lite", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const targetUserId = normalizeText(req.body?.targetUserId, 128);
+    const body = normalizePrivateMessageBody(req.body?.body);
+    if (!targetUserId || targetUserId === auth.userId || !body) {
+      return res.status(400).json({ error: "Invalid private message payload" });
+    }
+    const [iIgnoredTarget, targetIgnoredMe] = await Promise.all([
+      isIgnoredByOwner(auth.userId, targetUserId),
+      isIgnoredByOwner(targetUserId, auth.userId),
+    ]);
+    if (iIgnoredTarget || targetIgnoredMe) {
+      return res.status(403).json({ error: "private_message_blocked_by_ignore" });
+    }
+
+    const senderUser = await clerkClient.users.getUser(auth.userId);
+    const senderIsStaff = isAdminUser(senderUser);
+    const senderLinked = await isLinkedUserId(auth.userId);
+    const senderRankInfo = resolveDisplayRankFromMetadata(
+      senderUser?.publicMetadata || {},
+      senderIsStaff,
+      senderLinked,
+    );
+    if (!senderIsStaff && !senderLinked && senderRankInfo.ownedRank === "Unregistered") {
+      return res.status(403).json({ error: "Private messages require a linked account or rank." });
+    }
+    const targetUser = await clerkClient.users.getUser(targetUserId).catch(() => null);
+    if (!targetUser?.id) {
+      return res.status(404).json({ error: "Target user not found" });
+    }
+
+    const now = new Date().toISOString();
+    const senderLabel =
+      formatUsernameForDisplay(senderUser?.username, 80) ||
+      normalizeText(getUserDisplayName(senderUser), 80) ||
+      "User";
+    const encodedPayload = Buffer.from(
+      JSON.stringify({
+        fromUserId: auth.userId,
+        toUserId: targetUserId,
+        body,
+        sentAt: now,
+      }),
+      "utf8",
+    ).toString("base64");
+
+    await notificationsCollection.insertOne({
+      id: crypto.randomUUID(),
+      title: "New Private Message",
+      message: `${senderLabel} sent you a private message.`,
+      encodedMessage: encodedPayload,
+      author: senderLabel,
+      authorName: senderLabel,
+      authorUserId: auth.userId,
+      authorUsername: formatUsernameForDisplay(senderUser?.username, 80),
+      authorImage: senderUser?.imageUrl || "",
+      authorRank: senderRankInfo.displayRank || "Unregistered",
+      authorOwnedRank: senderRankInfo.ownedRank || "Unregistered",
+      authorIsStaff: Boolean(senderIsStaff),
+      authorStaffRole: resolveStaffRoleForUser(senderUser),
+      authorShowStaffBadge: resolveStaffBadgeVisible(senderUser?.publicMetadata || {}),
+      authorShowStaffBadgeIcon: resolveStaffBadgeIconVisible(senderUser?.publicMetadata || {}),
+      authorShowStaffGradient: resolveStaffGradientVisible(senderUser?.publicMetadata || {}),
+      authorUseRankFont: resolveRankFontVisible(senderUser?.publicMetadata || {}),
+      authorShowDonorGradient: resolveDonorGradientVisible(senderUser?.publicMetadata || {}),
+      featured: false,
+      type: "private_message_lite",
+      targetUserId: targetUserId,
+      readMoreUrl: "/",
+      isDeleted: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await pruneCollection(notificationsCollection, 120);
+    return res.json({ ok: true, sentAt: now });
+  } catch (error) {
+    console.error("Failed to send lite private message", error);
     return res.status(500).json({ error: "Failed to send private message" });
   }
 });

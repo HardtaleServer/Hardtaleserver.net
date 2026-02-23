@@ -96,7 +96,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.18";
+const VERSION = "1.4.21";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -202,6 +202,35 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.4.21",
+    date: "2026-02-23",
+    items: [
+      "Expanded friends platform with Mongo-backed ignore-list support (`/api/friends/ignore` add/remove) and integrated ignore checks into friend-request + private-message flows.",
+      "Added lightweight private messaging endpoint (`/api/private-messages/lite`) that sends encoded notification payloads for low-write delivery while preserving existing PM access rules.",
+      "Reworked Friends modal into tabbed views (`Online`, `Friend Requests`, `Ignore List`) with online/offline status dots, rank badges, inline actions, and ignore search controls.",
+      "Improved desktop user-search behavior: hidden while signed out, stabilized input focus during typing, and aligned search-shell hover treatment with primary button interactions.",
+      "Updated desktop auth for signed-out state to use a blank user-circle trigger with compact Sign in / Sign up dropdown actions.",
+    ],
+  },
+  {
+    version: "1.4.20",
+    date: "2026-02-23",
+    items: [
+      "Adjusted notification visibility rules so targeted notifications (including friend-request accept events) are only returned to their intended target user, preventing admin accounts from seeing other users' private social notifications in the bell feed.",
+      "Resolved confusing friend-request accept messaging scenarios where admin-wide notification visibility made private target-user events appear as if they belonged to the current account.",
+    ],
+  },
+  {
+    version: "1.4.19",
+    date: "2026-02-23",
+    items: [
+      "Refined desktop Home friends preview into a transparent carousel strip with visible horizontal scrollbar, larger avatars, and subtle hover motion.",
+      "Removed desktop Home friends arrow controls and kept `View more` as the primary launcher for the full Friends modal.",
+      "Added rank badges under each desktop Home friend chip (driven by friend profile rank metadata where available).",
+      "Replaced desktop signed-out `Sign in` / `Sign up` button pair with a blank user-circle account trigger that opens a compact auth dropdown menu.",
+    ],
+  },
   {
     version: "1.4.18",
     date: "2026-02-23",
@@ -9807,7 +9836,6 @@ function HomePage({
 }) {
   const navigate = useNavigate();
   const { openSignIn } = useClerk();
-  const friendsScrollerRef = useRef(null);
   const [showLeaderboardModal, setShowLeaderboardModal] = useState(false);
   const [forumPreview, setForumPreview] = useState([]);
   const [forumLoading, setForumLoading] = useState(true);
@@ -9911,13 +9939,6 @@ function HomePage({
       .slice(0, 120);
   const desktopFriends = Array.isArray(friendsPreview) ? friendsPreview.slice(0, 18) : [];
 
-  function scrollDesktopFriends(direction = 1) {
-    const node = friendsScrollerRef.current;
-    if (!node) return;
-    const delta = Math.max(140, Math.round(node.clientWidth * 0.62)) * (direction >= 0 ? 1 : -1);
-    node.scrollBy({ left: delta, behavior: "smooth" });
-  }
-
   return html`
     <section className="home-stack">
       <div className="hero fade-in">
@@ -9944,34 +9965,12 @@ function HomePage({
                 <div className="home-hero-friends-head">
                   <strong>Friends</strong>
                   <div className="home-hero-friends-actions">
-                    <button
-                      type="button"
-                      className="ghost-btn home-hero-friends-scroll"
-                      onClick=${() => scrollDesktopFriends(-1)}
-                      aria-label="Scroll friends left"
-                    >
-                      ‹
-                    </button>
-                    <button
-                      type="button"
-                      className="ghost-btn home-hero-friends-scroll"
-                      onClick=${() => scrollDesktopFriends(1)}
-                      aria-label="Scroll friends right"
-                    >
-                      ›
-                    </button>
-                    <button
-                      type="button"
-                      className="ghost-btn home-hero-friends-more"
-                      onClick=${() => onOpenFriendsModal && onOpenFriendsModal()}
-                    >
-                      View more
-                    </button>
+                    <span className="home-hero-friends-scroll-hint muted">Scroll</span>
                   </div>
                 </div>
                 ${desktopFriends.length === 0
                   ? html`<div className="muted home-hero-friends-empty">No friends yet. Use search to add players.</div>`
-                  : html`<div className="home-hero-friends-strip" ref=${friendsScrollerRef}>
+                  : html`<div className="home-hero-friends-strip">
                       ${desktopFriends.map(
                         (entry) => html`<button
                           key=${entry.userId}
@@ -9982,9 +9981,26 @@ function HomePage({
                         >
                           <img src=${entry.image || "/assets/HardTale_H_GreyScale.png"} alt=${entry.name || "Friend"} />
                           <span>${entry.name || "Friend"}</span>
+                          <span
+                            className=${`home-hero-friend-rank rank-${String(
+                              entry?.rankLabel || "Registered",
+                            )
+                              .trim()
+                              .toLowerCase()
+                              .replace(/[^a-z0-9]+/g, "-")}`.trim()}
+                          >
+                            ${getRankDisplayLabel(entry?.rankLabel || "Registered")}
+                          </span>
                         </button>`,
                       )}
                     </div>`}
+                <button
+                  type="button"
+                  className="ghost-btn home-hero-friends-more"
+                  onClick=${() => onOpenFriendsModal && onOpenFriendsModal()}
+                >
+                  View more
+                </button>
               </section>`
             : html``}
           <div className="join-row">
@@ -11084,8 +11100,14 @@ function Layout() {
     friends: [],
     incoming: [],
     outgoing: [],
+    ignored: [],
   });
   const [friendsLoading, setFriendsLoading] = useState(false);
+  const [friendsModalTab, setFriendsModalTab] = useState("online");
+  const [ignoreSearchQuery, setIgnoreSearchQuery] = useState("");
+  const [ignoreSearchLoading, setIgnoreSearchLoading] = useState(false);
+  const [ignoreSearchResults, setIgnoreSearchResults] = useState([]);
+  const [ignoreActionBusyUserId, setIgnoreActionBusyUserId] = useState("");
   const [friendActionBusyUserId, setFriendActionBusyUserId] = useState("");
   const [friendRequestActionBusyId, setFriendRequestActionBusyId] = useState("");
   const [profileTitleSaving, setProfileTitleSaving] = useState(false);
@@ -11127,6 +11149,8 @@ function Layout() {
   const avatarFileInputRef = useRef(null);
   const userSearchRootRef = useRef(null);
   const userSearchMobileRootRef = useRef(null);
+  const userSearchDesktopInputRef = useRef(null);
+  const userSearchMobileInputRef = useRef(null);
   const shellRef = useRef(null);
   const topbarRef = useRef(null);
   const playRef = useRef(null);
@@ -13052,7 +13076,7 @@ function Layout() {
 
   async function refreshFriendsSnapshot() {
     if (!isSignedIn) {
-      setFriendsSnapshot({ friends: [], incoming: [], outgoing: [] });
+      setFriendsSnapshot({ friends: [], incoming: [], outgoing: [], ignored: [] });
       setFriendsLoading(false);
       return;
     }
@@ -13065,9 +13089,10 @@ function Layout() {
         friends: Array.isArray(data?.friends) ? data.friends : [],
         incoming: Array.isArray(data?.incoming) ? data.incoming : [],
         outgoing: Array.isArray(data?.outgoing) ? data.outgoing : [],
+        ignored: Array.isArray(data?.ignored) ? data.ignored : [],
       });
     } catch {
-      setFriendsSnapshot({ friends: [], incoming: [], outgoing: [] });
+      setFriendsSnapshot({ friends: [], incoming: [], outgoing: [], ignored: [] });
     } finally {
       setFriendsLoading(false);
     }
@@ -13239,6 +13264,92 @@ function Layout() {
     }
   }
 
+  async function ignoreUser(targetUser) {
+    const targetUserId = String(targetUser?.userId || targetUser?.authorUserId || targetUser?.targetUserId || "").trim();
+    if (!targetUserId || !isSignedIn) return;
+    setIgnoreActionBusyUserId(targetUserId);
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/friends/ignore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUserId }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(data?.error || "Failed to ignore user."));
+      emitAppToast({
+        kind: "success",
+        title: "User Ignored",
+        message: "This user has been added to your ignore list.",
+      });
+      await refreshFriendsSnapshot();
+    } catch (error) {
+      emitAppToast({
+        kind: "error",
+        title: "Ignore Failed",
+        message: String(error?.message || "Failed to ignore user."),
+      });
+    } finally {
+      setIgnoreActionBusyUserId("");
+    }
+  }
+
+  async function unignoreUser(targetUser) {
+    const targetUserId = String(targetUser?.userId || targetUser?.authorUserId || targetUser?.targetUserId || "").trim();
+    if (!targetUserId || !isSignedIn) return;
+    setIgnoreActionBusyUserId(targetUserId);
+    try {
+      const response = await apiFetchWithToken(
+        getToken,
+        true,
+        `/api/friends/ignore/${encodeURIComponent(targetUserId)}`,
+        { method: "DELETE" },
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(data?.error || "Failed to unignore user."));
+      emitAppToast({
+        kind: "success",
+        title: "Ignore Removed",
+        message: "User removed from ignore list.",
+      });
+      await refreshFriendsSnapshot();
+    } catch (error) {
+      emitAppToast({
+        kind: "error",
+        title: "Unignore Failed",
+        message: String(error?.message || "Failed to unignore user."),
+      });
+    } finally {
+      setIgnoreActionBusyUserId("");
+    }
+  }
+
+  async function sendLitePrivateMessage(targetUser, initialBody = "") {
+    const targetUserId = String(targetUser?.userId || targetUser?.authorUserId || "").trim();
+    if (!targetUserId || !isSignedIn) return;
+    const bodyInput = String(initialBody || "").trim() || String(window.prompt("Write private message:", "") || "").trim();
+    if (!bodyInput) return;
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/private-messages/lite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUserId, body: bodyInput }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(data?.error || "Failed to send private message."));
+      emitAppToast({
+        kind: "success",
+        title: "Private Message Sent",
+        message: "Message delivered via lightweight notification.",
+      });
+    } catch (error) {
+      emitAppToast({
+        kind: "error",
+        title: "Message Failed",
+        message: String(error?.message || "Failed to send private message."),
+      });
+    }
+  }
+
   function normalizeDirectoryUser(entry) {
     const normalizedUserId = String(entry?.userId || entry?.authorUserId || "").trim();
     const normalizedUsername = formatUsernameForDisplay(entry?.username || entry?.authorUsername, 80);
@@ -13342,11 +13453,68 @@ function Layout() {
     return () => document.removeEventListener("mousedown", handleOutside);
   }, []);
 
+  useEffect(() => {
+    if (!friendsModalOpen) return;
+    setFriendsModalTab("online");
+  }, [friendsModalOpen]);
+
+  useEffect(() => {
+    const query = String(ignoreSearchQuery || "").trim();
+    if (!friendsModalOpen || friendsModalTab !== "ignore") {
+      setIgnoreSearchResults([]);
+      setIgnoreSearchLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      if (!query) {
+        setIgnoreSearchResults([]);
+        setIgnoreSearchLoading(false);
+        return;
+      }
+      setIgnoreSearchLoading(true);
+      try {
+        const response = await fetch(`/api/forum/members?q=${encodeURIComponent(query)}&limit=40`, {
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(String(data?.error || "Failed to search users."));
+        const rows = Array.isArray(data?.members) ? data.members : [];
+        const mapped = rows.map(normalizeDirectoryUser).filter(Boolean);
+        setIgnoreSearchResults(mapped);
+      } catch (error) {
+        if (error?.name === "AbortError") return;
+        setIgnoreSearchResults([]);
+      } finally {
+        setIgnoreSearchLoading(false);
+      }
+    }, 200);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [ignoreSearchQuery, friendsModalOpen, friendsModalTab]);
+
   const allFriends = useMemo(() => {
     return Array.isArray(friendsSnapshot.friends) ? friendsSnapshot.friends : [];
   }, [friendsSnapshot]);
 
-  const onlineFriends = useMemo(() => allFriends.slice(0, 12), [allFriends]);
+  const onlineFriends = useMemo(
+    () => allFriends.filter((entry) => entry?.online === true).slice(0, 24),
+    [allFriends],
+  );
+  const ignoredFriends = useMemo(
+    () => (Array.isArray(friendsSnapshot.ignored) ? friendsSnapshot.ignored : []),
+    [friendsSnapshot],
+  );
+  const ignoredUserIdSet = useMemo(() => {
+    const set = new Set();
+    for (const row of ignoredFriends) {
+      const id = String(row?.targetUserId || row?.target?.userId || "").trim();
+      if (id) set.add(id);
+    }
+    return set;
+  }, [ignoredFriends]);
 
   const notificationCount = isSignedIn ? unread : sortedNotifications.length;
   useEffect(() => {
@@ -13458,23 +13626,29 @@ function Layout() {
   }
 
   function renderUserSearchBar({ mobile = false } = {}) {
+    if (!isSignedIn) return html``;
     const containerClass = mobile ? "user-search user-search-mobile" : "user-search";
     const rootRef = mobile ? userSearchMobileRootRef : userSearchRootRef;
+    const inputRef = mobile ? userSearchMobileInputRef : userSearchDesktopInputRef;
     const rows = userSearchResults.slice(0, 30);
     return html`
       <div className=${containerClass} ref=${rootRef}>
         <div className="user-search-input-shell">
           <img className="user-search-icon" src=${PERSON_SEARCH_ICON_SVG} alt="" aria-hidden="true" />
           <input
+            ref=${inputRef}
             className="user-search-input"
             type="search"
             name=${mobile ? "mobile-user-search" : "desktop-user-search"}
             placeholder="Search users"
             value=${userSearchQuery}
             onFocus=${() => setUserSearchOpen(true)}
-            onChange=${(event) => {
+            onInput=${(event) => {
               setUserSearchQuery(event.target.value);
               setUserSearchOpen(true);
+              window.requestAnimationFrame(() => {
+                inputRef.current?.focus?.();
+              });
             }}
           />
         </div>
@@ -14343,85 +14517,208 @@ function Layout() {
         className="friends-modal-overlay"
       >
         <div className="friends-modal-body">
-          <section className="friends-modal-section">
-            <h4>Online Friends</h4>
-            ${onlineFriends.length === 0
-              ? html`<p className="muted">No online friends right now.</p>`
-              : html`<div className="friends-modal-list">
-                  ${onlineFriends.map(
-                    (entry) => html`<button
-                      key=${`online-${entry.userId}`}
-                      type="button"
-                      className="friends-modal-row"
-                      onClick=${() => openUserDirectoryProfile(entry)}
-                    >
-                      <img src=${entry.image} alt=${entry.name} />
-                      <span>
-                        <strong>${entry.name}</strong>
-                        <small>@${entry.username}</small>
-                      </span>
-                    </button>`,
-                  )}
-                </div>`}
-          </section>
-          <section className="friends-modal-section">
-            <h4>All Friends</h4>
-            ${allFriends.length === 0
-              ? html`<p className="muted">No friends added yet.</p>`
-              : html`<div className="friends-modal-list">
-                  ${allFriends.slice(0, 120).map(
-                    (entry) => html`<button
-                      key=${`all-${entry.userId}`}
-                      type="button"
-                      className="friends-modal-row"
-                      onClick=${() => openUserDirectoryProfile(entry)}
-                    >
-                      <img src=${entry.image} alt=${entry.name} />
-                      <span>
-                        <strong>${entry.name}</strong>
-                        <small>@${entry.username}</small>
-                      </span>
-                    </button>`,
-                  )}
-                </div>`}
-          </section>
-          <section className="friends-modal-section">
-            <h4>Friend Requests</h4>
-            ${Array.isArray(friendsSnapshot.incoming) && friendsSnapshot.incoming.length > 0
-              ? html`<div className="friends-modal-list">
-                  ${friendsSnapshot.incoming.map((entry) => {
-                    const requestId = String(entry?.requestId || "");
-                    const from = entry?.from || {};
-                    const busy = String(friendRequestActionBusyId || "") === requestId;
-                    return html`<div key=${requestId} className="friends-modal-row request-row">
-                      <img src=${from.image || "/assets/HardTale_H_GreyScale.png"} alt=${from.name || "User"} />
-                      <span>
-                        <strong>${from.name || "User"}</strong>
-                        <small>@${from.username || "user"}</small>
-                      </span>
-                      <div className="friends-request-actions">
-                        <button
-                          type="button"
-                          className="ghost-btn"
-                          disabled=${busy}
-                          onClick=${() => respondFriendRequest({ requestId, action: "accept" })}
-                        >
-                          ${busy ? "..." : "Accept"}
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost-btn delete-action-btn"
-                          disabled=${busy}
-                          onClick=${() => respondFriendRequest({ requestId, action: "decline" })}
-                        >
-                          Decline
-                        </button>
-                      </div>
-                    </div>`;
-                  })}
-                </div>`
-              : html`<p className="muted">No friend requests right now.</p>`}
-          </section>
+          <div className="friends-modal-tabs" role="tablist" aria-label="Friend Views">
+            ${[
+              { id: "online", label: "Online" },
+              { id: "requests", label: "Friend Requests" },
+              { id: "ignore", label: "Ignore List" },
+            ].map(
+              (tab) => html`<button
+                key=${tab.id}
+                type="button"
+                className=${`friends-modal-tab ${friendsModalTab === tab.id ? "active" : ""}`.trim()}
+                onClick=${() => setFriendsModalTab(tab.id)}
+                role="tab"
+                aria-selected=${friendsModalTab === tab.id}
+              >
+                ${tab.label}
+              </button>`,
+            )}
+          </div>
+          ${friendsModalTab === "online"
+            ? html`<section className="friends-modal-section">
+                <h4>Online Friends</h4>
+                ${onlineFriends.length === 0
+                  ? html`<p className="muted">No online friends right now.</p>`
+                  : html`<div className="friends-modal-carousel">
+                      ${onlineFriends.map((entry) => {
+                        const relation = getFriendState(entry.userId);
+                        const canRemove = relation.state === "FRIENDS" || relation.state === "PENDING_OUTGOING";
+                        const busy = String(friendActionBusyUserId || "") === String(entry.userId || "");
+                        const rankClass = `rank-${String(entry?.rankLabel || "registered")
+                          .trim()
+                          .toLowerCase()
+                          .replace(/[^a-z0-9]+/g, "-")}`;
+                        return html`<div key=${`online-${entry.userId}`} className="friends-modal-card">
+                          <button
+                            type="button"
+                            className="friends-modal-card-avatar-wrap"
+                            onClick=${() => openUserDirectoryProfile(entry)}
+                            title="Open profile card"
+                          >
+                            <img src=${entry.image || "/assets/HardTale_H_GreyScale.png"} alt=${entry.name || "User"} />
+                            <span className=${`friends-status-dot ${entry?.online ? "online" : "offline"}`.trim()}></span>
+                          </button>
+                          <div className="friends-modal-card-meta">
+                            <strong>${entry.name || "User"}</strong>
+                            <small>@${entry.username || "user"}</small>
+                            <span className=${`friends-modal-rank-pill ${rankClass}`.trim()}>
+                              ${getRankDisplayLabel(entry?.rankLabel || "Registered")}
+                            </span>
+                          </div>
+                          <div className="friends-modal-card-actions">
+                            <button type="button" className="ghost-btn" onClick=${() => sendLitePrivateMessage(entry)}>
+                              Message
+                            </button>
+                            <button
+                              type="button"
+                              className="ghost-btn delete-action-btn"
+                              disabled=${busy}
+                              onClick=${() => (canRemove ? removeFriend(entry) : requestFriend(entry))}
+                            >
+                              ${busy ? "..." : canRemove ? "Remove" : "Add"}
+                            </button>
+                          </div>
+                        </div>`;
+                      })}
+                    </div>`}
+                <h4>All Friends</h4>
+                ${allFriends.length === 0
+                  ? html`<p className="muted">No friends added yet.</p>`
+                  : html`<div className="friends-modal-list">
+                      ${allFriends.slice(0, 180).map((entry) => {
+                        const rankClass = `rank-${String(entry?.rankLabel || "registered")
+                          .trim()
+                          .toLowerCase()
+                          .replace(/[^a-z0-9]+/g, "-")}`;
+                        return html`<div key=${`all-${entry.userId}`} className="friends-modal-row">
+                          <button
+                            type="button"
+                            className="friends-modal-row-main"
+                            onClick=${() => openUserDirectoryProfile(entry)}
+                          >
+                            <img src=${entry.image || "/assets/HardTale_H_GreyScale.png"} alt=${entry.name || "User"} />
+                            <span>
+                              <strong>${entry.name || "User"}</strong>
+                              <small>@${entry.username || "user"}</small>
+                              <small className=${`friends-row-rank ${rankClass}`.trim()}>
+                                ${getRankDisplayLabel(entry?.rankLabel || "Registered")}
+                              </small>
+                            </span>
+                          </button>
+                          <div className="friends-request-actions">
+                            <button type="button" className="ghost-btn" onClick=${() => sendLitePrivateMessage(entry)}>
+                              Message
+                            </button>
+                          </div>
+                        </div>`;
+                      })}
+                    </div>`}
+              </section>`
+            : friendsModalTab === "requests"
+            ? html`<section className="friends-modal-section">
+                <h4>Friend Requests</h4>
+                ${Array.isArray(friendsSnapshot.incoming) && friendsSnapshot.incoming.length > 0
+                  ? html`<div className="friends-modal-list">
+                      ${friendsSnapshot.incoming.map((entry) => {
+                        const requestId = String(entry?.requestId || "");
+                        const from = entry?.from || {};
+                        const busy = String(friendRequestActionBusyId || "") === requestId;
+                        return html`<div key=${requestId} className="friends-modal-row request-row">
+                          <img src=${from.image || "/assets/HardTale_H_GreyScale.png"} alt=${from.name || "User"} />
+                          <span>
+                            <strong>${from.name || "User"}</strong>
+                            <small>@${from.username || "user"}</small>
+                          </span>
+                          <div className="friends-request-actions">
+                            <button
+                              type="button"
+                              className="ghost-btn"
+                              disabled=${busy}
+                              onClick=${() => respondFriendRequest({ requestId, action: "accept" })}
+                            >
+                              ${busy ? "..." : "Accept"}
+                            </button>
+                            <button
+                              type="button"
+                              className="ghost-btn delete-action-btn"
+                              disabled=${busy}
+                              onClick=${() => respondFriendRequest({ requestId, action: "decline" })}
+                            >
+                              Decline
+                            </button>
+                          </div>
+                        </div>`;
+                      })}
+                    </div>`
+                  : html`<p className="muted">No friend requests right now.</p>`}
+              </section>`
+            : html`<section className="friends-modal-section">
+                <h4>Ignore List</h4>
+                <div className="friends-ignore-search">
+                  <input
+                    type="search"
+                    name="ignore-user-search"
+                    placeholder="Search user to ignore"
+                    value=${ignoreSearchQuery}
+                    onInput=${(event) => setIgnoreSearchQuery(event.target.value)}
+                  />
+                </div>
+                ${ignoreSearchLoading
+                  ? html`<p className="muted">Searching...</p>`
+                  : ignoreSearchQuery && ignoreSearchResults.length > 0
+                  ? html`<div className="friends-modal-list">
+                      ${ignoreSearchResults.map((entry) => {
+                        const id = String(entry?.userId || "").trim();
+                        const isIgnored = ignoredUserIdSet.has(id);
+                        const busy = String(ignoreActionBusyUserId || "") === id;
+                        return html`<div key=${`ignore-search-${id}`} className="friends-modal-row">
+                          <img src=${entry.image || "/assets/HardTale_H_GreyScale.png"} alt=${entry.name || "User"} />
+                          <span>
+                            <strong>${entry.name || "User"}</strong>
+                            <small>@${entry.username || "user"}</small>
+                          </span>
+                          <div className="friends-request-actions">
+                            <button
+                              type="button"
+                              className="ghost-btn delete-action-btn"
+                              disabled=${busy}
+                              onClick=${() => (isIgnored ? unignoreUser(entry) : ignoreUser(entry))}
+                            >
+                              ${busy ? "..." : isIgnored ? "Unignore" : "Ignore"}
+                            </button>
+                          </div>
+                        </div>`;
+                      })}
+                    </div>`
+                  : html``}
+                ${ignoredFriends.length === 0
+                  ? html`<p className="muted">Ignore list is empty.</p>`
+                  : html`<div className="friends-modal-list">
+                      ${ignoredFriends.map((entry) => {
+                        const target = entry?.target || {};
+                        const id = String(entry?.targetUserId || target?.userId || "").trim();
+                        const busy = String(ignoreActionBusyUserId || "") === id;
+                        return html`<div key=${`ignored-${id}`} className="friends-modal-row">
+                          <img src=${target.image || "/assets/HardTale_H_GreyScale.png"} alt=${target.name || "User"} />
+                          <span>
+                            <strong>${target.name || "User"}</strong>
+                            <small>@${target.username || "user"}</small>
+                          </span>
+                          <div className="friends-request-actions">
+                            <button
+                              type="button"
+                              className="ghost-btn"
+                              disabled=${busy}
+                              onClick=${() => unignoreUser({ userId: id })}
+                            >
+                              ${busy ? "..." : "Unignore"}
+                            </button>
+                          </div>
+                        </div>`;
+                      })}
+                    </div>`}
+              </section>`}
         </div>
       <//>
       <${PopUp}

@@ -2,6 +2,36 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-23 (v1.4.21)
+- Expanded friends backend with ignore-list support:
+  - `POST /api/friends/ignore`
+  - `DELETE /api/friends/ignore/:targetUserId`
+  - `/api/friends` now includes `ignored` entries.
+- Added ignore enforcement to social interactions so blocked pairs cannot send friend requests or private messages.
+- Added lightweight private-message notification delivery endpoint:
+  - `POST /api/private-messages/lite`
+  - Stores encoded PM payload in notification metadata for lower-write delivery scenarios.
+- Reworked Friends modal UX into tabbed sections (`Online`, `Friend Requests`, `Ignore List`) with:
+  - online/offline status indicators,
+  - rank badges,
+  - quick actions (accept/decline/remove/message/ignore),
+  - and ignore-user search.
+- Updated user-search UX:
+  - hidden while signed out,
+  - preserved input focus during typing,
+  - and improved hover/focus visual treatment to match primary button styling.
+- Updated desktop signed-out auth entry to a blank user-circle trigger with dropdown actions (`Sign in`, `Sign up`).
+
+## 2026-02-23 (v1.4.20)
+- Updated notification visibility to keep targeted notifications private to the intended recipient (plus global notifications), including friend-request acceptance events.
+- Prevented admin bell feeds from showing other users' private friend-request target notifications, which previously created misleading `accepted your friend request` context.
+
+## 2026-02-23 (v1.4.19)
+- Refined desktop Home friends preview into a transparent carousel-style strip with visible horizontal scrollbar and larger friend avatars.
+- Removed desktop friends-strip arrow controls and retained a dedicated `View more` action for opening the Friends modal.
+- Added rank badges beneath desktop friend chips (rank metadata sourced from friend profile payloads where available).
+- Replaced desktop signed-out `Sign in` / `Sign up` nav buttons with a blank user-circle trigger that opens a compact auth dropdown (`Sign in`, `Sign up`).
+
 ## 2026-02-23 (v1.4.18)
 - Added a desktop Home hero friends preview block above `Join now` with horizontal friend chips and left/right scroll controls.
 - Added a desktop hero friends `View more` action that opens the Friends modal directly.

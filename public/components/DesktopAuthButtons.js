@@ -54,18 +54,26 @@ export default function DesktopAuthButtons({
   logoutIconSrc = "/Images/SVGs/Logout.svg",
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [guestMenuOpen, setGuestMenuOpen] = useState(false);
   const [hoveredItem, setHoveredItem] = useState("");
   const menuRootRef = useRef(null);
+  const guestMenuRootRef = useRef(null);
 
   useEffect(() => {
-    if (!menuOpen) return undefined;
+    if (!menuOpen && !guestMenuOpen) return undefined;
     function handlePointerDown(event) {
       const root = menuRootRef.current;
-      if (!root || root.contains(event.target)) return;
+      const guestRoot = guestMenuRootRef.current;
+      if (root && root.contains(event.target)) return;
+      if (guestRoot && guestRoot.contains(event.target)) return;
       setMenuOpen(false);
+      setGuestMenuOpen(false);
     }
     function handleEscape(event) {
-      if (event.key === "Escape") setMenuOpen(false);
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        setGuestMenuOpen(false);
+      }
     }
     window.addEventListener("pointerdown", handlePointerDown);
     window.addEventListener("keydown", handleEscape);
@@ -73,7 +81,7 @@ export default function DesktopAuthButtons({
       window.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [menuOpen]);
+  }, [menuOpen, guestMenuOpen]);
 
   function openAccountPanel() {
     setMenuOpen(false);
@@ -125,12 +133,41 @@ export default function DesktopAuthButtons({
       <//>
       <${ClerkLoaded}>
         <${SignedOut}>
-          <${SignUpButton} mode="modal">
-            <button className="button primary">Sign up</button>
-          <//>
-          <${SignInButton} mode="modal">
-            <button className="button">Sign in</button>
-          <//>
+          <span className="user-button desktop-user-menu" ref=${guestMenuRootRef}>
+            <button
+              className="user-button-trigger user-button-trigger-guest"
+              type="button"
+              title="Account options"
+              aria-expanded=${guestMenuOpen}
+              onClick=${() => setGuestMenuOpen((prev) => !prev)}
+            >
+              <span className="user-button-avatar-blank" aria-hidden="true"></span>
+            </button>
+            ${guestMenuOpen
+              ? html`<div className="desktop-account-menu" role="menu" aria-label="Sign in options">
+                  <${SignInButton} mode="modal">
+                    <button
+                      className="desktop-account-menu-item text-only"
+                      role="menuitem"
+                      type="button"
+                      onClick=${() => setGuestMenuOpen(false)}
+                    >
+                      Sign in
+                    </button>
+                  <//>
+                  <${SignUpButton} mode="modal">
+                    <button
+                      className="desktop-account-menu-item text-only"
+                      role="menuitem"
+                      type="button"
+                      onClick=${() => setGuestMenuOpen(false)}
+                    >
+                      Sign up
+                    </button>
+                  <//>
+                </div>`
+              : html``}
+          </span>
         <//>
         <${SignedIn}>
           <${NotificationsButton} count=${notificationCount} onClick=${openNotifications} flashEnabled=${uiFlashEnabled} />
