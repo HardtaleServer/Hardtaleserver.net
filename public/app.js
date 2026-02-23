@@ -8841,6 +8841,7 @@ function HomePage({
 }) {
   const navigate = useNavigate();
   const { openSignIn } = useClerk();
+  const [showLeaderboardModal, setShowLeaderboardModal] = useState(false);
   const [forumPreview, setForumPreview] = useState([]);
   const [forumLoading, setForumLoading] = useState(true);
   const [serverRuntime, setServerRuntime] = useState({
@@ -9108,9 +9109,19 @@ function HomePage({
 
         <div className="card news-sidebar home-right-leaderboard">
           <div className="section-title">Leaderboard</div>
-          <${SkillLeaderboardCard} iconSrc=${LEADERBOARD_ICON_SVG} />
+          <${SkillLeaderboardCard}
+            iconSrc=${LEADERBOARD_ICON_SVG}
+            onShowMore=${() => setShowLeaderboardModal(true)}
+          />
         </div>
       </section>
+      <${PopUp}
+        show=${showLeaderboardModal}
+        onClose=${() => setShowLeaderboardModal(false)}
+        title="Leaderboard"
+      >
+        <${SkillLeaderboardCard} iconSrc=${LEADERBOARD_ICON_SVG} detailed=${true} />
+      <//>
     </section>
   `;
 }

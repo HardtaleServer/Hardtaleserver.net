@@ -2378,7 +2378,7 @@ body[data-theme="dark"] .news-mini-preview {
   padding-top: 0;
   border-top: none;
   display: grid;
-  gap: 8px;
+  gap: 6px;
 }
 
 .home-leaderboard-head {
@@ -2400,6 +2400,20 @@ body[data-theme="dark"] .news-mini-preview {
 
 .home-leaderboard-subtitle {
   font-size: 12px;
+}
+
+.home-right-leaderboard {
+  gap: 6px;
+  align-content: start;
+}
+
+.home-right-leaderboard .section-title {
+  margin-bottom: 0;
+}
+
+.home-leaderboard-more-btn {
+  justify-self: stretch;
+  margin-top: 2px;
 }
 
 .home-leaderboard-list {
