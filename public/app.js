@@ -6575,10 +6575,15 @@ function ForumPage({ isAdmin = false }) {
   }
 
   function openForumHoverProfile(entry, anchorEl, options = {}) {
-    if (!entry || !anchorEl) return;
+    if (!entry) return;
     const normalized = normalizeForumProfileEntry(entry);
     if (!normalized) return;
-    const rect = anchorEl.getBoundingClientRect();
+    const rectCandidate = options?.anchorRect;
+    const rect =
+      rectCandidate && typeof rectCandidate === "object"
+        ? rectCandidate
+        : anchorEl?.getBoundingClientRect?.();
+    if (!rect) return;
     const key = `${normalized.authorUserId || normalized.authorUsername || normalized.authorName}`.toLowerCase();
     const position = computeForumHoverPosition(rect, options);
     setForumHoverProfile({
@@ -6589,15 +6594,15 @@ function ForumPage({ isAdmin = false }) {
     });
   }
 
-  function openForumMentionPreview(entry, triggerEl = null) {
+  function openForumMentionPreview(entry, triggerEl = null, anchorRect = null) {
     const normalized = normalizeForumProfileEntry(entry);
     if (!normalized) return;
     clearForumHoverTimers();
-    if (triggerEl?.getBoundingClientRect) {
-      const useTouchLayout = typeof window !== "undefined" && window.matchMedia("(hover: none)").matches;
+    if (anchorRect || triggerEl?.getBoundingClientRect) {
       openForumHoverProfile(normalized, triggerEl, {
         offsetX: 28,
         offsetY: 50,
+        anchorRect,
       });
       return;
     }
@@ -6693,6 +6698,7 @@ function ForumPage({ isAdmin = false }) {
   async function openForumMentionProfile(username, triggerEl = null, options = {}) {
     const allowFetch = options?.allowFetch !== false;
     const suppressToast = options?.suppressToast === true;
+    const anchorRect = triggerEl?.getBoundingClientRect?.() || null;
     const key = String(username || "").trim().replace(/^@+/, "").toLowerCase();
     if (!key) return;
     let entry = mentionProfileDirectory.get(key) || null;
@@ -6783,7 +6789,7 @@ function ForumPage({ isAdmin = false }) {
         return next;
       });
     }
-    openForumMentionPreview(hydratedEntry || entry, triggerEl);
+    openForumMentionPreview(hydratedEntry || entry, triggerEl, anchorRect);
   }
 
   function handleForumMentionHover(username, triggerEl = null) {

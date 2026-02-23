@@ -5951,6 +5951,7 @@ body[data-theme="dark"] .store-cta {
 
 .store-rank-head-cell {
   vertical-align: top;
+  --store-rank-head-shift: -8px;
 }
 
 .store-rank-head {
@@ -5958,6 +5959,10 @@ body[data-theme="dark"] .store-cta {
   gap: 8px;
   align-items: start;
   min-height: 100%;
+}
+
+.store-rank-head-cell > .store-rank-head {
+  transform: translateY(var(--store-rank-head-shift));
 }
 
 .store-rank-head-art-btn {
@@ -6372,6 +6377,10 @@ body[data-theme="dark"] .store-cta {
 
   .store-rank-head {
     gap: 6px;
+  }
+
+  .store-rank-head-cell {
+    --store-rank-head-shift: -6px;
   }
 
   .store-rank-head-art {
@@ -9131,6 +9140,10 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 
   .store-rank-head {
     gap: 4px;
+  }
+
+  .store-rank-head-cell {
+    --store-rank-head-shift: -4px;
   }
 
   .store-rank-head-profile {
