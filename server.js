@@ -5982,6 +5982,82 @@ app.get("/api/server/pending-links", async (req, res) => {
   }
 });
 
+app.post("/api/server/link-status", async (req, res) => {
+  try {
+    if (!requireNetstoreServerAuth(req, res, "server_link_status")) return;
+    if (!(await requireMongoReady(res))) return;
+
+    const rawList = Array.isArray(req.body?.playerUuids) ? req.body.playerUuids : null;
+    if (!rawList) {
+      return res.status(400).json({ error: "playerUuids array is required" });
+    }
+    if (rawList.length > 200) {
+      return res.status(400).json({ error: "playerUuids exceeds max size (200)" });
+    }
+
+    const normalizedInput = [];
+    for (const value of rawList) {
+      const uuid = normalizePlayerUuid(value);
+      if (!uuid) {
+        return res.status(400).json({ error: "playerUuids contains invalid UUID values" });
+      }
+      normalizedInput.push(uuid);
+    }
+    if (normalizedInput.length === 0) {
+      return res.json({ results: [] });
+    }
+
+    const uniqueUuids = Array.from(new Set(normalizedInput));
+    const rows = await linkedAccountsCollection
+      .find(
+        { playerUuid: { $in: uniqueUuids } },
+        {
+          projection: {
+            _id: 0,
+            playerUuid: 1,
+            webUserId: 1,
+            clerkUserId: 1,
+            linkedAt: 1,
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        },
+      )
+      .toArray();
+    const byUuid = new Map();
+    for (const row of rows) {
+      const playerUuid = normalizePlayerUuid(row?.playerUuid);
+      if (!playerUuid) continue;
+      byUuid.set(playerUuid, row);
+    }
+
+    const results = normalizedInput.map((playerUuid) => {
+      const row = byUuid.get(playerUuid);
+      if (!row) {
+        return { playerUuid, linked: false };
+      }
+      const clerkUserId = normalizeText(row?.clerkUserId || row?.webUserId || "", 128);
+      const linkedAtRaw = row?.linkedAt || row?.createdAt || row?.updatedAt || "";
+      const linkedAtDate = linkedAtRaw ? new Date(linkedAtRaw) : null;
+      const linkedAtIso =
+        linkedAtDate instanceof Date && !Number.isNaN(linkedAtDate.getTime())
+          ? linkedAtDate.toISOString()
+          : "";
+      return {
+        playerUuid,
+        linked: Boolean(clerkUserId),
+        ...(clerkUserId ? { clerkUserId } : {}),
+        ...(linkedAtIso ? { linkedAt: linkedAtIso } : {}),
+      };
+    });
+
+    return res.json({ results });
+  } catch (error) {
+    console.error("Failed to load server link status", error);
+    return res.status(500).json({ error: "Failed to load server link status" });
+  }
+});
+
 app.post("/api/server/ack-link", async (req, res) => {
   try {
     if (!requireNetstoreServerAuth(req, res, "ack_link")) return;

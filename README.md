@@ -39,3 +39,10 @@ Private / internal use.
   - Allows images from `http`, `https`, and `data:image/*`
   - Blocks raw script/event payloads by construction (no raw HTML execution)
 - Preview and final post rendering use the same renderer so what users see in Preview matches published output.
+
+## Plugin Link Verification
+- Canonical plugin link verification endpoint (Mongo source of truth):
+  - `POST /api/server/link-status`
+  - Auth: `Authorization: Bearer <NETSTORE_SERVER_SECRET>`
+  - Body: `{ "playerUuids": ["uuid1", "uuid2"] }` (max 200)
+  - Returns ordered `results[]` with `linked` status and optional `clerkUserId` / `linkedAt`.
