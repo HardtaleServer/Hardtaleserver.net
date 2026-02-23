@@ -3924,7 +3924,11 @@ function CommentThread({
       <${PopUp}
         show=${profileOpen}
         onClose=${() => setProfileOpen(false)}
-        title="Profile Card"
+        title=${(() => {
+          const username = String(profileUser?.username || "").replace(/^@+/, "");
+          const display = username || profileUser?.name || "User";
+          return `${display}'s Profile`;
+        })()}
         headerBelow=${profileUser?.isOwn
           ? html`<div className="profile-modal-header-actions">
               <button
@@ -6331,6 +6335,7 @@ function ForumPage({ isAdmin = false }) {
   const [forumMemberMentions, setForumMemberMentions] = useState([]);
   const [forumProfileOpen, setForumProfileOpen] = useState(false);
   const [forumProfileUser, setForumProfileUser] = useState(null);
+  const [forumHoverProfile, setForumHoverProfile] = useState(null);
   const [forumProfileInfoTab, setForumProfileInfoTab] = useState("badges");
   const [forumProfileTitleStatus, setForumProfileTitleStatus] = useState("");
   const [forumProfileTitleSaving, setForumProfileTitleSaving] = useState(false);
@@ -6351,6 +6356,8 @@ function ForumPage({ isAdmin = false }) {
   const [forumHistoryOpen, setForumHistoryOpen] = useState(false);
   const [forumHistoryItems, setForumHistoryItems] = useState([]);
   const [forumHistoryTitle, setForumHistoryTitle] = useState("Post Edit History");
+  const forumHoverOpenTimerRef = useRef(0);
+  const forumHoverCloseTimerRef = useRef(0);
   const FORUM_BODY_MIN_LENGTH = 30;
   const createTemplateOptions = useMemo(
     () => getForumTemplateOptions(selectedSectionId),
@@ -6459,7 +6466,125 @@ function ForumPage({ isAdmin = false }) {
 
   function openForumProfileEntry(entry) {
     if (!entry) return;
+    setForumHoverProfile(null);
     openForumProfileCard(entry);
+  }
+
+  function normalizeForumProfileEntry(entry) {
+    if (!entry) return null;
+    return {
+      authorName: String(entry?.authorName || entry?.name || "User"),
+      authorUsername: String(entry?.authorUsername || entry?.username || "").replace(/^@+/, ""),
+      authorImage: String(entry?.authorImage || entry?.image || "/assets/HardTale_H_GreyScale.png"),
+      authorRank: String(entry?.authorRank || "Unregistered"),
+      authorOwnedRank: String(entry?.authorOwnedRank || entry?.authorRank || "Unregistered"),
+      authorStaffRole: String(entry?.authorStaffRole || ""),
+      authorIsStaff: Boolean(entry?.authorIsStaff || isStaffLabel(entry?.authorRank || "") || isStaffLabel(entry?.authorStaffRole || "")),
+      authorUserId: String(entry?.authorUserId || entry?.createdBy || entry?.userId || "").trim(),
+      linkedAccount: Boolean(entry?.linkedAccount),
+    };
+  }
+
+  function clearForumHoverTimers() {
+    if (forumHoverOpenTimerRef.current) {
+      clearTimeout(forumHoverOpenTimerRef.current);
+      forumHoverOpenTimerRef.current = 0;
+    }
+    if (forumHoverCloseTimerRef.current) {
+      clearTimeout(forumHoverCloseTimerRef.current);
+      forumHoverCloseTimerRef.current = 0;
+    }
+  }
+
+  function openForumHoverProfile(entry, anchorEl) {
+    if (!entry || !anchorEl) return;
+    const normalized = normalizeForumProfileEntry(entry);
+    if (!normalized) return;
+    const rect = anchorEl.getBoundingClientRect();
+    const key = `${normalized.authorUserId || normalized.authorUsername || normalized.authorName}`.toLowerCase();
+    setForumHoverProfile({
+      key,
+      entry: normalized,
+      x: Math.max(10, rect.left),
+      y: rect.bottom + 8,
+    });
+  }
+
+  function scheduleForumHoverOpen(entry, anchorEl) {
+    clearForumHoverTimers();
+    forumHoverOpenTimerRef.current = setTimeout(() => {
+      openForumHoverProfile(entry, anchorEl);
+      forumHoverOpenTimerRef.current = 0;
+    }, 1000);
+  }
+
+  function scheduleForumHoverClose() {
+    if (forumHoverCloseTimerRef.current) clearTimeout(forumHoverCloseTimerRef.current);
+    forumHoverCloseTimerRef.current = setTimeout(() => {
+      setForumHoverProfile(null);
+      forumHoverCloseTimerRef.current = 0;
+    }, 1000);
+  }
+
+  function handleForumIdentityMouseEnter(entry, anchorEl) {
+    if (typeof window !== "undefined" && window.matchMedia("(hover: none)").matches) return;
+    scheduleForumHoverOpen(entry, anchorEl);
+  }
+
+  function handleForumIdentityMouseLeave() {
+    if (typeof window !== "undefined" && window.matchMedia("(hover: none)").matches) return;
+    scheduleForumHoverClose();
+  }
+
+  function handleForumIdentityTap(entry, anchorEl) {
+    if (!(typeof window !== "undefined" && window.matchMedia("(hover: none)").matches)) {
+      openForumProfileEntry(entry);
+      return;
+    }
+    const normalized = normalizeForumProfileEntry(entry);
+    if (!normalized) return;
+    const key = `${normalized.authorUserId || normalized.authorUsername || normalized.authorName}`.toLowerCase();
+    if (forumHoverProfile?.key === key) {
+      openForumProfileEntry(normalized);
+      return;
+    }
+    clearForumHoverTimers();
+    openForumHoverProfile(normalized, anchorEl);
+  }
+
+  function renderForumHoverProfileCard() {
+    if (!forumHoverProfile?.entry) return html``;
+    const preview = forumHoverProfile.entry;
+    const username = String(preview.authorUsername || "").replace(/^@+/, "");
+    const displayBadge = resolvePrimaryOwnedBadge(
+      normalizeOwnedRankLabel(preview.authorOwnedRank || preview.authorRank || "Unregistered"),
+      false,
+      normalizeOwnedRankLabel(preview.authorOwnedRank || preview.authorRank || "Unregistered"),
+    );
+    const showStaff = Boolean(preview.authorIsStaff || isStaffLabel(preview.authorRank || ""));
+    return html`<div
+      className="forum-profile-peek-shell"
+      style=${{ left: `${forumHoverProfile.x}px`, top: `${forumHoverProfile.y}px` }}
+      onMouseEnter=${() => clearForumHoverTimers()}
+      onMouseLeave=${scheduleForumHoverClose}
+    >
+      <${MobileDrawerProfilePreview}
+        className="drawer-profile-preview forum-profile-peek-card"
+        onClick=${() => openForumProfileEntry(preview)}
+        title=${username ? `${username}'s Profile` : `${preview.authorName}'s Profile`}
+        avatar=${preview.authorImage}
+        name=${preview.authorName || "User"}
+        username=${username}
+        linkedLabel=${preview.linkedAccount ? "Linked" : "Unlinked"}
+        displayedBadge=${displayBadge !== "Unregistered" ? displayBadge : preview.authorRank || "Unregistered"}
+        showStaffBadge=${showStaff}
+        staffLabel=${toStaffPillTitle(preview.authorStaffRole || "") || "Staff"}
+        staffRoleClass=${resolveStaffRoleClass({
+          staffRole: preview.authorStaffRole || "",
+          authorStaffRole: preview.authorStaffRole || "",
+        })}
+      />
+    </div>`;
   }
 
   function openForumMentionProfile(username) {
@@ -6494,10 +6619,6 @@ function ForumPage({ isAdmin = false }) {
         message: `Couldn't copy ${label}.`,
       });
     }
-  }
-
-  function isForumPostForcedEdit(post) {
-    return Boolean(post?.staffForcedEdit);
   }
 
   async function openForumPostHistory(post) {
@@ -6551,15 +6672,86 @@ function ForumPage({ isAdmin = false }) {
       ${forumHistoryItems.map(
         (entry, index) => html`<div key=${entry.id || `${entry.createdAt || ""}-${index}`} className="comment-history-item">
           <div className="comment-history-meta">
-            <img
-              className="comment-avatar small"
-              src=${entry.editorImage || "/assets/HardTale_H_GreyScale.png"}
-              alt=${entry.editorName || "Editor"}
-            />
-            <div>
-              <div className="comment-author">
-                ${entry.editorName || "Editor"}${entry?.editorUsername ? ` @${entry.editorUsername}` : ""}
-              </div>
+            <button
+              type="button"
+              className="forum-post-author-trigger"
+              onMouseEnter=${(event) =>
+                handleForumIdentityMouseEnter(
+                  {
+                    authorName: entry.editorName || "Editor",
+                    authorUsername: entry.editorUsername || "",
+                    authorImage: entry.editorImage || "/assets/HardTale_H_GreyScale.png",
+                    authorRank: entry.editorRank || "Unregistered",
+                    authorOwnedRank: entry.editorOwnedRank || entry.editorRank || "Unregistered",
+                    authorStaffRole: entry.editorStaffRole || "",
+                    authorIsStaff: Boolean(entry.editorIsStaff),
+                    authorUserId: entry.editorUserId || "",
+                  },
+                  event.currentTarget,
+                )}
+              onMouseLeave=${handleForumIdentityMouseLeave}
+              onClick=${(event) =>
+                handleForumIdentityTap(
+                  {
+                    authorName: entry.editorName || "Editor",
+                    authorUsername: entry.editorUsername || "",
+                    authorImage: entry.editorImage || "/assets/HardTale_H_GreyScale.png",
+                    authorRank: entry.editorRank || "Unregistered",
+                    authorOwnedRank: entry.editorOwnedRank || entry.editorRank || "Unregistered",
+                    authorStaffRole: entry.editorStaffRole || "",
+                    authorIsStaff: Boolean(entry.editorIsStaff),
+                    authorUserId: entry.editorUserId || "",
+                  },
+                  event.currentTarget,
+                )}
+              title="Open profile"
+              aria-label="Open profile"
+            >
+              <img
+                className="comment-avatar small"
+                src=${entry.editorImage || "/assets/HardTale_H_GreyScale.png"}
+                alt=${entry.editorName || "Editor"}
+              />
+            </button>
+            <div className="forum-history-meta-main">
+              <button
+                type="button"
+                className="forum-post-author-name-btn"
+                onMouseEnter=${(event) =>
+                  handleForumIdentityMouseEnter(
+                    {
+                      authorName: entry.editorName || "Editor",
+                      authorUsername: entry.editorUsername || "",
+                      authorImage: entry.editorImage || "/assets/HardTale_H_GreyScale.png",
+                      authorRank: entry.editorRank || "Unregistered",
+                      authorOwnedRank: entry.editorOwnedRank || entry.editorRank || "Unregistered",
+                      authorStaffRole: entry.editorStaffRole || "",
+                      authorIsStaff: Boolean(entry.editorIsStaff),
+                      authorUserId: entry.editorUserId || "",
+                    },
+                    event.currentTarget,
+                  )}
+                onMouseLeave=${handleForumIdentityMouseLeave}
+                onClick=${(event) =>
+                  handleForumIdentityTap(
+                    {
+                      authorName: entry.editorName || "Editor",
+                      authorUsername: entry.editorUsername || "",
+                      authorImage: entry.editorImage || "/assets/HardTale_H_GreyScale.png",
+                      authorRank: entry.editorRank || "Unregistered",
+                      authorOwnedRank: entry.editorOwnedRank || entry.editorRank || "Unregistered",
+                      authorStaffRole: entry.editorStaffRole || "",
+                      authorIsStaff: Boolean(entry.editorIsStaff),
+                      authorUserId: entry.editorUserId || "",
+                    },
+                    event.currentTarget,
+                  )}
+                title="Open profile"
+              >
+                <span className="comment-author">
+                  ${entry.editorName || "Editor"}${entry?.editorUsername ? ` @${entry.editorUsername}` : ""}
+                </span>
+              </button>
               ${entry?.forcedEdit
                 ? html`<div className="forum-history-forced-row">
                     <img src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" className="forum-history-forced-icon" />
@@ -7531,6 +7723,13 @@ function ForumPage({ isAdmin = false }) {
     };
   }, []);
 
+  useEffect(
+    () => () => {
+      clearForumHoverTimers();
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!selectedSectionId || !selectedPostId) {
       setSelectedPost(null);
@@ -7753,12 +7952,14 @@ function ForumPage({ isAdmin = false }) {
               ? html`<p className="muted">Loading post...</p>`
               : !selectedPost
               ? html`<p className="muted">Post not found in this section.</p>`
-              : html`<article className=${`news-card forum-post-card ${isForumPostForcedEdit(selectedPost) ? "forum-post-forced-edit" : ""}`.trim()}>
+              : html`<article className="news-card forum-post-card">
                   <div className="forum-post-author-row">
                     <button
                       className="forum-post-author-trigger"
                       type="button"
-                      onClick=${() => openForumProfileEntry(selectedPost)}
+                      onMouseEnter=${(event) => handleForumIdentityMouseEnter(selectedPost, event.currentTarget)}
+                      onMouseLeave=${handleForumIdentityMouseLeave}
+                      onClick=${(event) => handleForumIdentityTap(selectedPost, event.currentTarget)}
                       title="Open profile card"
                       aria-label="Open profile card"
                     >
@@ -7772,7 +7973,9 @@ function ForumPage({ isAdmin = false }) {
                     <button
                       className="forum-post-author-name-btn"
                       type="button"
-                      onClick=${() => openForumProfileEntry(selectedPost)}
+                      onMouseEnter=${(event) => handleForumIdentityMouseEnter(selectedPost, event.currentTarget)}
+                      onMouseLeave=${handleForumIdentityMouseLeave}
+                      onClick=${(event) => handleForumIdentityTap(selectedPost, event.currentTarget)}
                     >
                       <${AuthorName}
                         value=${selectedPost.authorName || "User"}
@@ -7834,10 +8037,10 @@ function ForumPage({ isAdmin = false }) {
                     : html`<${ForumRenderedMarkdown}
                         value=${selectedPost.body}
                         onMentionClick=${openForumMentionProfile}
-                        className=${`news-body-paragraph ${isForumPostForcedEdit(selectedPost) ? "forum-post-forced-body" : ""}`.trim()}
+                        className="news-body-paragraph"
                       />`}
                     <div className="forum-post-status-row">
-                    ${(selectedPost.editCount || 0) > 0 && isForumPostForcedEdit(selectedPost)
+                    ${(selectedPost.editCount || 0) > 0
                       ? html`<button
                           className="ghost-btn forum-post-history-btn"
                           type="button"
@@ -7852,18 +8055,6 @@ function ForumPage({ isAdmin = false }) {
                     </div>
                   ${canManageForumPost(selectedPost)
                     ? html`<div className="forum-post-actions-row">
-                        ${(selectedPost.editCount || 0) > 0 && !isForumPostForcedEdit(selectedPost)
-                          ? html`<button
-                              className="ghost-btn forum-post-history-btn"
-                              type="button"
-                              onMouseDown=${(event) => triggerFlash(event.currentTarget)}
-                              onClick=${() => openForumPostHistory(selectedPost)}
-                              title="View past edits"
-                            >
-                              <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
-                              Past edits
-                            </button>`
-                          : html``}
                         <button
                           className="ghost-btn"
                           type="button"
@@ -7891,10 +8082,15 @@ function ForumPage({ isAdmin = false }) {
                     />
                   </article>`}
           </section>
+          ${renderForumHoverProfileCard()}
           <${PopUp}
             show=${forumProfileOpen}
             onClose=${() => setForumProfileOpen(false)}
-            title="Profile Card"
+            title=${(() => {
+              const username = String(forumProfileUser?.username || "").replace(/^@+/, "");
+              const display = username || forumProfileUser?.name || "User";
+              return `${display}'s Profile`;
+            })()}
             headerBelow=${forumProfileUser?.isOwn
               ? html`<div className="profile-modal-header-actions">
                   <button
@@ -7993,13 +8189,15 @@ function ForumPage({ isAdmin = false }) {
                 ${posts.map(
                   (post) => html`<article
                     key=${post.id}
-                    className=${`news-card forum-post-card ${isForumPostForcedEdit(post) ? "forum-post-forced-edit" : ""}`.trim()}
+                    className="news-card forum-post-card"
                   >
                     <div className="forum-post-author-row">
                       <button
                         className="forum-post-author-trigger"
                         type="button"
-                        onClick=${() => openForumProfileEntry(post)}
+                        onMouseEnter=${(event) => handleForumIdentityMouseEnter(post, event.currentTarget)}
+                        onMouseLeave=${handleForumIdentityMouseLeave}
+                        onClick=${(event) => handleForumIdentityTap(post, event.currentTarget)}
                         title="Open profile card"
                         aria-label="Open profile card"
                       >
@@ -8013,7 +8211,9 @@ function ForumPage({ isAdmin = false }) {
                       <button
                         className="forum-post-author-name-btn"
                         type="button"
-                        onClick=${() => openForumProfileEntry(post)}
+                        onMouseEnter=${(event) => handleForumIdentityMouseEnter(post, event.currentTarget)}
+                        onMouseLeave=${handleForumIdentityMouseLeave}
+                        onClick=${(event) => handleForumIdentityTap(post, event.currentTarget)}
                       >
                         <${AuthorName}
                           value=${post.authorName || "User"}
@@ -8044,7 +8244,7 @@ function ForumPage({ isAdmin = false }) {
                           <h3>${post.title}</h3>
                         </div>
                       </div>
-                      <div className=${`news-body-paragraph forum-post-preview ${isForumPostForcedEdit(post) ? "forum-post-forced-body" : ""}`.trim()}>
+                      <div className="news-body-paragraph forum-post-preview">
                         <${ForumRenderedMarkdown}
                           value=${post.body || ""}
                           className="forum-post-preview-markdown"
@@ -8053,7 +8253,7 @@ function ForumPage({ isAdmin = false }) {
                       </div>
                     </${Link}>
                     <div className="forum-post-status-row">
-                      ${(post.editCount || 0) > 0 && isForumPostForcedEdit(post)
+                      ${(post.editCount || 0) > 0
                         ? html`<button
                             className="ghost-btn forum-post-history-btn"
                             type="button"
@@ -8068,18 +8268,6 @@ function ForumPage({ isAdmin = false }) {
                     </div>
                     ${canManageForumPost(post)
                       ? html`<div className="forum-post-actions-row">
-                          ${(post.editCount || 0) > 0 && !isForumPostForcedEdit(post)
-                            ? html`<button
-                                className="ghost-btn forum-post-history-btn"
-                                type="button"
-                                onMouseDown=${(event) => triggerFlash(event.currentTarget)}
-                                onClick=${() => openForumPostHistory(post)}
-                                title="View past edits"
-                              >
-                                <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
-                                Past edits
-                              </button>`
-                            : html``}
                           <button
                             className="ghost-btn"
                             type="button"
@@ -8138,10 +8326,15 @@ function ForumPage({ isAdmin = false }) {
               </div>`}
           ${postsStatus ? html`<div className="muted">${postsStatus}</div>` : html``}
         </section>
+        ${renderForumHoverProfileCard()}
         <${PopUp}
           show=${forumProfileOpen}
           onClose=${() => setForumProfileOpen(false)}
-          title="Profile Card"
+          title=${(() => {
+            const username = String(forumProfileUser?.username || "").replace(/^@+/, "");
+            const display = username || forumProfileUser?.name || "User";
+            return `${display}'s Profile`;
+          })()}
           headerBelow=${forumProfileUser?.isOwn
             ? html`<div className="profile-modal-header-actions">
                 <button
@@ -12695,7 +12888,11 @@ function Layout() {
       <${PopUp}
         show=${notificationProfileOpen}
         onClose=${() => setNotificationProfileOpen(false)}
-        title="Profile Card"
+        title=${(() => {
+          const username = String(notificationProfileUser?.username || "").replace(/^@+/, "");
+          const display = username || notificationProfileUser?.name || "User";
+          return `${display}'s Profile`;
+        })()}
         className="profile-card-overlay"
         headerBelow=${notificationProfileUser?.isOwn
           ? html`<div className="profile-modal-header-actions">

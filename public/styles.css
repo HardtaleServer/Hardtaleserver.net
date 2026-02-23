@@ -1623,9 +1623,11 @@ body[data-theme="dark"] {
 }
 
 .forum-history-time {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 6px;
+  justify-content: flex-end;
+  width: 100%;
 }
 
 .forum-history-time .notification-timestamp,
@@ -1633,6 +1635,23 @@ body[data-theme="dark"] {
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
+}
+
+.forum-history-meta-main {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+}
+
+.forum-profile-peek-shell {
+  position: fixed;
+  z-index: 10020;
+  width: min(320px, calc(100vw - 20px));
+}
+
+.forum-profile-peek-card {
+  width: 100%;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
 }
 
 .forum-history-body {
