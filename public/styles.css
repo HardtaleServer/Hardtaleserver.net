@@ -5241,22 +5241,29 @@ button.profile-owned-badge:disabled {
   }
 
   .profile-card-overlay {
-    padding: 0;
-    place-items: stretch;
+    padding: 10px;
+    place-items: center;
   }
 
   .profile-card-overlay .popup {
-    width: 100%;
+    width: min(760px, 94vw);
     max-width: 100%;
-    height: 100vh;
-    max-height: 100vh;
+    max-height: 88vh;
+    height: auto;
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    margin: 0;
+    border-radius: 16px;
+    transform: none;
+  }
+
+  .profile-card-overlay .popup > .profile-card {
+    max-height: 100%;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    margin: 0;
-    border-radius: 0;
-    border-left: none;
-    border-right: none;
-    transform: none;
+    overscroll-behavior: contain;
+    padding-right: 4px;
   }
 
   .image-preview-modal {
@@ -7231,7 +7238,8 @@ html.custom-scrollbars-enabled .support-center-overlay .popup,
 html.custom-scrollbars-enabled .checkout-overlay .popup,
 html.custom-scrollbars-enabled .cart-list,
 html.custom-scrollbars-enabled .mobile-drawer-panel,
-html.custom-scrollbars-enabled .admin-panel-modal-content {
+html.custom-scrollbars-enabled .admin-panel-modal-content,
+html.custom-scrollbars-enabled .profile-card-overlay .popup > .profile-card {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--accent) 72%, var(--accent-2)) var(--scrollbar-track);
 }
@@ -7246,7 +7254,8 @@ html.custom-scrollbars-enabled .support-center-overlay .popup::-webkit-scrollbar
 html.custom-scrollbars-enabled .checkout-overlay .popup::-webkit-scrollbar,
 html.custom-scrollbars-enabled .cart-list::-webkit-scrollbar,
 html.custom-scrollbars-enabled .mobile-drawer-panel::-webkit-scrollbar,
-html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar {
+html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar,
+html.custom-scrollbars-enabled .profile-card-overlay .popup > .profile-card::-webkit-scrollbar {
   width: 10px;
   height: 10px;
 }
@@ -7261,7 +7270,8 @@ html.custom-scrollbars-enabled .support-center-overlay .popup::-webkit-scrollbar
 html.custom-scrollbars-enabled .checkout-overlay .popup::-webkit-scrollbar-track,
 html.custom-scrollbars-enabled .cart-list::-webkit-scrollbar-track,
 html.custom-scrollbars-enabled .mobile-drawer-panel::-webkit-scrollbar-track,
-html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar-track {
+html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar-track,
+html.custom-scrollbars-enabled .profile-card-overlay .popup > .profile-card::-webkit-scrollbar-track {
   border-radius: 999px;
   background: var(--scrollbar-track);
   border: 1px solid var(--scrollbar-track-border);
@@ -7277,7 +7287,8 @@ html.custom-scrollbars-enabled .support-center-overlay .popup::-webkit-scrollbar
 html.custom-scrollbars-enabled .checkout-overlay .popup::-webkit-scrollbar-thumb,
 html.custom-scrollbars-enabled .cart-list::-webkit-scrollbar-thumb,
 html.custom-scrollbars-enabled .mobile-drawer-panel::-webkit-scrollbar-thumb,
-html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar-thumb {
+html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar-thumb,
+html.custom-scrollbars-enabled .profile-card-overlay .popup > .profile-card::-webkit-scrollbar-thumb {
   border-radius: 999px;
   border: 1px solid var(--scrollbar-thumb-border);
   background: var(--scrollbar-thumb-gradient);
@@ -7295,7 +7306,8 @@ html.custom-scrollbars-enabled .support-center-overlay .popup::-webkit-scrollbar
 html.custom-scrollbars-enabled .checkout-overlay .popup::-webkit-scrollbar-thumb:hover,
 html.custom-scrollbars-enabled .cart-list::-webkit-scrollbar-thumb:hover,
 html.custom-scrollbars-enabled .mobile-drawer-panel::-webkit-scrollbar-thumb:hover,
-html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar-thumb:hover {
+html.custom-scrollbars-enabled .admin-panel-modal-content::-webkit-scrollbar-thumb:hover,
+html.custom-scrollbars-enabled .profile-card-overlay .popup > .profile-card::-webkit-scrollbar-thumb:hover {
   filter: var(--scrollbar-thumb-hover-filter);
 }
 

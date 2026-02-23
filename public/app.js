@@ -205,6 +205,8 @@ const CHANGELOG_ENTRIES = [
     items: [
       "Fixed forum author hover/tap preview cards to hydrate profile metadata before final render, so linked status and badge info no longer show stale/unlinked values on avatar/name hover targets.",
       "Added race-safe hover hydration guards so delayed profile fetch responses cannot overwrite the current hover card with outdated data after pointer movement.",
+      "Reworked mobile profile-card modal sizing to use a bounded popup with internal profile-content scrolling instead of full-height takeover, and routed that internal scroll region through the custom scrollbar theme.",
+      "Updated profile badge settings dropdown behavior so Donor Tab and Staff Tab now default collapsed instead of auto-open.",
       "Removed temporary root-level response/handoff `.txt` artifacts from the repository to keep project files focused on runtime code and durable documentation.",
     ],
   },
@@ -9483,7 +9485,7 @@ function renderOwnedRankBadges(entry, options = {}) {
       ? html`<div className="profile-card-badges-block">
           <div className="profile-card-badges-title">Badge Display Tabs</div>
           ${canManageDonorBadge
-            ? html`<details className="profile-badge-dropdown" open>
+            ? html`<details className="profile-badge-dropdown">
                 <summary>Donor Tab</summary>
                 <label className="profile-card-title-picker">
                   <span className="muted">Displayed donor badge</span>
@@ -9509,7 +9511,7 @@ function renderOwnedRankBadges(entry, options = {}) {
               </details>`
             : html``}
           ${canManageStaffBadge
-            ? html`<details className="profile-badge-dropdown" open>
+            ? html`<details className="profile-badge-dropdown">
                 <summary>Staff Tab</summary>
                 <label className="profile-card-title-picker">
                   <span className="muted">Staff badge mode</span>
