@@ -123,6 +123,18 @@ const ACHIEVEMENT_DEFS = [
     description: "Use /link successfully",
     icon: "L",
   },
+  {
+    key: "first_post",
+    title: "First post",
+    description: "Create your first forum post",
+    icon: "P",
+  },
+  {
+    key: "finding_someone",
+    title: "Finding someone!",
+    description: "@ mention another player successfully",
+    icon: "@",
+  },
 ];
 const MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URI || "";
 const MONGO_DB_NAME = process.env.MONGO_DB || process.env.MONGODB_DB || "hardtaledb";
@@ -2857,6 +2869,91 @@ async function notifyForumMentions({
   if (notifications.length === 0) return;
   await notificationsCollection.insertMany(notifications, { ordered: false });
   await pruneCollection(notificationsCollection, 120);
+  if (safeActorUserId) {
+    await unlockAchievement(safeActorUserId, "finding_someone", { notify: true }).catch(() => {});
+  }
+}
+
+async function loadForumActivityForUserId(userId) {
+  const safeUserId = normalizeText(userId, 128);
+  const fallback = {
+    posts: 0,
+    comments: 0,
+    replies: 0,
+    mentionsReceived: 0,
+    totalEngagement: 0,
+    lastPostAt: "",
+    lastCommentAt: "",
+    lastReplyAt: "",
+  };
+  if (!safeUserId || !forumPostsCollection || !commentsCollection || !notificationsCollection) return fallback;
+
+  const [postRows, commentRows, mentionCount] = await Promise.all([
+    forumPostsCollection
+      .find(
+        {
+          isDeleted: false,
+          $or: [{ authorUserId: safeUserId }, { createdBy: safeUserId }],
+        },
+        { projection: { createdAt: 1 } },
+      )
+      .toArray(),
+    commentsCollection
+      .find(
+        {
+          isDeleted: false,
+          newsId: /^forum:/,
+          userId: safeUserId,
+        },
+        { projection: { createdAt: 1, replies: 1 } },
+      )
+      .toArray(),
+    notificationsCollection.countDocuments({
+      isDeleted: false,
+      type: "forum_mention",
+      targetUserId: safeUserId,
+    }),
+  ]);
+
+  let replies = 0;
+  let lastReplyAtMs = 0;
+  let lastCommentAtMs = 0;
+  for (const comment of commentRows) {
+    const commentCreatedAtMs = Date.parse(String(comment?.createdAt || ""));
+    if (Number.isFinite(commentCreatedAtMs)) {
+      lastCommentAtMs = Math.max(lastCommentAtMs, commentCreatedAtMs);
+    }
+    const rows = Array.isArray(comment?.replies) ? comment.replies : [];
+    for (const reply of rows) {
+      if (normalizeText(reply?.userId, 128) !== safeUserId) continue;
+      replies += 1;
+      const replyCreatedAtMs = Date.parse(String(reply?.createdAt || ""));
+      if (Number.isFinite(replyCreatedAtMs)) {
+        lastReplyAtMs = Math.max(lastReplyAtMs, replyCreatedAtMs);
+      }
+    }
+  }
+
+  const lastPostAtMs = postRows.reduce((maxMs, row) => {
+    const nextMs = Date.parse(String(row?.createdAt || ""));
+    return Number.isFinite(nextMs) ? Math.max(maxMs, nextMs) : maxMs;
+  }, 0);
+
+  const posts = postRows.length;
+  const comments = commentRows.length;
+  const mentionsReceived = Number.isFinite(Number(mentionCount)) ? Number(mentionCount) : 0;
+  const totalEngagement = posts + comments + replies;
+
+  return {
+    posts,
+    comments,
+    replies,
+    mentionsReceived,
+    totalEngagement,
+    lastPostAt: lastPostAtMs ? new Date(lastPostAtMs).toISOString() : "",
+    lastCommentAt: lastCommentAtMs ? new Date(lastCommentAtMs).toISOString() : "",
+    lastReplyAt: lastReplyAtMs ? new Date(lastReplyAtMs).toISOString() : "",
+  };
 }
 
 function normalizeForumPost(doc) {
@@ -5096,6 +5193,21 @@ app.post("/api/payments/stripe/create-payment-intent", async (req, res) => {
   }
 });
 
+app.get("/api/profile/forum-activity/:userId", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const userId = normalizeText(req.params.userId, 128);
+    if (!userId) {
+      return res.status(400).json({ error: "Invalid user id" });
+    }
+    const activity = await loadForumActivityForUserId(userId);
+    return res.json({ userId, activity });
+  } catch (error) {
+    console.error("Failed to load profile forum activity", error);
+    return res.status(500).json({ error: "Failed to load profile forum activity" });
+  }
+});
+
 app.post("/api/profile/staff-role-preview", async (req, res) => {
   try {
     if (!(await requireMongoReady(res))) return;
@@ -6017,6 +6129,7 @@ app.post("/api/forum/posts", async (req, res) => {
     };
 
     await forumPostsCollection.insertOne(post);
+    await unlockAchievement(auth.userId, "first_post", { notify: true }).catch(() => {});
     const mentionHandles = extractForumMentionHandles(body);
     await notifyForumMentions({
       actorUserId: auth.userId,

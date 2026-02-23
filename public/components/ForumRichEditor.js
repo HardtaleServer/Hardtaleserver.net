@@ -79,6 +79,7 @@ export default function ForumRichEditor({
   mentionSuggestions = [],
 }) {
   const textareaRef = useRef(null);
+  const mentionPickerInputRef = useRef(null);
   const emojiPickerRef = useRef(null);
   const undoStackRef = useRef([]);
   const redoStackRef = useRef([]);
@@ -94,12 +95,40 @@ export default function ForumRichEditor({
   const [mentionMenuOpen, setMentionMenuOpen] = useState(false);
   const [mentionMenuItems, setMentionMenuItems] = useState([]);
   const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionPickerOpen, setMentionPickerOpen] = useState(false);
+  const [mentionPickerQuery, setMentionPickerQuery] = useState("");
   const draftKey = useMemo(() => buildDraftStorageKey("forum-editor-draft", draftScope), [draftScope]);
   const count = String(value || "").length;
   const tooShort = count > 0 && count < minLength;
   const canUndo = undoStackRef.current.length > 0;
   const canRedo = redoStackRef.current.length > 0;
   const activeMode = showModeTabs ? mode : "edit";
+  const normalizedMentionSuggestions = useMemo(() => {
+    const byUsername = new Map();
+    (Array.isArray(mentionSuggestions) ? mentionSuggestions : []).forEach((entry) => {
+      const username = String(
+        typeof entry === "string" ? entry : entry?.username || entry?.authorUsername || "",
+      )
+        .trim()
+        .replace(/^@+/, "");
+      if (!username) return;
+      const key = username.toLowerCase();
+      if (byUsername.has(key)) return;
+      byUsername.set(key, {
+        username,
+        image: String(typeof entry === "object" ? entry?.image || entry?.authorImage || "" : ""),
+      });
+    });
+    return Array.from(byUsername.values());
+  }, [mentionSuggestions]);
+  const mentionPickerItems = useMemo(() => {
+    const query = String(mentionPickerQuery || "").trim().toLowerCase();
+    const pool = normalizedMentionSuggestions;
+    if (!query) return pool.slice(0, 12);
+    return pool
+      .filter((entry) => String(entry?.username || "").toLowerCase().includes(query))
+      .slice(0, 12);
+  }, [normalizedMentionSuggestions, mentionPickerQuery]);
   const templates = Array.isArray(templateOptions) && templateOptions.length > 0
     ? templateOptions
     : [
@@ -284,7 +313,7 @@ export default function ForumRichEditor({
         setMentionIndex((prev) => (prev - 1 + mentionMenuItems.length) % mentionMenuItems.length);
         return;
       }
-      const selected = String(mentionMenuItems[mentionIndex] || mentionMenuItems[0] || "");
+      const selected = mentionMenuItems[mentionIndex] || mentionMenuItems[0] || null;
       if (selected) applyMentionSelection(selected);
       return;
     }
@@ -338,15 +367,8 @@ export default function ForumRichEditor({
       setMentionIndex(0);
       return;
     }
-    const normalized = Array.from(
-      new Set(
-        (Array.isArray(mentionSuggestions) ? mentionSuggestions : [])
-          .map((entry) => String(entry || "").trim().replace(/^@+/, ""))
-          .filter(Boolean),
-      ),
-    );
-    const nextItems = normalized
-      .filter((entry) => entry.toLowerCase().startsWith(context.query))
+    const nextItems = normalizedMentionSuggestions
+      .filter((entry) => String(entry?.username || "").toLowerCase().startsWith(context.query))
       .slice(0, 8);
     if (nextItems.length === 0) {
       setMentionMenuOpen(false);
@@ -359,21 +381,40 @@ export default function ForumRichEditor({
     setMentionIndex((prev) => Math.min(prev, Math.max(nextItems.length - 1, 0)));
   }
 
-  function applyMentionSelection(username) {
+  function applyMentionSelection(mentionValue) {
     const textarea = textareaRef.current;
     if (!textarea) return;
+    const username = String(
+      typeof mentionValue === "string"
+        ? mentionValue
+        : mentionValue?.username || mentionValue?.authorUsername || "",
+    )
+      .trim()
+      .replace(/^@+/, "");
+    if (!username) return;
     const textValue = String(value || "");
-    const context = resolveMentionContext(textValue, textarea.selectionStart || 0);
-    if (!context) return;
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || start;
+    const context = resolveMentionContext(textValue, start);
     const replacement = `@${String(username || "").replace(/^@+/, "")} `;
-    const nextValue = `${textValue.slice(0, context.start)}${replacement}${textValue.slice(context.end)}`;
-    const nextCursor = context.start + replacement.length;
+    let nextValue = "";
+    let nextCursor = 0;
+    if (context) {
+      nextValue = `${textValue.slice(0, context.start)}${replacement}${textValue.slice(context.end)}`;
+      nextCursor = context.start + replacement.length;
+    } else {
+      const result = insertAtSelection(textValue, start, end, replacement);
+      nextValue = result.value;
+      nextCursor = result.selectionStart;
+    }
     applyEditorValue(nextValue, {
       selection: { start: nextCursor, end: nextCursor },
     });
     setMentionMenuOpen(false);
     setMentionMenuItems([]);
     setMentionIndex(0);
+    setMentionPickerOpen(false);
+    setMentionPickerQuery("");
   }
 
   function applyTemplate(valueKey) {
@@ -442,6 +483,17 @@ export default function ForumRichEditor({
           }}
         ><${ToolIcon} name="image" /></button>
         <button type="button" className="ghost-btn forum-editor-icon-btn" onClick=${() => setShowEmoji((prev) => !prev)} title="Emoji"><${ToolIcon} name="emoji" /></button>
+        <button
+          type="button"
+          className="ghost-btn"
+          onClick=${() => {
+            setMentionPickerOpen((prev) => !prev);
+            setMentionPickerQuery("");
+            requestAnimationFrame(() => mentionPickerInputRef.current?.focus());
+          }}
+        >
+          @Someone
+        </button>
         <button type="button" className="ghost-btn" onClick=${() => applyEditorValue(clearMarkdownFormatting(value))}>Clear</button>
       </div>
 
@@ -464,6 +516,42 @@ export default function ForumRichEditor({
               )}
             </select>
           </label>`
+        : html``}
+      ${mentionPickerOpen
+        ? html`<div className="forum-editor-mention-picker">
+            <label className="forum-editor-mention-search">
+              <span className="muted">Mention a player</span>
+              <input
+                ref=${mentionPickerInputRef}
+                type="text"
+                value=${mentionPickerQuery}
+                placeholder="@username"
+                onInput=${(event) => setMentionPickerQuery(event.target.value)}
+              />
+            </label>
+            <div className="forum-editor-mentions mention-picker-results">
+              ${mentionPickerItems.length > 0
+                ? mentionPickerItems.map(
+                    (item, index) => html`<button
+                      key=${`mention-picker-${item.username}-${index}`}
+                      type="button"
+                      className="forum-editor-mention-item"
+                      onMouseDown=${(event) => {
+                        event.preventDefault();
+                        applyMentionSelection(item);
+                      }}
+                    >
+                      <img
+                        className="forum-editor-mention-avatar"
+                        src=${item.image || "/assets/HardTale_H_GreyScale.png"}
+                        alt=${item.username}
+                      />
+                      <span>@${item.username}</span>
+                    </button>`,
+                  )
+                : html`<div className="muted forum-editor-mention-empty">No matching users.</div>`}
+            </div>
+          </div>`
         : html``}
 
       <div className=${`forum-editor-body mode-${activeMode}`.trim()}>
@@ -492,7 +580,7 @@ export default function ForumRichEditor({
         ? html`<div className="forum-editor-mentions">
             ${mentionMenuItems.map(
               (item, index) => html`<button
-                key=${`mention-${item}-${index}`}
+                key=${`mention-${item.username}-${index}`}
                 type="button"
                 className=${`forum-editor-mention-item ${mentionIndex === index ? "active" : ""}`.trim()}
                 onMouseEnter=${() => setMentionIndex(index)}
@@ -501,7 +589,12 @@ export default function ForumRichEditor({
                   applyMentionSelection(item);
                 }}
               >
-                @${item}
+                <img
+                  className="forum-editor-mention-avatar"
+                  src=${item.image || "/assets/HardTale_H_GreyScale.png"}
+                  alt=${item.username}
+                />
+                <span>@${item.username}</span>
               </button>`,
             )}
           </div>`

@@ -10,6 +10,7 @@ function ProfileInfoTabs({
   renderRanks,
   renderGroups,
   renderAchievements,
+  renderForumActivity,
 }) {
   let content = typeof renderBadges === "function" ? renderBadges() : null;
   if (activeTab === "ranks") {
@@ -20,6 +21,9 @@ function ProfileInfoTabs({
   }
   if (activeTab === "achievements") {
     content = typeof renderAchievements === "function" ? renderAchievements() : null;
+  }
+  if (activeTab === "forum-activity") {
+    content = typeof renderForumActivity === "function" ? renderForumActivity() : null;
   }
   return html`
     <div className="profile-card-subtabs" role="tablist" aria-label="Profile details">
@@ -51,6 +55,15 @@ function ProfileInfoTabs({
       >
         Achievements
       </button>
+      ${typeof renderForumActivity === "function"
+        ? html`<button
+            type="button"
+            className=${`profile-card-subtab ${activeTab === "forum-activity" ? "active" : ""}`.trim()}
+            onClick=${() => onTabChange && onTabChange("forum-activity")}
+          >
+            Forum Activity
+          </button>`
+        : html``}
     </div>
     ${content}
   `;

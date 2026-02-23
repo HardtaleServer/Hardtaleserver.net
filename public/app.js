@@ -2721,6 +2721,19 @@ function CommentThread({
     }
   }
 
+  async function loadProfileForumActivity(targetUserId) {
+    const safeUserId = String(targetUserId || "").trim();
+    if (!safeUserId) return null;
+    try {
+      const response = await fetch(`/api/profile/forum-activity/${encodeURIComponent(safeUserId)}`);
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json().catch(() => ({}));
+      return data?.activity && typeof data.activity === "object" ? data.activity : null;
+    } catch {
+      return null;
+    }
+  }
+
   async function updateOwnDisplayTitle(nextTitle) {
     if (!profileUser?.isOwn || !nextTitle || profileTitleSaving) return;
     const current = String(profileUser.rankLabel || "");
@@ -3274,10 +3287,11 @@ function CommentThread({
     if (isOwn && availableTitles.length === 0 && selectedTitle) {
       availableTitles = [selectedTitle];
     }
-    const [linkStatus, achievements, groups] = await Promise.all([
+    const [linkStatus, achievements, groups, forumActivity] = await Promise.all([
       loadProfileLinkStatus(authorUserId),
       loadProfileAchievements(authorUserId),
       loadProfileGroups(authorUserId),
+      loadProfileForumActivity(authorUserId),
     ]);
     setProfileTitleStatus("");
     setProfileInfoTab("badges");
@@ -3318,6 +3332,7 @@ function CommentThread({
       linkedAccount: linkStatus.linked,
       achievements,
       groups,
+      forumActivity,
     });
     setProfileOpen(true);
     } finally {
@@ -3895,6 +3910,8 @@ function CommentThread({
                   html`<${ProfileAchievementsPanel}
                     achievements=${profileUser?.achievements || []}
                   />`}
+                renderForumActivity=${() =>
+                  html`${renderProfileForumActivityCard(profileUser, formatTimestamp)}`}
               />
               ${profileUser.isOwn
                 ? html`<label className="profile-card-title-picker">
@@ -5237,12 +5254,20 @@ function StorePage({
   }
 
   function getStoreCardBadges() {
-    const badges = [];
-    badges.push(isLinkedAccount ? "Linked" : "Unlinked");
-    if (storePreviewOwnedRank !== "Unregistered") {
-      badges.push(storePreviewOwnedRank);
-    }
-    return Array.from(new Set(badges));
+    const showAllOwnedRankBadges = user?.publicMetadata?.showAllOwnedRankBadges !== false;
+    const selectedOwnedBadge = normalizeOwnedRankLabel(user?.publicMetadata?.selectedOwnedBadge || "");
+    const ownedBadges = buildOwnedRankBadges(storePreviewOwnedRank, false, {
+      showAllOwnedRankBadges,
+      selectedOwnedBadge,
+    });
+    const featuredBadge = normalizeOwnedRankLabel(profileRankLabel || "");
+    const linkedBadge = isLinkedAccount ? "Linked" : "Unlinked";
+    const candidates = [
+      featuredBadge !== "Unregistered" ? featuredBadge : linkedBadge,
+      linkedBadge,
+      ...ownedBadges,
+    ];
+    return Array.from(new Set(candidates.filter(Boolean))).slice(0, 3);
   }
 
   function getStorePreviewBadges(item) {
@@ -6260,16 +6285,22 @@ function ForumPage({ isAdmin = false }) {
     [selectedSectionId],
   );
   const mentionSuggestions = useMemo(() => {
-    const fromPosts = posts
-      .map((entry) => String(entry?.authorUsername || "").trim().replace(/^@+/, ""))
-      .filter(Boolean);
-    const fromSelected = selectedPost?.authorUsername
-      ? [String(selectedPost.authorUsername).trim().replace(/^@+/, "")]
-      : [];
-    const fromMembers = forumMemberMentions
-      .map((entry) => String(entry?.username || "").trim().replace(/^@+/, ""))
-      .filter(Boolean);
-    return Array.from(new Set([...fromMembers, ...fromPosts, ...fromSelected]));
+    const directory = new Map();
+    const register = (entry) => {
+      const username = String(entry?.authorUsername || entry?.username || "").trim().replace(/^@+/, "");
+      if (!username) return;
+      const key = username.toLowerCase();
+      if (directory.has(key)) return;
+      directory.set(key, {
+        username,
+        image: String(entry?.authorImage || entry?.image || "/assets/HardTale_H_GreyScale.png"),
+        userId: String(entry?.authorUserId || entry?.createdBy || entry?.userId || "").trim(),
+      });
+    };
+    posts.forEach(register);
+    if (selectedPost) register(selectedPost);
+    forumMemberMentions.forEach(register);
+    return Array.from(directory.values());
   }, [forumMemberMentions, posts, selectedPost]);
   const mentionProfileDirectory = useMemo(() => {
     const directory = new Map();
@@ -6557,6 +6588,19 @@ function ForumPage({ isAdmin = false }) {
     }
   }
 
+  async function loadForumProfileActivity(targetUserId) {
+    const safeUserId = String(targetUserId || "").trim();
+    if (!safeUserId) return null;
+    try {
+      const response = await fetch(`/api/profile/forum-activity/${encodeURIComponent(safeUserId)}`);
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json().catch(() => ({}));
+      return data?.activity && typeof data.activity === "object" ? data.activity : null;
+    } catch {
+      return null;
+    }
+  }
+
   async function openForumProfileCard(entry) {
     if (!entry) return;
     setForumProfileCardLoading(true);
@@ -6639,10 +6683,11 @@ function ForumPage({ isAdmin = false }) {
     if (isOwn && availableTitles.length === 0 && selectedTitle) {
       availableTitles = [selectedTitle];
     }
-    const [linkStatus, achievements, groups] = await Promise.all([
+    const [linkStatus, achievements, groups, forumActivity] = await Promise.all([
       loadForumProfileLinkStatus(authorUserId),
       loadForumProfileAchievements(authorUserId),
       loadForumProfileGroups(authorUserId),
+      loadForumProfileActivity(authorUserId),
     ]);
     setForumProfileTitleStatus("");
     setForumProfileInfoTab("badges");
@@ -6684,6 +6729,7 @@ function ForumPage({ isAdmin = false }) {
       linkedAccount: linkStatus.linked,
       achievements,
       groups,
+      forumActivity,
     });
     setForumProfileOpen(true);
     } finally {
@@ -7189,6 +7235,8 @@ function ForumPage({ isAdmin = false }) {
           html`<${ProfileAchievementsPanel}
             achievements=${forumProfileUser?.achievements || []}
           />`}
+        renderForumActivity=${() =>
+          html`${renderProfileForumActivityCard(forumProfileUser, formatTimestamp)}`}
       />
       ${forumProfileUser.isOwn
         ? html`<label className="profile-card-title-picker">
@@ -8633,7 +8681,12 @@ function renderStaffBadge(entry) {
 
 function renderLinkedStatusIcon(linked = false) {
   if (linked) {
-    return html`<span className="link-state-icon link-state-icon-verified" aria-hidden="true">✓</span>`;
+    return html`<img
+      className="link-state-icon link-state-icon-verified"
+      src=${LINKED_STATUS_ICON_SVG}
+      alt=""
+      aria-hidden="true"
+    />`;
   }
   return html`<img
     className="link-state-icon link-state-icon-warning"
@@ -8717,6 +8770,29 @@ function renderProfileGroupsCard(entry, options = {}) {
           </select>
         </label>`
       : html``}
+  </div>`;
+}
+
+function renderProfileForumActivityCard(entry, formatTimestamp) {
+  const activity = entry?.forumActivity || {};
+  const posts = Number(activity?.posts || 0);
+  const comments = Number(activity?.comments || 0);
+  const replies = Number(activity?.replies || 0);
+  const mentionsReceived = Number(activity?.mentionsReceived || 0);
+  const totalEngagement = Number(activity?.totalEngagement || posts + comments + replies);
+  const lastActiveAt = String(activity?.lastReplyAt || activity?.lastCommentAt || activity?.lastPostAt || "");
+  return html`<div className="profile-card-badges-block">
+    <div className="profile-card-badges-title">Forum Activity</div>
+    <div className="profile-card-badges-row profile-groups-row">
+      <span className="profile-group-pill">Posts: ${posts}</span>
+      <span className="profile-group-pill">Comments: ${comments}</span>
+      <span className="profile-group-pill">Replies: ${replies}</span>
+      <span className="profile-group-pill">Mentions: ${mentionsReceived}</span>
+      <span className="profile-group-pill">Total: ${totalEngagement}</span>
+    </div>
+    <div className="muted profile-card-badges-empty">
+      ${lastActiveAt ? `Last activity: ${formatTimestamp(lastActiveAt)}` : "No recent forum activity."}
+    </div>
   </div>`;
 }
 
@@ -11061,6 +11137,19 @@ function Layout() {
     }
   }
 
+  async function loadLayoutProfileForumActivity(targetUserId) {
+    const safeUserId = String(targetUserId || "").trim();
+    if (!safeUserId) return null;
+    try {
+      const response = await fetch(`/api/profile/forum-activity/${encodeURIComponent(safeUserId)}`);
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json().catch(() => ({}));
+      return data?.activity && typeof data.activity === "object" ? data.activity : null;
+    } catch {
+      return null;
+    }
+  }
+
   async function loadOwnProfileTitleSettings() {
     try {
       const response = await apiFetchWithToken(getToken, true, "/api/profile/title");
@@ -11106,10 +11195,11 @@ function Layout() {
           : [];
       }
     }
-    const [linkStatus, achievements, groups] = await Promise.all([
+    const [linkStatus, achievements, groups, forumActivity] = await Promise.all([
       loadLayoutProfileLinkStatus(authorUserId),
       loadLayoutProfileAchievements(authorUserId),
       loadLayoutProfileGroups(authorUserId),
+      loadLayoutProfileForumActivity(authorUserId),
     ]);
     setNotificationProfileInfoTab("badges");
     setNotificationProfileUser({
@@ -11137,6 +11227,7 @@ function Layout() {
       linkedAccount: linkStatus.linked,
       achievements,
       groups,
+      forumActivity,
     });
     setNotificationProfileOpen(true);
     } finally {
@@ -12058,6 +12149,8 @@ function Layout() {
                   html`<${ProfileAchievementsPanel}
                     achievements=${notificationProfileUser?.achievements || []}
                   />`}
+                renderForumActivity=${() =>
+                  html`${renderProfileForumActivityCard(notificationProfileUser, formatTimestamp)}`}
               />
               ${notificationProfileUser?.isOwn
                 ? html`<div className="profile-account-footer">

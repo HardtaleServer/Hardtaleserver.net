@@ -1,0 +1,72 @@
+PLANNED CHANGES - Forum Mentions, Activity, and Social Foundation
+Date: 2026-02-23
+
+Goal
+- Make @mentions actionable and profile-driven.
+- Expose forum engagement in account panel.
+- Add achievement hooks for first contribution and successful mention.
+- Prepare architecture for friends + private messaging.
+
+Delivered in this pass
+- Clickable @mention rendering opens the target profile card flow.
+- Added profile tab: Forum Activity (posts, comments, replies, mentions, total, last activity).
+- Added achievements:
+  - first_post (first forum post)
+  - finding_someone (successful @mention notification)
+- Added rich editor @someone picker button with search field and avatar results.
+- Kept inline @autocomplete and keyboard selection in editor.
+
+Naming Convention (recommended and now used)
+- UI components: PascalCase nouns
+  - ForumMentionPicker
+  - ForumMentionLink
+  - ForumActivityTab
+- Handlers: verb + domain + target
+  - openForumMentionProfile
+  - loadForumProfileActivity
+  - notifyForumMentions
+- State keys: domain + noun
+  - mentionSuggestions
+  - mentionProfileDirectory
+  - forumActivity
+- CSS blocks: feature-prefixed kebab-case
+  - forum-editor-mention-picker
+  - forum-editor-mention-search
+  - forum-editor-mention-item
+
+Production-Safe Next Steps
+1. Mention directory source hardening
+- Move mention candidates to a dedicated endpoint with pagination and debounce.
+- Enforce username normalization + uniqueness server-side.
+- Add rate-limits for mention search endpoint.
+
+2. Mention permission model
+- Optional section-level mention permission checks.
+- Ignore mentions to deleted/banned/inactive users.
+- Add anti-spam threshold per post/comment edit cycle.
+
+3. Activity panel enrichment
+- Add rolling windows (7d, 30d, all-time).
+- Add thread participation and received reactions.
+- Add caching layer for high-traffic profile opens.
+
+4. Achievement integrity
+- Keep unlock idempotent on server.
+- Track unlock source metadata for audit (postId/commentId).
+- Add admin visibility endpoint for achievement telemetry.
+
+5. Friends/PM foundation
+- Introduce SocialIdentity model keyed by userId.
+- Add FriendRequest, Friendship, DirectThread, DirectMessage collections.
+- Reuse mention search backend for friend discovery.
+
+6. Security + reliability
+- Sanitize all mention and profile-card payload fields.
+- Add request validation schema for all forum/social endpoints.
+- Add metrics: mention attempts, mention success ratio, endpoint latency.
+- Add integration tests for mention parse -> notify -> achievement unlock chain.
+
+7. UX follow-up
+- Add quick actions on profile card: Add Friend, Message (future-flagged).
+- Add mention hover card on desktop and tap card on mobile.
+- Add empty/error/loading states for mention picker and forum activity tab.
