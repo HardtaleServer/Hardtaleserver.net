@@ -6550,18 +6550,21 @@ function ForumPage({ isAdmin = false }) {
     }
   }
 
-  function openForumHoverProfile(entry, anchorEl) {
+  function openForumHoverProfile(entry, anchorEl, options = {}) {
     if (!entry || !anchorEl) return;
     const normalized = normalizeForumProfileEntry(entry);
     if (!normalized) return;
     const rect = anchorEl.getBoundingClientRect();
+    const offsetX = Number.isFinite(Number(options?.offsetX)) ? Number(options.offsetX) : 0;
+    const offsetY = Number.isFinite(Number(options?.offsetY)) ? Number(options.offsetY) : 8;
     const key = `${normalized.authorUserId || normalized.authorUsername || normalized.authorName}`.toLowerCase();
     const maxX = Math.max(10, (typeof window !== "undefined" ? window.innerWidth : 1200) - 340);
+    const left = rect.left + offsetX;
     setForumHoverProfile({
       key,
       entry: normalized,
-      x: Math.min(Math.max(10, rect.left), maxX),
-      y: rect.bottom + 8,
+      x: Math.min(Math.max(10, left), maxX),
+      y: rect.bottom + offsetY,
     });
   }
 
@@ -6570,7 +6573,7 @@ function ForumPage({ isAdmin = false }) {
     if (!normalized) return;
     clearForumHoverTimers();
     if (triggerEl?.getBoundingClientRect) {
-      openForumHoverProfile(normalized, triggerEl);
+      openForumHoverProfile(normalized, triggerEl, { offsetX: -25, offsetY: 50 });
       return;
     }
     const key = `${normalized.authorUserId || normalized.authorUsername || normalized.authorName}`.toLowerCase();

@@ -1657,6 +1657,12 @@ body[data-theme="dark"] {
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
 }
 
+.forum-profile-peek-shell .forum-profile-peek-card.mobile-drawer-profile-preview {
+  background: var(--bg) !important;
+  opacity: 1 !important;
+  backdrop-filter: none !important;
+}
+
 .forum-history-body {
   display: grid;
   gap: 8px;
