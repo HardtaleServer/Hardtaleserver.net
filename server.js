@@ -236,6 +236,7 @@ let cartsCollection = null;
 let purchasesCollection = null;
 let supportTicketsCollection = null;
 let forumPostsCollection = null;
+let privateMessagesCollection = null;
 let linkedAccountsCollection = null;
 let userAchievementsCollection = null;
 let linkCodesCollection = null;
@@ -265,6 +266,7 @@ function resetMongoState() {
   purchasesCollection = null;
   supportTicketsCollection = null;
   forumPostsCollection = null;
+  privateMessagesCollection = null;
   linkedAccountsCollection = null;
   userAchievementsCollection = null;
   linkCodesCollection = null;
@@ -304,6 +306,7 @@ async function connectMongo() {
     purchasesCollection &&
     supportTicketsCollection &&
     forumPostsCollection &&
+    privateMessagesCollection &&
     linkedAccountsCollection &&
     userAchievementsCollection &&
     linkCodesCollection &&
@@ -341,6 +344,7 @@ async function connectMongo() {
       purchasesCollection = mongoDb.collection("purchases");
       supportTicketsCollection = mongoDb.collection("support_tickets");
       forumPostsCollection = mongoDb.collection("forum_posts");
+      privateMessagesCollection = mongoDb.collection("private_messages");
       linkedAccountsCollection = mongoDb.collection("linked_accounts");
       userAchievementsCollection = mongoDb.collection("user_achievements");
       linkCodesCollection = mongoDb.collection("link_codes");
@@ -368,6 +372,9 @@ async function connectMongo() {
       await supportTicketsCollection.createIndex({ id: 1 }, { unique: true });
       await supportTicketsCollection.createIndex({ createdBy: 1, createdAt: -1 });
       await supportTicketsCollection.createIndex({ status: 1, updatedAt: -1 });
+      await privateMessagesCollection.createIndex({ id: 1 }, { unique: true });
+      await privateMessagesCollection.createIndex({ fromUserId: 1, toUserId: 1, createdAt: -1 });
+      await privateMessagesCollection.createIndex({ toUserId: 1, createdAt: -1 });
       await forumPostsCollection.createIndex({ id: 1 }, { unique: true });
       await forumPostsCollection.createIndex({ section: 1, createdAt: -1 });
       await forumPostsCollection.createIndex({ createdBy: 1, createdAt: -1 });
@@ -512,6 +519,7 @@ async function requireMongoReady(res) {
     !purchasesCollection ||
     !supportTicketsCollection ||
     !forumPostsCollection ||
+    !privateMessagesCollection ||
     !forumPostRevisionsCollection ||
     !linkedAccountsCollection ||
     !userAchievementsCollection ||
@@ -537,6 +545,7 @@ async function requireMongoReady(res) {
     !purchasesCollection ||
     !supportTicketsCollection ||
     !forumPostsCollection ||
+    !privateMessagesCollection ||
     !forumPostRevisionsCollection ||
     !linkedAccountsCollection ||
     !userAchievementsCollection ||
@@ -2733,6 +2742,27 @@ function normalizeForumBody(value) {
 function normalizeForumBodyFormat(value) {
   const format = normalizeText(value, 20).toLowerCase();
   return format === "markdown" ? "markdown" : "plain";
+}
+
+function normalizePrivateMessageBody(value) {
+  return normalizeText(value, 1200);
+}
+
+function normalizePrivateMessageDoc(doc) {
+  if (!doc) return null;
+  const stripped = stripMongoId(doc);
+  return {
+    ...stripped,
+    id: normalizeText(stripped.id, 128),
+    fromUserId: normalizeText(stripped.fromUserId, 128),
+    toUserId: normalizeText(stripped.toUserId, 128),
+    fromUsername: formatUsernameForDisplay(stripped.fromUsername, 80),
+    fromName: normalizeText(stripped.fromName, 80),
+    fromImage: String(stripped.fromImage || ""),
+    body: normalizePrivateMessageBody(stripped.body),
+    createdAt: stripped.createdAt || new Date().toISOString(),
+    updatedAt: stripped.updatedAt || stripped.createdAt || new Date().toISOString(),
+  };
 }
 
 function extractForumMentionHandles(value, limit = 32) {
@@ -6205,6 +6235,7 @@ app.patch("/api/forum/posts/:id", async (req, res) => {
         postId,
         editedBy: auth.userId,
         editorName,
+        editorUsername: formatUsernameForDisplay(user?.username, 80),
         editorImage: user?.imageUrl || "",
         oldTitle: previousTitle,
         oldBody: previousBody,
@@ -6234,10 +6265,39 @@ app.patch("/api/forum/posts/:id", async (req, res) => {
     );
 
     if (forcedEdit && doc.createdBy && doc.createdBy !== auth.userId) {
+      let forcedTicketId = "";
+      if (supportTicketsCollection) {
+        forcedTicketId = crypto.randomUUID();
+        const forcedTicketBody = normalizeTicketBody(
+          `Your forum post was forcefully edited by staff.\n\nModerator: ${editorName}\nPost: ${String(doc.title || "Untitled Post")}\nSection: ${String(doc.section || "forum")}\n\nReason/notes should be discussed in this private thread.`,
+        );
+        const forcedTicketMessage = {
+          id: crypto.randomUUID(),
+          body: forcedTicketBody,
+          authorId: auth.userId,
+          authorName: editorName,
+          role: "admin",
+          createdAt: now,
+        };
+        await supportTicketsCollection.insertOne({
+          id: forcedTicketId,
+          subject: normalizeTicketSubject(`Forced Edit Review - ${String(doc.title || "Forum Post")}`),
+          category: "warning",
+          status: "open",
+          createdBy: doc.createdBy,
+          createdByName: normalizeText(doc.authorName, 80) || "User",
+          assigneeId: auth.userId,
+          body: forcedTicketBody,
+          messages: [forcedTicketMessage],
+          isDeleted: false,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
       await notificationsCollection.insertOne({
         id: crypto.randomUUID(),
         title: "Forum Post Edited by Staff",
-        message: `${editorName} edited your forum post: ${String(doc.title || "Untitled Post")}`,
+        message: `${editorName} forcefully edited your forum post and opened a private support ticket.`,
         author: editorName,
         authorName: editorName,
         authorUserId: auth.userId,
@@ -6257,7 +6317,9 @@ app.patch("/api/forum/posts/:id", async (req, res) => {
         featured: false,
         type: "forum_post_staff_edit",
         targetUserId: doc.createdBy,
-        readMoreUrl: `/forum?section=${encodeURIComponent(String(doc.section || ""))}&post=${encodeURIComponent(postId)}`,
+        readMoreUrl: forcedTicketId
+          ? `/support?ticketId=${encodeURIComponent(forcedTicketId)}`
+          : `/forum?section=${encodeURIComponent(String(doc.section || ""))}&post=${encodeURIComponent(postId)}`,
         isDeleted: false,
         createdAt: now,
         updatedAt: now,
@@ -6593,6 +6655,119 @@ app.patch("/api/forum/tickets/:id", async (req, res) => {
   }
 });
 
+app.get("/api/private-messages/thread/:targetUserId", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const targetUserId = normalizeText(req.params.targetUserId, 128);
+    if (!targetUserId || targetUserId === auth.userId) {
+      return res.status(400).json({ error: "Invalid private message target" });
+    }
+    const rows = await privateMessagesCollection
+      .find({
+        isDeleted: false,
+        $or: [
+          { fromUserId: auth.userId, toUserId: targetUserId },
+          { fromUserId: targetUserId, toUserId: auth.userId },
+        ],
+      })
+      .sort({ createdAt: 1 })
+      .limit(250)
+      .toArray();
+    const messages = rows.map(normalizePrivateMessageDoc).filter(Boolean);
+    return res.json({ targetUserId, messages });
+  } catch (error) {
+    console.error("Failed to load private message thread", error);
+    return res.status(500).json({ error: "Failed to load private message thread" });
+  }
+});
+
+app.post("/api/private-messages", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = getAuth(req);
+    if (!auth?.userId) {
+      return res.status(401).json({ error: "Not authenticated" });
+    }
+    const targetUserId = normalizeText(req.body?.targetUserId, 128);
+    const body = normalizePrivateMessageBody(req.body?.body);
+    if (!targetUserId || targetUserId === auth.userId || !body) {
+      return res.status(400).json({ error: "Invalid private message payload" });
+    }
+
+    const senderUser = await clerkClient.users.getUser(auth.userId);
+    const senderIsStaff = isAdminUser(senderUser);
+    const senderLinked = await isLinkedUserId(auth.userId);
+    const senderRankInfo = resolveDisplayRankFromMetadata(
+      senderUser?.publicMetadata || {},
+      senderIsStaff,
+      senderLinked,
+    );
+    if (!senderIsStaff && !senderLinked && senderRankInfo.ownedRank === "Unregistered") {
+      return res.status(403).json({ error: "Private messages require a linked account or rank." });
+    }
+
+    const targetUser = await clerkClient.users.getUser(targetUserId).catch(() => null);
+    if (!targetUser?.id) {
+      return res.status(404).json({ error: "Target user not found" });
+    }
+
+    const now = new Date().toISOString();
+    const record = {
+      id: crypto.randomUUID(),
+      fromUserId: auth.userId,
+      toUserId: targetUserId,
+      fromUsername: formatUsernameForDisplay(senderUser?.username, 80),
+      fromName: getUserDisplayName(senderUser),
+      fromImage: senderUser?.imageUrl || "",
+      body,
+      isDeleted: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await privateMessagesCollection.insertOne(record);
+
+    const senderLabel =
+      formatUsernameForDisplay(senderUser?.username, 80) ||
+      normalizeText(getUserDisplayName(senderUser), 80) ||
+      "User";
+    await notificationsCollection.insertOne({
+      id: crypto.randomUUID(),
+      title: "New Private Message",
+      message: `${senderLabel} sent you a private message.`,
+      author: senderLabel,
+      authorName: senderLabel,
+      authorUserId: auth.userId,
+      authorUsername: formatUsernameForDisplay(senderUser?.username, 80),
+      authorImage: senderUser?.imageUrl || "",
+      authorRank: senderRankInfo.displayRank || "Unregistered",
+      authorOwnedRank: senderRankInfo.ownedRank || "Unregistered",
+      authorIsStaff: Boolean(senderIsStaff),
+      authorStaffRole: resolveStaffRoleForUser(senderUser),
+      authorShowStaffBadge: resolveStaffBadgeVisible(senderUser?.publicMetadata || {}),
+      authorShowStaffBadgeIcon: resolveStaffBadgeIconVisible(senderUser?.publicMetadata || {}),
+      authorShowStaffGradient: resolveStaffGradientVisible(senderUser?.publicMetadata || {}),
+      authorUseRankFont: resolveRankFontVisible(senderUser?.publicMetadata || {}),
+      authorShowDonorGradient: resolveDonorGradientVisible(senderUser?.publicMetadata || {}),
+      featured: false,
+      type: "private_message",
+      targetUserId: targetUserId,
+      readMoreUrl: "/",
+      isDeleted: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await pruneCollection(notificationsCollection, 120);
+    return res.json({ message: normalizePrivateMessageDoc(record) });
+  } catch (error) {
+    console.error("Failed to send private message", error);
+    return res.status(500).json({ error: "Failed to send private message" });
+  }
+});
+
 app.get("/logo.png", (req, res) => {
   res.sendFile(logoPath);
 });
@@ -6673,6 +6848,7 @@ app.get("/health", (req, res) => {
     purchasesCollection &&
     supportTicketsCollection &&
     forumPostsCollection &&
+    privateMessagesCollection &&
     forumPostRevisionsCollection &&
     linkedAccountsCollection &&
     userAchievementsCollection &&

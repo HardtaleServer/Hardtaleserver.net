@@ -94,7 +94,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.03";
+const VERSION = "1.4.04";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -196,6 +196,16 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.4.04",
+    date: "2026-02-23",
+    items: [
+      "Added live notification toasts for new incoming bell notifications with the shared bell icon and Legend-style warning gradient treatment.",
+      "Moved forced-edit emphasis from forum cards into the Past Edits modal, including Hardtale icon callouts and clearer forced-change history metadata.",
+      "Enhanced forced edit moderation flow: staff-forced forum edits now automatically open a private support ticket for the affected user and notify them with a direct support deep-link.",
+      "Added private messaging modal access from profile cards with linked-or-above gating and server-side enforcement.",
+    ],
+  },
   {
     version: "1.4.02",
     date: "2026-02-18",
@@ -4091,7 +4101,7 @@ function CommentThread({
                     />
                     <div>
                       <div className="comment-author">${entry.editorName}</div>
-                      <div className="muted">${formatTimestamp(entry.createdAt)}</div>
+                      <div className="muted"> Edited ${formatTimestamp(entry.createdAt)}</div>
                     </div>
                   </div>
                   <div className="comment-history-body">
@@ -6458,11 +6468,22 @@ function ForumPage({ isAdmin = false }) {
       return html`<p className="muted">No revisions yet.</p>`;
     }
     const firstEditedAt = String(forumHistoryItems[0]?.createdAt || "");
+    const forcedEdits = forumHistoryItems.filter((entry) => entry?.forcedEdit);
+    const latestForcedEdit =
+      forcedEdits.length > 0 ? forcedEdits[forcedEdits.length - 1] : null;
     return html`<div className="comment-history">
       ${firstEditedAt
         ? html`<div className="forum-history-originally-edited">
             <span className="muted">Originally edited</span>
             <${TimestampText} value=${firstEditedAt} formatTimestamp=${formatTimestamp} />
+          </div>`
+        : html``}
+      ${latestForcedEdit
+        ? html`<div className="forum-history-forced-banner">
+            <img src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" className="forum-history-forced-icon" />
+            <span>
+              Hardtale forced edit notice: ${latestForcedEdit.editorName || "Staff"} updated this post and opened a private support ticket for discussion.
+            </span>
           </div>`
         : html``}
       ${forumHistoryItems.map(
@@ -6474,14 +6495,19 @@ function ForumPage({ isAdmin = false }) {
               alt=${entry.editorName || "Editor"}
             />
             <div>
-              <div className="comment-author">${entry.editorName || "Editor"}</div>
+              <div className="comment-author">
+                ${entry.editorName || "Editor"}${entry?.editorUsername ? ` @${entry.editorUsername}` : ""}
+              </div>
               ${entry?.forcedEdit
-                ? html`<div className="forum-post-edited-note forced">
-                    STAFF forced edit by ${entry.editorName || "Staff"}
+                ? html`<div className="forum-history-forced-row">
+                    <img src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" className="forum-history-forced-icon" />
+                    <span className="forum-post-edited-note forced">
+                      Forcefully changed by ${entry.editorName || "Staff"}${entry?.editorUsername ? ` (@${entry.editorUsername})` : ""}.
+                    </span>
                   </div>`
                 : html``}
               <div className="forum-history-time">
-                <span className="muted">Edited</span>
+                <span className="muted"> Edited</span>
                 <${TimestampText} value=${entry.createdAt} formatTimestamp=${formatTimestamp} />
               </div>
             </div>
@@ -7687,17 +7713,6 @@ function ForumPage({ isAdmin = false }) {
                         className=${`news-body-paragraph ${isForumPostForcedEdit(selectedPost) ? "forum-post-forced-body" : ""}`.trim()}
                       />`}
                     <div className="forum-post-status-row">
-                    ${isForumPostForcedEdit(selectedPost)
-                      ? html`<button
-                          className="forum-post-forced-pill forum-post-forced-pill-btn"
-                          type="button"
-                          onMouseDown=${(event) => triggerFlash(event.currentTarget)}
-                          onClick=${() => openForumPostHistory(selectedPost)}
-                          title="View past edits"
-                        >
-                          STAFF FORCED EDIT${selectedPost?.staffForcedEditBy ? ` • ${selectedPost.staffForcedEditBy}` : ""}
-                        </button>`
-                      : html``}
                     ${(selectedPost.editCount || 0) > 0 && isForumPostForcedEdit(selectedPost)
                       ? html`<button
                           className="ghost-btn forum-post-history-btn"
@@ -7879,17 +7894,6 @@ function ForumPage({ isAdmin = false }) {
                       </p>
                     </${Link}>
                     <div className="forum-post-status-row">
-                      ${isForumPostForcedEdit(post)
-                        ? html`<button
-                            className="forum-post-forced-pill forum-post-forced-pill-btn"
-                            type="button"
-                            onMouseDown=${(event) => triggerFlash(event.currentTarget)}
-                            onClick=${() => openForumPostHistory(post)}
-                            title="View past edits"
-                          >
-                            STAFF FORCED EDIT${post?.staffForcedEditBy ? ` • ${post.staffForcedEditBy}` : ""}
-                          </button>`
-                        : html``}
                       ${(post.editCount || 0) > 0 && isForumPostForcedEdit(post)
                         ? html`<button
                             className="ghost-btn forum-post-history-btn"
@@ -10005,6 +10009,13 @@ function Layout() {
   const [notificationProfileUser, setNotificationProfileUser] = useState(null);
   const [notificationProfileInfoTab, setNotificationProfileInfoTab] = useState("badges");
   const [notificationProfileLoading, setNotificationProfileLoading] = useState(false);
+  const [privateMessageOpen, setPrivateMessageOpen] = useState(false);
+  const [privateMessageTarget, setPrivateMessageTarget] = useState(null);
+  const [privateMessageThread, setPrivateMessageThread] = useState([]);
+  const [privateMessageBody, setPrivateMessageBody] = useState("");
+  const [privateMessageStatus, setPrivateMessageStatus] = useState("");
+  const [privateMessageLoading, setPrivateMessageLoading] = useState(false);
+  const [privateMessageSending, setPrivateMessageSending] = useState(false);
   const [profileTitleSaving, setProfileTitleSaving] = useState(false);
   const [drawerProfileSummary, setDrawerProfileSummary] = useState({
     rankLabel: "Unregistered",
@@ -10046,6 +10057,8 @@ function Layout() {
   const previousSignedInRef = useRef(null);
   const toastTimersRef = useRef(new Map());
   const seenAchievementToastIdsRef = useRef(new Set());
+  const liveNotificationBaselineReadyRef = useRef(false);
+  const seenLiveNotificationToastIdsRef = useRef(new Set());
   const stripeFinalizeKeyRef = useRef("");
   const stripeMountRef = useRef(null);
   const stripeClientRef = useRef(null);
@@ -10109,6 +10122,10 @@ function Layout() {
     normalizedDrawerRank === "Legend" ||
     normalizedDrawerRank === "Mythic";
   const canUploadOwnAvatar = Boolean(isStaffAccount || isDonorRankAccount);
+  const canStartPrivateMessages = Boolean(
+    isSignedIn &&
+      (isLinkedAccount || normalizedDrawerOwnedRank !== "Unregistered" || isStaffAccount),
+  );
   const resolvedOwnAvatar = useMemo(() => {
     const clerkAvatar = String(user?.imageUrl || "/assets/HardTale_H_GreyScale.png");
     if (avatarSource === "hytale" && hytaleAvatarUrl) return hytaleAvatarUrl;
@@ -11040,6 +11057,82 @@ function Layout() {
     }
   }
 
+  async function loadPrivateMessageThread(targetUserId) {
+    const safeTargetId = String(targetUserId || "").trim();
+    if (!safeTargetId || !isSignedIn) {
+      setPrivateMessageThread([]);
+      return;
+    }
+    setPrivateMessageLoading(true);
+    try {
+      const response = await apiFetchWithToken(
+        getToken,
+        true,
+        `/api/private-messages/thread/${encodeURIComponent(safeTargetId)}`,
+      );
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json().catch(() => ({}));
+      setPrivateMessageThread(Array.isArray(data?.messages) ? data.messages : []);
+      setPrivateMessageStatus("");
+    } catch {
+      setPrivateMessageThread([]);
+      setPrivateMessageStatus("Failed to load private messages.");
+    } finally {
+      setPrivateMessageLoading(false);
+    }
+  }
+
+  function openPrivateMessageModal(targetUser) {
+    const targetId = String(targetUser?.authorUserId || targetUser?.userId || "").trim();
+    if (!targetId) return;
+    if (!canStartPrivateMessages) {
+      pushToast({
+        kind: "warning",
+        title: "Private Message Locked",
+        message: "Link your account (or hold a rank) to use private messages.",
+      });
+      return;
+    }
+    setPrivateMessageTarget({
+      userId: targetId,
+      name: String(targetUser?.name || targetUser?.authorName || "User"),
+      username: formatUsernameForDisplay(targetUser?.username || targetUser?.authorUsername || ""),
+      image: String(targetUser?.image || targetUser?.authorImage || "/assets/HardTale_H_GreyScale.png"),
+    });
+    setPrivateMessageBody("");
+    setPrivateMessageStatus("");
+    setPrivateMessageThread([]);
+    setPrivateMessageOpen(true);
+    loadPrivateMessageThread(targetId);
+  }
+
+  async function sendPrivateMessage() {
+    if (!privateMessageTarget?.userId || !privateMessageBody.trim() || privateMessageSending) return;
+    setPrivateMessageSending(true);
+    setPrivateMessageStatus("Sending...");
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/private-messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          targetUserId: privateMessageTarget.userId,
+          body: privateMessageBody.trim(),
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(String(data?.error || "Failed to send private message."));
+      }
+      setPrivateMessageBody("");
+      setPrivateMessageStatus("Message sent.");
+      await loadPrivateMessageThread(privateMessageTarget.userId);
+    } catch (error) {
+      setPrivateMessageStatus(String(error?.message || "Failed to send private message."));
+    } finally {
+      setPrivateMessageSending(false);
+    }
+  }
+
   useEffect(() => {
     function onToast(event) {
       const detail = event?.detail || {};
@@ -11048,6 +11141,51 @@ function Layout() {
     window.addEventListener(APP_TOAST_EVENT, onToast);
     return () => window.removeEventListener(APP_TOAST_EVENT, onToast);
   }, []);
+
+  useEffect(() => {
+    liveNotificationBaselineReadyRef.current = false;
+    seenLiveNotificationToastIdsRef.current.clear();
+  }, [isSignedIn, userId]);
+
+  useEffect(() => {
+    if (notificationsLoading) return;
+    if (!isSignedIn || !userId) return;
+    const rows = Array.isArray(sortedNotifications) ? sortedNotifications : [];
+    if (!liveNotificationBaselineReadyRef.current) {
+      rows.forEach((item) => {
+        const id = String(item?.id || "").trim();
+        if (id) seenLiveNotificationToastIdsRef.current.add(id);
+      });
+      liveNotificationBaselineReadyRef.current = true;
+      return;
+    }
+    const incoming = [];
+    rows.forEach((item) => {
+      const id = String(item?.id || "").trim();
+      if (!id || seenLiveNotificationToastIdsRef.current.has(id)) return;
+      seenLiveNotificationToastIdsRef.current.add(id);
+      if (item?.readByMe === true) return;
+      if (isLocalLinkReminderId(id)) return;
+      const haystack = `${item?.title || ""} ${item?.message || ""}`.toLowerCase();
+      if (/(achievement|badge unlocked|title unlocked|unlocked achievement)/i.test(haystack)) return;
+      incoming.push(item);
+    });
+    if (incoming.length === 0) return;
+    incoming
+      .slice()
+      .reverse()
+      .slice(0, 4)
+      .forEach((item) => {
+        pushToast({
+          id: `notif-live-${String(item?.id || "").trim()}`,
+          kind: "warning",
+          title: String(item?.title || "New Notification"),
+          message: String(item?.message || "").trim(),
+          icon: NOTIFICATIONS_ICON_SVG,
+          duration: 6400,
+        });
+      });
+  }, [sortedNotifications, notificationsLoading, isSignedIn, userId]);
 
   useEffect(() => {
     if (!isSignedIn || !userId) return;
@@ -11218,6 +11356,7 @@ function Layout() {
       showStaffGradient: item?.authorShowStaffGradient !== false,
       useRankFont: item?.authorUseRankFont === true,
       showDonorGradient: item?.authorShowDonorGradient !== false,
+      authorUserId,
       isOwn,
       canPreviewStaffRole,
       staffRolePreview,
@@ -12058,6 +12197,19 @@ function Layout() {
                   value: notificationProfileUser.hytalePlayerUuid || "N/A",
                   copyValue: notificationProfileUser.hytalePlayerUuid || "",
                 },
+                ...(!notificationProfileUser?.isOwn
+                  ? [
+                      {
+                        label: "",
+                        value: "Private Message",
+                        onClick: () => openPrivateMessageModal(notificationProfileUser),
+                        title: canStartPrivateMessages
+                          ? "Open private message"
+                          : "Link your account (or hold a rank) to unlock private messages",
+                        className: "account-management-pill",
+                      },
+                    ]
+                  : []),
                 {
                   label: "",
                   value: "Account Management",
@@ -12164,6 +12316,75 @@ function Layout() {
                 : html``}
             <//>`
           : html``}
+      <//>
+      <${PopUp}
+        show=${privateMessageOpen}
+        onClose=${() => {
+          setPrivateMessageOpen(false);
+          setPrivateMessageTarget(null);
+          setPrivateMessageThread([]);
+          setPrivateMessageBody("");
+          setPrivateMessageStatus("");
+        }}
+        title=${privateMessageTarget?.username
+          ? `Private Message - @${privateMessageTarget.username}`
+          : "Private Message"}
+        className="private-message-overlay"
+      >
+        ${!privateMessageTarget
+          ? html`<p className="muted">No recipient selected.</p>`
+          : html`<div className="private-message-panel">
+              <div className="private-message-target">
+                <img
+                  className="comment-avatar small"
+                  src=${privateMessageTarget.image || "/assets/HardTale_H_GreyScale.png"}
+                  alt=${privateMessageTarget.name || "User"}
+                />
+                <div>
+                  <div className="comment-author">${privateMessageTarget.name || "User"}</div>
+                  <div className="muted">
+                    ${privateMessageTarget.username ? `@${privateMessageTarget.username}` : ""}
+                  </div>
+                </div>
+              </div>
+              <div className="private-message-thread">
+                ${privateMessageLoading
+                  ? html`<p className="muted">Loading conversation...</p>`
+                  : privateMessageThread.length === 0
+                  ? html`<p className="muted">No private messages yet.</p>`
+                  : privateMessageThread.map((entry) => html`<div
+                        key=${entry.id}
+                        className=${`private-message-item ${
+                          String(entry?.fromUserId || "") === String(userId || "") ? "outgoing" : "incoming"
+                        }`.trim()}
+                      >
+                        <div className="private-message-item-header">
+                          <span className="comment-author">${entry?.fromName || "User"}</span>
+                          <span className="muted">${formatTimestamp(entry?.createdAt)}</span>
+                        </div>
+                        <div className="private-message-item-body">${entry?.body || ""}</div>
+                      </div>`)}
+              </div>
+              <textarea
+                className="private-message-input"
+                rows="4"
+                maxLength="1200"
+                placeholder="Write a private message..."
+                value=${privateMessageBody}
+                onInput=${(event) => setPrivateMessageBody(event.target.value)}
+              ></textarea>
+              <div className="comment-actions right">
+                <button
+                  className="button primary"
+                  type="button"
+                  onClick=${sendPrivateMessage}
+                  disabled=${privateMessageSending || !privateMessageBody.trim()}
+                >
+                  ${privateMessageSending ? "Sending..." : "Send"}
+                </button>
+              </div>
+              ${privateMessageStatus ? html`<div className="muted">${privateMessageStatus}</div>` : html``}
+            </div>`}
       <//>
       <${PopUp}
         show=${showConnectHelp}

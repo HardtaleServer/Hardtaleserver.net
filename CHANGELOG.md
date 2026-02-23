@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-23 (v1.4.04)
+- Added live notification toasts for new incoming bell notifications with the shared bell icon and Legend-style warning gradient treatment.
+- Moved forced-edit emphasis from forum cards into the Past Edits modal, including Hardtale icon callouts and clearer forced-change history metadata.
+- Enhanced forced edit moderation flow: staff-forced forum edits now automatically open a private support ticket for the affected user and notify them with a direct support deep-link.
+- Added private messaging modal access from profile cards with linked-or-above gating and server-side enforcement.
+
 ## 2026-02-22 (v1.4.03)
 - Updated Home hero join-state behavior for signed-out visitors: the previous `Unlinked` pill now renders as a `Sign Up` button.
 - Kept signed-in behavior unchanged so linked users still see `Linked` and signed-in unlinked users still see `Unlinked` with the existing link flow.

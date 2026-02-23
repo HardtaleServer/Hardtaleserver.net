@@ -37,11 +37,16 @@ function toTitle(value) {
     .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
-export default function SkillLeaderboardCard({ iconSrc = "/Images/SVGs/ui/Leaderboard_SVG.svg" }) {
-  const { rows, enabledCount } = useMemo(() => {
+export default function SkillLeaderboardCard({
+  iconSrc = "/Images/SVGs/ui/Leaderboard_SVG.svg",
+  detailed = false,
+  onShowMore = null,
+}) {
+  const { rows, previewRows, enabledCount } = useMemo(() => {
     const enabledSkills = Object.entries(SKILL_CONFIG)
       .filter(([, config]) => config?.enabled === true)
       .map(([key]) => key);
+
     const calculated = FAKE_SKILL_BOARD.map((entry) => {
       const scoped = enabledSkills.map((skill) => [skill, Number(entry?.skills?.[skill] || 0)]);
       const totalXp = scoped.reduce((sum, [, value]) => sum + value, 0);
@@ -52,35 +57,66 @@ export default function SkillLeaderboardCard({ iconSrc = "/Images/SVGs/ui/Leader
         topSkill: toTitle(topSkill),
         topValue,
       };
-    })
-      .sort((a, b) => b.totalXp - a.totalXp)
-      .slice(0, 5);
+    }).sort((a, b) => b.totalXp - a.totalXp);
+
     return {
       rows: calculated,
+      previewRows: calculated.slice(0, 5),
       enabledCount: enabledSkills.length,
     };
   }, []);
 
-  return html`<section className="home-leaderboard-preview" aria-label="Leaderboard preview">
+  return html`<section className="home-leaderboard-preview" aria-label=${detailed ? "Detailed leaderboard" : "Leaderboard preview"}>
     <div className="home-leaderboard-head">
       <img className="home-leaderboard-icon" src=${iconSrc} alt="" aria-hidden="true" />
       <div>
-        <div className="home-leaderboard-title">Leaderboard (Preview)</div>
+        <div className="home-leaderboard-title">${detailed ? "Detailed Leaderboard" : "Leaderboard (Preview)"}</div>
         <div className="home-leaderboard-subtitle muted">
-          Showing fake data from ${enabledCount} enabled skills.
+          Showing fake data from ${enabledCount} enabled skills${detailed ? "." : " (top players)."}
         </div>
       </div>
     </div>
-    <div className="home-leaderboard-list">
-      ${rows.map(
-        (row, index) => html`<div key=${row.name} className="home-leaderboard-row">
-          <span className="home-leaderboard-rank">#${index + 1}</span>
-          <span className="home-leaderboard-name">${row.name}</span>
-          <span className="home-leaderboard-meta">${row.topSkill}: ${row.topValue.toLocaleString()}</span>
-          <span className="home-leaderboard-xp">${row.totalXp.toLocaleString()} XP</span>
-        </div>`,
-      )}
-    </div>
+
+    ${detailed
+      ? html`<div className="home-leaderboard-detailed-wrap">
+          <table className="home-leaderboard-detailed-table" aria-label="Detailed leaderboard table">
+            <thead>
+              <tr>
+                <th scope="col">#</th>
+                <th scope="col">Player</th>
+                <th scope="col">Total XP</th>
+                <th scope="col">Top Skill</th>
+                <th scope="col">Skill XP</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(
+                (row, index) => html`<tr key=${`detailed-${row.name}`}>
+                  <td>${index + 1}</td>
+                  <td>${row.name}</td>
+                  <td>${row.totalXp.toLocaleString()}</td>
+                  <td>${row.topSkill}</td>
+                  <td>${row.topValue.toLocaleString()}</td>
+                </tr>`,
+              )}
+            </tbody>
+          </table>
+        </div>`
+      : html`<div className="home-leaderboard-list">
+          ${previewRows.map(
+            (row, index) => html`<div key=${row.name} className="home-leaderboard-row">
+              <span className="home-leaderboard-rank">#${index + 1}</span>
+              <span className="home-leaderboard-name">${row.name}</span>
+              <span className="home-leaderboard-meta">${row.topSkill}: ${row.topValue.toLocaleString()}</span>
+              <span className="home-leaderboard-xp">${row.totalXp.toLocaleString()} XP</span>
+            </div>`,
+          )}
+        </div>`}
+
+    ${!detailed && typeof onShowMore === "function"
+      ? html`<button className="button ghost-btn home-leaderboard-more-btn" type="button" onClick=${onShowMore}>
+          Show More
+        </button>`
+      : html``}
   </section>`;
 }
-
