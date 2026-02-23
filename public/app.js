@@ -9335,6 +9335,7 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
     () => new RegExp(`^[A-Z0-9]{${LINK_CODE_LENGTH}}$`),
     [LINK_CODE_LENGTH],
   );
+  const LINKED_INPUT_DISPLAY = "HARDTALE";
   const EMPTY_CODE_ARRAY = useMemo(
     () => Array.from({ length: LINK_CODE_LENGTH }, () => ""),
     [LINK_CODE_LENGTH],
@@ -9429,7 +9430,7 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
   const isComplete = fullCode.length === LINK_CODE_LENGTH && LINK_CODE_REGEX.test(fullCode);
   const urlCode = strictQuery.code;
   const isCooldownActive = cooldownLeft > 0;
-  const debugCode = isComplete ? fullCode : urlCode;
+  const debugCode = linkedInfo.linked ? LINKED_INPUT_DISPLAY : isComplete ? fullCode : urlCode;
   const clerkUsername = formatUsernameForDisplay(user?.username, 80) || "unknown";
   const clerkEmail = String(user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress || "");
   const linkedDebugSummary = linkedInfo.linked
@@ -9522,7 +9523,7 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
         ...prev,
         loading: false,
         error: "",
-        code: "",
+        code: LINKED_INPUT_DISPLAY,
         status: "linked",
         valid: null,
         isClaimed: null,
@@ -9648,15 +9649,7 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
         abortController.abort();
       }
     };
-  }, [debugCode, LINK_CODE_REGEX, linkedInfo.linked]);
-
-  useEffect(() => {
-    if (!showComparison) return;
-    const topWrap = comparisonTopWrapRef.current;
-    const bottomWrap = comparisonBottomWrapRef.current;
-    if (!topWrap || !bottomWrap) return;
-    bottomWrap.scrollLeft = topWrap.scrollLeft;
-  }, [showComparison]);
+  }, [debugCode, LINK_CODE_REGEX, linkedInfo.linked, LINKED_INPUT_DISPLAY]);
 
   function formatCooldown(ms) {
     const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
@@ -9895,7 +9888,7 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
               autocomplete="one-time-code"
               pattern="[A-Za-z0-9]*"
               maxLength="1"
-              value=${linkedInfo.linked ? "" : digit}
+              value=${linkedInfo.linked ? LINKED_INPUT_DISPLAY[index] || "" : digit}
               disabled=${linkedInfo.linked}
               readOnly=${linkedInfo.linked}
               aria-label=${`Link code character ${index + 1}`}
@@ -9905,6 +9898,11 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
             />`,
           )}
         </div>
+        ${linkedInfo.linked
+          ? html`<div className="link-status link-status-info">
+              HARDTALE is the linked-account placeholder input. No code verification is required.
+            </div>`
+          : html``}
         <div className="link-actions">
           ${isCooldownActive
             ? html`<div className="link-status link-status-error">
