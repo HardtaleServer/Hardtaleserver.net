@@ -26,7 +26,9 @@ export default function NotificationsPanel({
   onView,
   onOpenProfile,
   onDelete,
+  onFriendAction,
   deletingId = "",
+  friendActionBusyId = "",
   formatTimestamp,
   isStaffLabel,
   featuredIconSrc = "/Images/SVGs/ui/Featured.svg",
@@ -66,6 +68,15 @@ export default function NotificationsPanel({
         const countdownLabel = formatExpiryCountdown(expiresInMs);
         const canDeleteForMe = typeof onDelete === "function" && item?.readByMe === true;
         const deleting = String(deletingId || "") === String(item?.id || "");
+        const isFriendRequest = String(item?.type || "") === "friend_request";
+        const friendRequestId = String(item?.friendRequestId || "").trim();
+        const friendActionStatus = String(item?.friendActionStatus || "").trim().toUpperCase();
+        const canFriendAct =
+          isFriendRequest &&
+          friendRequestId &&
+          friendActionStatus === "PENDING" &&
+          typeof onFriendAction === "function";
+        const friendBusy = String(friendActionBusyId || "") === friendRequestId;
         return html`<div key=${item.id} className="notif-card">
           <div className="notif-title">
             ${item.featured
@@ -135,6 +146,26 @@ export default function NotificationsPanel({
             ? html`<div className="notif-actions">
                 <button className="ghost-btn" type="button" onClick=${() => onView(item)}>
                   View
+                </button>
+              </div>`
+            : html``}
+          ${canFriendAct
+            ? html`<div className="notif-actions notif-friend-actions">
+                <button
+                  className="ghost-btn"
+                  type="button"
+                  disabled=${friendBusy}
+                  onClick=${() => onFriendAction(item, "accept")}
+                >
+                  ${friendBusy ? "Working..." : "Accept"}
+                </button>
+                <button
+                  className="ghost-btn delete-action-btn"
+                  type="button"
+                  disabled=${friendBusy}
+                  onClick=${() => onFriendAction(item, "decline")}
+                >
+                  Decline
                 </button>
               </div>`
             : html``}

@@ -657,7 +657,7 @@ body[data-theme="dark"] {
   cursor: pointer;
   text-align: left;
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto 1fr auto;
   gap: 10px;
   align-items: center;
   padding: 8px 10px;
@@ -696,6 +696,30 @@ body[data-theme="dark"] {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.user-search-row-action {
+  border: 1px solid var(--stroke);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-soft) 86%, transparent);
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  padding: 5px 8px;
+}
+
+.user-search-row-action img {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+.user-search-row-action span {
+  white-space: nowrap;
 }
 
 .nav-link {
@@ -8013,6 +8037,12 @@ html.custom-scrollbars-enabled .profile-card-overlay .popup > .profile-card::-we
   display: flex;
   justify-content: flex-end;
 }
+
+.notif-friend-actions {
+  justify-content: flex-start;
+  gap: 8px;
+  margin-top: 6px;
+}
 .mobile-drawer {
   position: fixed;
   inset: 0;
@@ -8430,6 +8460,17 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 
 .friends-modal-row small {
   color: var(--muted);
+}
+
+.friends-modal-row.request-row {
+  grid-template-columns: auto 1fr auto;
+  cursor: default;
+}
+
+.friends-request-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .drawer-settings-row {

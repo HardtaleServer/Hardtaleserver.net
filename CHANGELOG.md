@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-23 (v1.4.16)
+- Added Mongo-backed friends system endpoints for send/respond/remove flows:
+  - `GET /api/friends`
+  - `GET /api/friends/state/:targetUserId`
+  - `POST /api/friends/request`
+  - `POST /api/friends/respond`
+  - `DELETE /api/friends/:targetUserId`
+- Added friend-request notifications with actionable state payload (`friendRequestId`, `friendActionStatus`) and server-side status updates after accept/decline.
+- Added notification-card friend actions so users can accept/decline incoming friend requests directly from the bell panel.
+- Added `Person_Add.svg` / `Person_Remove.svg` friend controls in user search + notification profile card with dynamic state-based icon swapping.
+- Updated Friends modal `Friend Requests` section with inline accept/decline actions and live refresh/toast feedback.
+
 ## 2026-02-23 (v1.4.15)
 - Added a desktop navbar user-search bar with `Person_Search.svg` icon and live `/api/forum/members` lookup.
 - Search results now render as avatar-first, scrollable profile rows; selecting a row opens the same profile modal flow used elsewhere in the app.

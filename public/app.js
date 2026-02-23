@@ -96,7 +96,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.15";
+const VERSION = "1.4.16";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -112,6 +112,8 @@ const SUCCESS_STATUS_ICON_SVG = "/Images/SVGs/toasts/Success.svg";
 const ERROR_STATUS_ICON_SVG = "/Images/SVGs/toasts/Error.svg";
 const INFO_STATUS_ICON_SVG = "/Images/SVGs/toasts/Info.svg";
 const PERSON_SEARCH_ICON_SVG = "/Images/SVGs/Person_Search.svg";
+const PERSON_ADD_ICON_SVG = "/Images/SVGs/Person_Add.svg";
+const PERSON_REMOVE_ICON_SVG = "/Images/SVGs/Person_Remove.svg";
 const HERO_RANK_ICON_SVG = "/Images/SVGs/ranks/RANK_HERO.svg";
 const MOD_RANK_ICON_SVG = "/Images/SVGs/ranks/RANK_MOD.svg";
 const ACHIEVEMENT_STAR_ICON_SVG = "/Images/SVGs/ui/Achievement_Star.svg";
@@ -200,6 +202,16 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.4.16",
+    date: "2026-02-23",
+    items: [
+      "Added end-to-end friends flow with Mongo-backed friend requests/friendships, including send, accept, decline, and remove actions.",
+      "Added friend-request notification actions so incoming requests can be accepted/declined directly from notification cards.",
+      "Integrated `Person_Add.svg`/`Person_Remove.svg` into search/profile friend controls with dynamic icon swap based on relationship state.",
+      "Updated Friends modal `Friend Requests` section with actionable accept/decline controls and live refresh + toast feedback.",
+    ],
+  },
   {
     version: "1.4.15",
     date: "2026-02-23",
@@ -10990,8 +11002,15 @@ function Layout() {
   const [userSearchLoading, setUserSearchLoading] = useState(false);
   const [userSearchResults, setUserSearchResults] = useState([]);
   const [socialDirectory, setSocialDirectory] = useState([]);
-  const [socialDirectoryLoading, setSocialDirectoryLoading] = useState(false);
   const [friendsModalOpen, setFriendsModalOpen] = useState(false);
+  const [friendsSnapshot, setFriendsSnapshot] = useState({
+    friends: [],
+    incoming: [],
+    outgoing: [],
+  });
+  const [friendsLoading, setFriendsLoading] = useState(false);
+  const [friendActionBusyUserId, setFriendActionBusyUserId] = useState("");
+  const [friendRequestActionBusyId, setFriendRequestActionBusyId] = useState("");
   const [profileTitleSaving, setProfileTitleSaving] = useState(false);
   const [drawerProfileSummary, setDrawerProfileSummary] = useState({
     rankLabel: "Unregistered",
@@ -12013,6 +12032,12 @@ function Layout() {
     navigate(url);
   }
 
+  async function handleNotificationFriendAction(item, action) {
+    const requestId = String(item?.friendRequestId || "").trim();
+    if (!requestId) return;
+    await respondFriendRequest({ requestId, action });
+  }
+
   async function deleteNotificationForMe(item) {
     const notificationId = String(item?.id || "").trim();
     if (!notificationId) return;
@@ -12930,6 +12955,177 @@ function Layout() {
     setShowCart(true);
   }
 
+  async function refreshFriendsSnapshot() {
+    if (!isSignedIn) {
+      setFriendsSnapshot({ friends: [], incoming: [], outgoing: [] });
+      setFriendsLoading(false);
+      return;
+    }
+    setFriendsLoading(true);
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/friends");
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(data?.error || "Failed to load friends."));
+      setFriendsSnapshot({
+        friends: Array.isArray(data?.friends) ? data.friends : [],
+        incoming: Array.isArray(data?.incoming) ? data.incoming : [],
+        outgoing: Array.isArray(data?.outgoing) ? data.outgoing : [],
+      });
+    } catch {
+      setFriendsSnapshot({ friends: [], incoming: [], outgoing: [] });
+    } finally {
+      setFriendsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    refreshFriendsSnapshot();
+  }, [isSignedIn, userId]);
+
+  const friendStateByUserId = useMemo(() => {
+    const map = new Map();
+    for (const entry of Array.isArray(friendsSnapshot.friends) ? friendsSnapshot.friends : []) {
+      const id = String(entry?.userId || "").trim();
+      if (id) map.set(id, { state: "FRIENDS", requestId: "" });
+    }
+    for (const entry of Array.isArray(friendsSnapshot.outgoing) ? friendsSnapshot.outgoing : []) {
+      const id = String(entry?.toUserId || entry?.to?.userId || "").trim();
+      const requestId = String(entry?.requestId || "").trim();
+      if (id && !map.has(id)) map.set(id, { state: "PENDING_OUTGOING", requestId });
+    }
+    for (const entry of Array.isArray(friendsSnapshot.incoming) ? friendsSnapshot.incoming : []) {
+      const id = String(entry?.fromUserId || entry?.from?.userId || "").trim();
+      const requestId = String(entry?.requestId || "").trim();
+      if (id && !map.has(id)) map.set(id, { state: "PENDING_INCOMING", requestId });
+    }
+    return map;
+  }, [friendsSnapshot]);
+
+  function getFriendState(targetUserIdRaw = "") {
+    const targetUserId = String(targetUserIdRaw || "").trim();
+    if (!targetUserId) return { state: "NONE", requestId: "" };
+    if (targetUserId === String(userId || "").trim()) return { state: "SELF", requestId: "" };
+    return friendStateByUserId.get(targetUserId) || { state: "NONE", requestId: "" };
+  }
+
+  async function requestFriend(targetUser) {
+    const targetUserId = String(targetUser?.authorUserId || targetUser?.userId || "").trim();
+    if (!targetUserId || !isSignedIn) return;
+    const ownId = String(userId || "").trim();
+    if (targetUserId === ownId) return;
+    setFriendActionBusyUserId(targetUserId);
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/friends/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetUserId }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(data?.error || "Failed to send friend request."));
+      emitAppToast({
+        kind: "success",
+        title: "Friend Request Sent",
+        message: "Request sent successfully.",
+      });
+      await Promise.all([
+        refreshFriendsSnapshot(),
+        (async () => {
+          const response = await apiFetchWithToken(getToken, true, "/api/notifications");
+          const data = await response.json().catch(() => ({}));
+          if (response.ok && Array.isArray(data?.notifications)) {
+            setNotifications(data.notifications);
+          }
+        })(),
+      ]);
+    } catch (error) {
+      emitAppToast({
+        kind: "error",
+        title: "Friend Request Failed",
+        message: String(error?.message || "Failed to send friend request."),
+      });
+    } finally {
+      setFriendActionBusyUserId("");
+    }
+  }
+
+  async function removeFriend(targetUser) {
+    const targetUserId = String(targetUser?.authorUserId || targetUser?.userId || "").trim();
+    if (!targetUserId || !isSignedIn) return;
+    setFriendActionBusyUserId(targetUserId);
+    try {
+      const response = await apiFetchWithToken(
+        getToken,
+        true,
+        `/api/friends/${encodeURIComponent(targetUserId)}`,
+        { method: "DELETE" },
+      );
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(data?.error || "Failed to remove friend."));
+      emitAppToast({
+        kind: "success",
+        title: "Friend Removed",
+        message: "Friend connection updated.",
+      });
+      await Promise.all([
+        refreshFriendsSnapshot(),
+        (async () => {
+          const response = await apiFetchWithToken(getToken, true, "/api/notifications");
+          const data = await response.json().catch(() => ({}));
+          if (response.ok && Array.isArray(data?.notifications)) {
+            setNotifications(data.notifications);
+          }
+        })(),
+      ]);
+    } catch (error) {
+      emitAppToast({
+        kind: "error",
+        title: "Friend Update Failed",
+        message: String(error?.message || "Failed to remove friend."),
+      });
+    } finally {
+      setFriendActionBusyUserId("");
+    }
+  }
+
+  async function respondFriendRequest({ requestId, action }) {
+    const safeRequestId = String(requestId || "").trim();
+    const safeAction = String(action || "").trim().toLowerCase();
+    if (!safeRequestId || !["accept", "decline"].includes(safeAction)) return;
+    setFriendRequestActionBusyId(safeRequestId);
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/friends/respond", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId: safeRequestId, action: safeAction }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(String(data?.error || "Failed to update friend request."));
+      emitAppToast({
+        kind: "success",
+        title: safeAction === "accept" ? "Friend Added" : "Friend Request Declined",
+        message: safeAction === "accept" ? "You are now friends." : "Request declined.",
+      });
+      await Promise.all([
+        refreshFriendsSnapshot(),
+        (async () => {
+          const response = await apiFetchWithToken(getToken, true, "/api/notifications");
+          const data = await response.json().catch(() => ({}));
+          if (response.ok && Array.isArray(data?.notifications)) {
+            setNotifications(data.notifications);
+          }
+        })(),
+      ]);
+    } catch (error) {
+      emitAppToast({
+        kind: "error",
+        title: "Friend Request Update Failed",
+        message: String(error?.message || "Failed to update request."),
+      });
+    } finally {
+      setFriendRequestActionBusyId("");
+    }
+  }
+
   function normalizeDirectoryUser(entry) {
     const normalizedUserId = String(entry?.userId || entry?.authorUserId || "").trim();
     const normalizedUsername = formatUsernameForDisplay(entry?.username || entry?.authorUsername, 80);
@@ -12968,7 +13164,6 @@ function Layout() {
   useEffect(() => {
     let alive = true;
     async function loadSocialDirectory() {
-      setSocialDirectoryLoading(true);
       try {
         const response = await fetch("/api/forum/members?limit=120");
         const data = await response.json().catch(() => ({}));
@@ -12980,8 +13175,6 @@ function Layout() {
       } catch {
         if (!alive) return;
         setSocialDirectory([]);
-      } finally {
-        if (alive) setSocialDirectoryLoading(false);
       }
     }
     loadSocialDirectory();
@@ -13037,9 +13230,8 @@ function Layout() {
   }, []);
 
   const allFriends = useMemo(() => {
-    const ownUserId = String(userId || "").trim();
-    return socialDirectory.filter((entry) => String(entry?.userId || "").trim() !== ownUserId);
-  }, [socialDirectory, userId]);
+    return Array.isArray(friendsSnapshot.friends) ? friendsSnapshot.friends : [];
+  }, [friendsSnapshot]);
 
   const onlineFriends = useMemo(() => allFriends.slice(0, 12), [allFriends]);
 
@@ -13180,18 +13372,73 @@ function Layout() {
                 ? html`<div className="user-search-state muted">No users found.</div>`
                 : html`<div className="user-search-list">
                     ${rows.map(
-                      (entry) => html`<button
-                        key=${entry.userId}
-                        type="button"
-                        className="user-search-row"
-                        onClick=${() => openUserDirectoryProfile(entry)}
-                      >
-                        <img className="user-search-row-avatar" src=${entry.image} alt=${entry.name} />
-                        <span className="user-search-row-meta">
-                          <span className="user-search-row-name">${entry.name}</span>
-                          <span className="user-search-row-username">@${entry.username}</span>
-                        </span>
-                      </button>`,
+                      (entry) => {
+                        const relation = getFriendState(entry.userId);
+                        const busy = String(friendActionBusyUserId || "") === String(entry.userId || "");
+                        const canAdd = relation.state === "NONE" || relation.state === "PENDING_INCOMING";
+                        const canRemove = relation.state === "FRIENDS" || relation.state === "PENDING_OUTGOING";
+                        return html`<div
+                          key=${entry.userId}
+                          className="user-search-row"
+                          onClick=${() => openUserDirectoryProfile(entry)}
+                          role="button"
+                          tabIndex="0"
+                          onKeyDown=${(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              openUserDirectoryProfile(entry);
+                            }
+                          }}
+                        >
+                          <img className="user-search-row-avatar" src=${entry.image} alt=${entry.name} />
+                          <span className="user-search-row-meta">
+                            <span className="user-search-row-name">${entry.name}</span>
+                            <span className="user-search-row-username">@${entry.username}</span>
+                          </span>
+                          ${relation.state !== "SELF"
+                            ? html`<button
+                                type="button"
+                                className="user-search-row-action"
+                                onClick=${(event) => {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  if (busy) return;
+                                  if (relation.state === "PENDING_INCOMING" && relation.requestId) {
+                                    respondFriendRequest({ requestId: relation.requestId, action: "accept" });
+                                    return;
+                                  }
+                                  if (canAdd) {
+                                    requestFriend({
+                                      userId: entry.userId,
+                                      authorUserId: entry.userId,
+                                      name: entry.name,
+                                      authorName: entry.name,
+                                    });
+                                    return;
+                                  }
+                                  if (canRemove) {
+                                    removeFriend({
+                                      userId: entry.userId,
+                                      authorUserId: entry.userId,
+                                    });
+                                  }
+                                }}
+                                title=${canRemove
+                                  ? "Remove friend"
+                                  : relation.state === "PENDING_INCOMING"
+                                  ? "Accept friend request"
+                                  : "Add friend"}
+                              >
+                                <img
+                                  src=${canRemove ? PERSON_REMOVE_ICON_SVG : PERSON_ADD_ICON_SVG}
+                                  alt=""
+                                  aria-hidden="true"
+                                />
+                                <span>${busy ? "..." : canRemove ? "Remove" : relation.state === "PENDING_INCOMING" ? "Accept" : "Add"}</span>
+                              </button>`
+                            : html``}
+                        </div>`;
+                      },
                     )}
                   </div>`}
             </div>`
@@ -13554,7 +13801,7 @@ function Layout() {
                     View all
                   </button>
                 </div>
-                ${socialDirectoryLoading
+                ${friendsLoading
                   ? html`<div className="muted mobile-online-friends-empty">Loading friends...</div>`
                   : onlineFriends.length === 0
                   ? html`<div className="muted mobile-online-friends-empty">No online friends yet.</div>`
@@ -13720,6 +13967,8 @@ function Layout() {
           onDelete=${deleteNotificationForMe}
           deletingId=${notificationDeletingId}
           onOpenProfile=${openNotificationProfile}
+          onFriendAction=${handleNotificationFriendAction}
+          friendActionBusyId=${friendRequestActionBusyId}
           formatTimestamp=${formatTimestamp}
           isStaffLabel=${isStaffLabel}
           featuredIconSrc=${FEATURED_BADGE_ICON_SVG}
@@ -13749,22 +13998,47 @@ function Layout() {
               </button>
             </div>`
           : isSignedIn
-          ? html`<div className="profile-modal-header-actions">
-              <button
-                type="button"
-                className="copy-action-btn subtle profile-copy-action account-management-pill"
-                onClick=${() =>
-                  emitAppToast({
-                    kind: "info",
-                    title: "Friends Feature Planned",
-                    message: `Friend requests are planned. @${notificationProfileUser?.username || notificationProfileUser?.name || "user"} support is coming soon.`,
-                  })}
-                title="Add Friend (planned)"
-              >
-                <img src=${ADD_FRIEND_ICON_SVG} alt="" aria-hidden="true" className="profile-action-icon-img" />
-                <span>Add Friend</span>
-              </button>
-            </div>`
+          ? (() => {
+              const targetId = String(notificationProfileUser?.authorUserId || "").trim();
+              const relation = getFriendState(targetId);
+              const busy = String(friendActionBusyUserId || "") === targetId;
+              const canAdd = relation.state === "NONE" || relation.state === "PENDING_INCOMING";
+              const canRemove = relation.state === "FRIENDS" || relation.state === "PENDING_OUTGOING";
+              const label = busy
+                ? "Working..."
+                : canRemove
+                ? "Remove Friend"
+                : relation.state === "PENDING_INCOMING"
+                ? "Accept Friend"
+                : "Add Friend";
+              return html`<div className="profile-modal-header-actions">
+                <button
+                  type="button"
+                  className="copy-action-btn subtle profile-copy-action account-management-pill"
+                  onClick=${() => {
+                    if (busy) return;
+                    if (relation.state === "PENDING_INCOMING" && relation.requestId) {
+                      respondFriendRequest({ requestId: relation.requestId, action: "accept" });
+                      return;
+                    }
+                    if (canRemove) {
+                      removeFriend(notificationProfileUser);
+                      return;
+                    }
+                    requestFriend(notificationProfileUser);
+                  }}
+                  title=${label}
+                >
+                  <img
+                    src=${canRemove ? PERSON_REMOVE_ICON_SVG : PERSON_ADD_ICON_SVG}
+                    alt=""
+                    aria-hidden="true"
+                    className="profile-action-icon-img"
+                  />
+                  <span>${label}</span>
+                </button>
+              </div>`;
+            })()
           : html``}
       >
         ${notificationProfileLoading
@@ -13982,7 +14256,40 @@ function Layout() {
           </section>
           <section className="friends-modal-section">
             <h4>Friend Requests</h4>
-            <p className="muted">No friend requests right now.</p>
+            ${Array.isArray(friendsSnapshot.incoming) && friendsSnapshot.incoming.length > 0
+              ? html`<div className="friends-modal-list">
+                  ${friendsSnapshot.incoming.map((entry) => {
+                    const requestId = String(entry?.requestId || "");
+                    const from = entry?.from || {};
+                    const busy = String(friendRequestActionBusyId || "") === requestId;
+                    return html`<div key=${requestId} className="friends-modal-row request-row">
+                      <img src=${from.image || "/assets/HardTale_H_GreyScale.png"} alt=${from.name || "User"} />
+                      <span>
+                        <strong>${from.name || "User"}</strong>
+                        <small>@${from.username || "user"}</small>
+                      </span>
+                      <div className="friends-request-actions">
+                        <button
+                          type="button"
+                          className="ghost-btn"
+                          disabled=${busy}
+                          onClick=${() => respondFriendRequest({ requestId, action: "accept" })}
+                        >
+                          ${busy ? "..." : "Accept"}
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost-btn delete-action-btn"
+                          disabled=${busy}
+                          onClick=${() => respondFriendRequest({ requestId, action: "decline" })}
+                        >
+                          Decline
+                        </button>
+                      </div>
+                    </div>`;
+                  })}
+                </div>`
+              : html`<p className="muted">No friend requests right now.</p>`}
           </section>
         </div>
       <//>

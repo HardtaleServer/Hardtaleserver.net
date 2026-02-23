@@ -263,6 +263,8 @@ let userAchievementsCollection = null;
 let linkCodesCollection = null;
 let fulfillmentJobsCollection = null;
 let grantsCollection = null;
+let friendRequestsCollection = null;
+let friendshipsCollection = null;
 let mongoConnectInFlight = null;
 let mongoReconnectTimer = null;
 let mongoReconnectDelayMs = 1000;
@@ -301,7 +303,9 @@ function isMongoReady() {
       userAchievementsCollection &&
       linkCodesCollection &&
       fulfillmentJobsCollection &&
-      grantsCollection,
+      grantsCollection &&
+      friendRequestsCollection &&
+      friendshipsCollection,
   );
 }
 
@@ -393,6 +397,8 @@ function resetMongoState() {
   linkCodesCollection = null;
   fulfillmentJobsCollection = null;
   grantsCollection = null;
+  friendRequestsCollection = null;
+  friendshipsCollection = null;
   mongoConnectInFlight = null;
   if (MONGO_URI) {
     setMongoState("connecting", mongoLastErrorCode || "");
@@ -462,6 +468,8 @@ async function connectMongo() {
       linkCodesCollection = mongoDb.collection("link_codes");
       fulfillmentJobsCollection = mongoDb.collection("fulfillment_jobs");
       grantsCollection = mongoDb.collection("grants");
+      friendRequestsCollection = mongoDb.collection("friend_requests");
+      friendshipsCollection = mongoDb.collection("friendships");
       await commentsCollection.createIndex({ newsId: 1, createdAt: 1 });
       await commentsCollection.createIndex({ userId: 1 });
       await commentRevisionsCollection.createIndex({ commentId: 1, createdAt: 1 });
@@ -507,6 +515,17 @@ async function connectMongo() {
       await grantsCollection.createIndex({ state: 1, serverId: 1, createdAt: 1 });
       await grantsCollection.createIndex({ buyerUserId: 1, createdAt: -1 });
       await grantsCollection.createIndex({ playerUuid: 1, state: 1, createdAt: 1 });
+      await friendRequestsCollection.createIndex({ id: 1 }, { unique: true });
+      await friendRequestsCollection.createIndex({ fromUserId: 1, status: 1, createdAt: -1 });
+      await friendRequestsCollection.createIndex({ toUserId: 1, status: 1, createdAt: -1 });
+      await friendRequestsCollection.createIndex(
+        { fromUserId: 1, toUserId: 1, status: 1 },
+        { unique: true, partialFilterExpression: { status: "PENDING" } },
+      );
+      await friendshipsCollection.createIndex({ id: 1 }, { unique: true });
+      await friendshipsCollection.createIndex({ pairKey: 1 }, { unique: true });
+      await friendshipsCollection.createIndex({ userLow: 1, createdAt: -1 });
+      await friendshipsCollection.createIndex({ userHigh: 1, createdAt: -1 });
       mongoReconnectDelayMs = 1000;
       setMongoState("ready", "");
       console.log("Connected to MongoDB");
@@ -2867,6 +2886,8 @@ function normalizeNotificationItem(item) {
   const newsId = normalizeText(item?.newsId, 200);
   const commentId = normalizeText(item?.commentId, 128);
   const replyId = normalizeText(item?.replyId, 128);
+  const friendRequestId = normalizeText(item?.friendRequestId, 128);
+  const friendActionStatus = normalizeText(item?.friendActionStatus, 24).toUpperCase();
 
   if (!title || !message || !author) {
     return null;
@@ -2884,8 +2905,144 @@ function normalizeNotificationItem(item) {
     newsId,
     commentId,
     replyId,
+    friendRequestId,
+    friendActionStatus,
     createdAt: new Date().toISOString(),
   };
+}
+
+function sortPairIds(aRaw, bRaw) {
+  const a = normalizeText(aRaw, 128);
+  const b = normalizeText(bRaw, 128);
+  if (!a || !b) return null;
+  return a < b ? [a, b] : [b, a];
+}
+
+function buildFriendPairKey(aRaw, bRaw) {
+  const pair = sortPairIds(aRaw, bRaw);
+  if (!pair) return "";
+  return `${pair[0]}:${pair[1]}`;
+}
+
+function requireSignedInAuth(req, res) {
+  const auth = getAuth(req);
+  const userId = normalizeText(auth?.userId, 128);
+  if (!userId) {
+    res.status(401).json({ error: "Not authenticated" });
+    return null;
+  }
+  return { auth, userId };
+}
+
+function toBasicFriendProfile(user = null) {
+  if (!user?.id) return null;
+  return {
+    userId: normalizeText(user.id, 128),
+    username: formatUsernameForDisplay(user?.username, 80),
+    name: getUserDisplayName(user),
+    image: String(user?.imageUrl || ""),
+  };
+}
+
+async function loadBasicFriendProfilesByIds(ids = []) {
+  const unique = [...new Set((Array.isArray(ids) ? ids : []).map((entry) => normalizeText(entry, 128)).filter(Boolean))];
+  if (unique.length === 0) return new Map();
+  const map = new Map();
+  await Promise.all(
+    unique.map(async (id) => {
+      try {
+        const user = await clerkClient.users.getUser(id);
+        const profile = toBasicFriendProfile(user);
+        if (profile) map.set(id, profile);
+      } catch {}
+    }),
+  );
+  return map;
+}
+
+async function loadFriendStateForUserPair(userIdRaw, targetUserIdRaw) {
+  const userId = normalizeText(userIdRaw, 128);
+  const targetUserId = normalizeText(targetUserIdRaw, 128);
+  if (!userId || !targetUserId || userId === targetUserId) {
+    return { state: "NONE", requestId: "" };
+  }
+  const pairKey = buildFriendPairKey(userId, targetUserId);
+  if (!pairKey) return { state: "NONE", requestId: "" };
+
+  const existingFriendship = await friendshipsCollection.findOne(
+    { pairKey },
+    { projection: { id: 1 } },
+  );
+  if (existingFriendship) {
+    return { state: "FRIENDS", requestId: "" };
+  }
+
+  const outgoing = await friendRequestsCollection.findOne(
+    { fromUserId: userId, toUserId: targetUserId, status: "PENDING" },
+    { projection: { id: 1 } },
+  );
+  if (outgoing?.id) return { state: "PENDING_OUTGOING", requestId: normalizeText(outgoing.id, 128) };
+
+  const incoming = await friendRequestsCollection.findOne(
+    { fromUserId: targetUserId, toUserId: userId, status: "PENDING" },
+    { projection: { id: 1 } },
+  );
+  if (incoming?.id) return { state: "PENDING_INCOMING", requestId: normalizeText(incoming.id, 128) };
+
+  return { state: "NONE", requestId: "" };
+}
+
+async function notifyFriendRequest({ requestId, fromUser, fromUserId, toUserId }) {
+  const senderProfile = toBasicFriendProfile(fromUser);
+  const senderName = senderProfile?.name || "User";
+  const senderUsername = senderProfile?.username || "user";
+  await notificationsCollection.insertOne({
+    id: crypto.randomUUID(),
+    title: "Friend Request",
+    message: `${senderName} (@${senderUsername}) sent you a friend request.`,
+    author: senderName,
+    authorName: senderName,
+    authorUsername: senderUsername,
+    authorUserId: fromUserId,
+    authorImage: senderProfile?.image || "",
+    authorRank: "Registered",
+    featured: false,
+    type: "friend_request",
+    targetUserId: toUserId,
+    friendRequestId: requestId,
+    friendActionStatus: "PENDING",
+    readMoreUrl: "/",
+    isDeleted: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  await pruneCollection(notificationsCollection, 120);
+}
+
+async function notifyFriendRequestAccepted({ fromUserId, toUserId, acceptedByUser }) {
+  const acceptorProfile = toBasicFriendProfile(acceptedByUser);
+  const acceptorName = acceptorProfile?.name || "User";
+  const acceptorUsername = acceptorProfile?.username || "user";
+  await notificationsCollection.insertOne({
+    id: crypto.randomUUID(),
+    title: "Friend Request Accepted",
+    message: `${acceptorName} (@${acceptorUsername}) accepted your friend request.`,
+    author: acceptorName,
+    authorName: acceptorName,
+    authorUsername: acceptorUsername,
+    authorUserId: toUserId,
+    authorImage: acceptorProfile?.image || "",
+    authorRank: "Registered",
+    featured: false,
+    type: "friend_request_accepted",
+    targetUserId: fromUserId,
+    friendActionStatus: "ACCEPTED",
+    readMoreUrl: "/",
+    isDeleted: false,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  await pruneCollection(notificationsCollection, 120);
 }
 
 async function resolveNotificationQueryForUser(userIdRaw) {
@@ -4472,6 +4629,251 @@ app.post("/api/notifications/read", async (req, res) => {
   } catch (error) {
     console.error("Failed to mark notifications as read", error);
     return res.status(500).json({ error: "Failed to mark notifications as read" });
+  }
+});
+
+app.get("/api/friends/state/:targetUserId", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const signed = requireSignedInAuth(req, res);
+    if (!signed) return;
+    const targetUserId = normalizeText(req.params?.targetUserId, 128);
+    if (!targetUserId) {
+      return res.status(400).json({ error: "targetUserId_required" });
+    }
+    const state = await loadFriendStateForUserPair(signed.userId, targetUserId);
+    return res.json({ targetUserId, ...state });
+  } catch (error) {
+    console.error("Failed to load friend state", error);
+    return res.status(500).json({ error: "Failed to load friend state" });
+  }
+});
+
+app.get("/api/friends", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const signed = requireSignedInAuth(req, res);
+    if (!signed) return;
+    const userId = signed.userId;
+    const [friendships, incoming, outgoing] = await Promise.all([
+      friendshipsCollection
+        .find({ $or: [{ userLow: userId }, { userHigh: userId }] })
+        .sort({ createdAt: -1 })
+        .limit(500)
+        .toArray(),
+      friendRequestsCollection
+        .find({ toUserId: userId, status: "PENDING" })
+        .sort({ createdAt: -1 })
+        .limit(200)
+        .toArray(),
+      friendRequestsCollection
+        .find({ fromUserId: userId, status: "PENDING" })
+        .sort({ createdAt: -1 })
+        .limit(200)
+        .toArray(),
+    ]);
+
+    const friendIds = friendships
+      .map((entry) => (entry.userLow === userId ? entry.userHigh : entry.userLow))
+      .filter(Boolean);
+    const incomingIds = incoming.map((entry) => normalizeText(entry.fromUserId, 128)).filter(Boolean);
+    const outgoingIds = outgoing.map((entry) => normalizeText(entry.toUserId, 128)).filter(Boolean);
+    const profiles = await loadBasicFriendProfilesByIds([...friendIds, ...incomingIds, ...outgoingIds]);
+
+    const toProfile = (id) => profiles.get(normalizeText(id, 128)) || {
+      userId: normalizeText(id, 128),
+      username: "",
+      name: "User",
+      image: "",
+    };
+
+    return res.json({
+      friends: friendIds.map((id) => ({ ...toProfile(id) })),
+      incoming: incoming.map((entry) => ({
+        requestId: normalizeText(entry.id, 128),
+        createdAt: entry.createdAt || new Date().toISOString(),
+        fromUserId: normalizeText(entry.fromUserId, 128),
+        from: toProfile(entry.fromUserId),
+      })),
+      outgoing: outgoing.map((entry) => ({
+        requestId: normalizeText(entry.id, 128),
+        createdAt: entry.createdAt || new Date().toISOString(),
+        toUserId: normalizeText(entry.toUserId, 128),
+        to: toProfile(entry.toUserId),
+      })),
+    });
+  } catch (error) {
+    console.error("Failed to load friends", error);
+    return res.status(500).json({ error: "Failed to load friends" });
+  }
+});
+
+app.post("/api/friends/request", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const signed = requireSignedInAuth(req, res);
+    if (!signed) return;
+    const userId = signed.userId;
+    const targetUserId = normalizeText(req.body?.targetUserId, 128);
+    if (!targetUserId || targetUserId === userId) {
+      return res.status(400).json({ error: "invalid_target_user" });
+    }
+    const targetExists = await clerkClient.users.getUser(targetUserId).catch(() => null);
+    if (!targetExists) {
+      return res.status(404).json({ error: "target_user_not_found" });
+    }
+
+    const relation = await loadFriendStateForUserPair(userId, targetUserId);
+    if (relation.state === "FRIENDS") {
+      return res.status(409).json({ error: "already_friends", state: relation.state });
+    }
+    if (relation.state === "PENDING_OUTGOING") {
+      return res.status(200).json({ ok: true, requestId: relation.requestId, state: relation.state });
+    }
+    if (relation.state === "PENDING_INCOMING") {
+      return res.status(409).json({ error: "incoming_request_exists", state: relation.state, requestId: relation.requestId });
+    }
+
+    const now = new Date().toISOString();
+    const requestId = crypto.randomUUID();
+    await friendRequestsCollection.insertOne({
+      id: requestId,
+      fromUserId: userId,
+      toUserId: targetUserId,
+      status: "PENDING",
+      createdAt: now,
+      updatedAt: now,
+      respondedAt: null,
+      respondedByUserId: "",
+    });
+    const fromUser = await clerkClient.users.getUser(userId).catch(() => null);
+    if (fromUser) {
+      await notifyFriendRequest({
+        requestId,
+        fromUser,
+        fromUserId: userId,
+        toUserId: targetUserId,
+      });
+    }
+    return res.json({ ok: true, requestId, state: "PENDING_OUTGOING" });
+  } catch (error) {
+    const code = Number(error?.code || 0);
+    if (code === 11000) {
+      return res.status(200).json({ ok: true, state: "PENDING_OUTGOING" });
+    }
+    console.error("Failed to create friend request", error);
+    return res.status(500).json({ error: "Failed to create friend request" });
+  }
+});
+
+app.post("/api/friends/respond", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const signed = requireSignedInAuth(req, res);
+    if (!signed) return;
+    const userId = signed.userId;
+    const requestId = normalizeText(req.body?.requestId, 128);
+    const action = normalizeText(req.body?.action, 24).toLowerCase();
+    if (!requestId || !["accept", "decline"].includes(action)) {
+      return res.status(400).json({ error: "invalid_request_payload" });
+    }
+    const requestDoc = await friendRequestsCollection.findOne({ id: requestId });
+    if (!requestDoc) {
+      return res.status(404).json({ error: "friend_request_not_found" });
+    }
+    if (normalizeText(requestDoc.toUserId, 128) !== userId) {
+      return res.status(403).json({ error: "not_request_target" });
+    }
+    if (String(requestDoc.status || "") !== "PENDING") {
+      return res.json({
+        ok: true,
+        requestId,
+        status: String(requestDoc.status || "UNKNOWN"),
+      });
+    }
+    const now = new Date().toISOString();
+    const nextStatus = action === "accept" ? "ACCEPTED" : "DECLINED";
+    await friendRequestsCollection.updateOne(
+      { id: requestId, status: "PENDING" },
+      {
+        $set: {
+          status: nextStatus,
+          respondedByUserId: userId,
+          respondedAt: now,
+          updatedAt: now,
+        },
+      },
+    );
+    await notificationsCollection.updateMany(
+      { type: "friend_request", friendRequestId: requestId, targetUserId: userId, isDeleted: false },
+      { $set: { friendActionStatus: nextStatus, updatedAt: now } },
+    );
+
+    if (nextStatus === "ACCEPTED") {
+      const fromUserId = normalizeText(requestDoc.fromUserId, 128);
+      const pair = sortPairIds(fromUserId, userId);
+      if (pair) {
+        await friendshipsCollection.updateOne(
+          { pairKey: `${pair[0]}:${pair[1]}` },
+          {
+            $setOnInsert: {
+              id: crypto.randomUUID(),
+              userLow: pair[0],
+              userHigh: pair[1],
+              pairKey: `${pair[0]}:${pair[1]}`,
+              createdAt: now,
+            },
+            $set: { updatedAt: now },
+          },
+          { upsert: true },
+        );
+      }
+      const acceptedBy = await clerkClient.users.getUser(userId).catch(() => null);
+      if (acceptedBy) {
+        await notifyFriendRequestAccepted({
+          fromUserId,
+          toUserId: userId,
+          acceptedByUser: acceptedBy,
+        });
+      }
+    }
+
+    return res.json({ ok: true, requestId, status: nextStatus });
+  } catch (error) {
+    console.error("Failed to respond to friend request", error);
+    return res.status(500).json({ error: "Failed to respond to friend request" });
+  }
+});
+
+app.delete("/api/friends/:targetUserId", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const signed = requireSignedInAuth(req, res);
+    if (!signed) return;
+    const userId = signed.userId;
+    const targetUserId = normalizeText(req.params?.targetUserId, 128);
+    if (!targetUserId || targetUserId === userId) {
+      return res.status(400).json({ error: "invalid_target_user" });
+    }
+    const pairKey = buildFriendPairKey(userId, targetUserId);
+    if (pairKey) {
+      await friendshipsCollection.deleteOne({ pairKey });
+    }
+    const now = new Date().toISOString();
+    await friendRequestsCollection.updateMany(
+      {
+        status: "PENDING",
+        $or: [
+          { fromUserId: userId, toUserId: targetUserId },
+          { fromUserId: targetUserId, toUserId: userId },
+        ],
+      },
+      { $set: { status: "CANCELED", respondedByUserId: userId, respondedAt: now, updatedAt: now } },
+    );
+    return res.json({ ok: true });
+  } catch (error) {
+    console.error("Failed to remove friend", error);
+    return res.status(500).json({ error: "Failed to remove friend" });
   }
 });
 
