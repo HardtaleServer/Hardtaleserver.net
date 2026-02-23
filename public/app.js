@@ -6575,8 +6575,8 @@ function ForumPage({ isAdmin = false }) {
     if (triggerEl?.getBoundingClientRect) {
       const useTouchLayout = typeof window !== "undefined" && window.matchMedia("(hover: none)").matches;
       openForumHoverProfile(normalized, triggerEl, {
-        offsetX: useTouchLayout ? 12 : 28,
-        offsetY: useTouchLayout ? 14 : 18,
+        offsetX: 28,
+        offsetY: 50,
       });
       return;
     }
