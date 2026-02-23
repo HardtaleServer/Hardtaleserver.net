@@ -17,10 +17,12 @@ function MobileDrawerProfilePreview({
   staffRoleClass = "",
   className = "",
 }) {
-  const hasDisplayedBadge =
-    String(displayedBadge || "").trim() &&
-    !["Unregistered", "Unlinked"].includes(String(displayedBadge || "").trim());
   const normalizedLinkedLabel = String(linkedLabel || "Unlinked").trim() || "Unlinked";
+  const normalizedDisplayedBadge = String(displayedBadge || "").trim() || "Unregistered";
+  const hasDisplayedBadge =
+    normalizedDisplayedBadge &&
+    !["Unregistered", "Unlinked"].includes(normalizedDisplayedBadge) &&
+    normalizedDisplayedBadge.toLowerCase() !== normalizedLinkedLabel.toLowerCase();
   return html`
     <button
       type="button"
@@ -45,7 +47,7 @@ function MobileDrawerProfilePreview({
               </span>`
             : html``}
           ${hasDisplayedBadge
-            ? html`<${RankBadge} label=${displayedBadge} className="store-owned-badge" />`
+            ? html`<${RankBadge} label=${normalizedDisplayedBadge} className="store-owned-badge" />`
             : html``}
         </div>
       </div>

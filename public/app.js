@@ -6558,16 +6558,32 @@ function ForumPage({ isAdmin = false }) {
     const cardHeight = Number.isFinite(Number(options?.cardHeight)) ? Number(options.cardHeight) : 172;
     const offsetX = Number.isFinite(Number(options?.offsetX)) ? Number(options.offsetX) : 0;
     const offsetY = Number.isFinite(Number(options?.offsetY)) ? Number(options.offsetY) : 8;
+    const anchorPoint = options?.anchorPoint && typeof options.anchorPoint === "object"
+      ? {
+          x: Number(options.anchorPoint.x),
+          y: Number(options.anchorPoint.y),
+        }
+      : null;
+    const useAnchorPoint =
+      options?.preferAnchorPoint === true &&
+      Number.isFinite(anchorPoint?.x) &&
+      Number.isFinite(anchorPoint?.y);
 
     const maxX = Math.max(margin, viewportWidth - cardWidth - margin);
-    const rawX = rect.left + offsetX;
+    const rawX = useAnchorPoint
+      ? anchorPoint.x - (cardWidth * 0.35) + offsetX
+      : rect.left + offsetX;
     const x = Math.min(Math.max(margin, rawX), maxX);
 
-    const preferredY = rect.bottom + offsetY;
+    const preferredY = useAnchorPoint
+      ? anchorPoint.y + offsetY
+      : rect.bottom + offsetY;
     const fitsBelow = preferredY + cardHeight <= viewportHeight - margin;
     if (fitsBelow) return { x, y: preferredY };
 
-    const aboveY = rect.top - cardHeight - 10;
+    const aboveY = useAnchorPoint
+      ? anchorPoint.y - cardHeight - Math.max(10, offsetY)
+      : rect.top - cardHeight - 10;
     if (aboveY >= margin) return { x, y: aboveY };
 
     const fallbackY = Math.max(margin, viewportHeight - cardHeight - margin);
@@ -6594,15 +6610,17 @@ function ForumPage({ isAdmin = false }) {
     });
   }
 
-  function openForumMentionPreview(entry, triggerEl = null, anchorRect = null) {
+  function openForumMentionPreview(entry, triggerEl = null, anchorRect = null, anchorPoint = null) {
     const normalized = normalizeForumProfileEntry(entry);
     if (!normalized) return;
     clearForumHoverTimers();
-    if (anchorRect || triggerEl?.getBoundingClientRect) {
+    if (anchorRect || triggerEl?.getBoundingClientRect || anchorPoint) {
       openForumHoverProfile(normalized, triggerEl, {
-        offsetX: 28,
-        offsetY: 50,
+        offsetX: 0,
+        offsetY: 10,
         anchorRect,
+        anchorPoint,
+        preferAnchorPoint: false,
       });
       return;
     }
@@ -6663,11 +6681,15 @@ function ForumPage({ isAdmin = false }) {
     if (!forumHoverProfile?.entry) return html``;
     const preview = forumHoverProfile.entry;
     const username = String(preview.authorUsername || "").replace(/^@+/, "");
-    const displayBadge = resolvePrimaryOwnedBadge(
+    const primaryOwnedBadge = resolvePrimaryOwnedBadge(
       normalizeOwnedRankLabel(preview.authorOwnedRank || preview.authorRank || "Unregistered"),
       preview?.showAllOwnedRankBadges !== false,
       normalizeOwnedRankLabel(preview?.selectedOwnedBadge || preview.authorOwnedRank || preview.authorRank || "Unregistered"),
     );
+    const displayBadge =
+      primaryOwnedBadge !== "Unregistered"
+        ? primaryOwnedBadge
+        : String(preview.authorRank || "Unregistered");
     const showStaff = preview?.authorShowStaffBadge !== false &&
       Boolean(preview.authorIsStaff || isStaffLabel(preview.authorRank || ""));
     return html`<div
@@ -6684,7 +6706,7 @@ function ForumPage({ isAdmin = false }) {
         name=${preview.authorName || "User"}
         username=${username}
         linkedLabel=${preview.linkedAccount ? "Linked" : "Unlinked"}
-        displayedBadge=${displayBadge !== "Unregistered" ? displayBadge : preview.authorRank || "Unregistered"}
+        displayedBadge=${displayBadge}
         showStaffBadge=${showStaff}
         staffLabel=${toStaffPillTitle(preview.authorStaffRole || "") || "Staff"}
         staffRoleClass=${resolveStaffRoleClass({
@@ -6698,7 +6720,15 @@ function ForumPage({ isAdmin = false }) {
   async function openForumMentionProfile(username, triggerEl = null, options = {}) {
     const allowFetch = options?.allowFetch !== false;
     const suppressToast = options?.suppressToast === true;
-    const anchorRect = triggerEl?.getBoundingClientRect?.() || null;
+    const anchorRect = options?.anchorRect ||
+      triggerEl?.getBoundingClientRect?.() ||
+      null;
+    const anchorPoint = options?.anchorPoint && typeof options.anchorPoint === "object"
+      ? {
+          x: Number(options.anchorPoint.x),
+          y: Number(options.anchorPoint.y),
+        }
+      : null;
     const key = String(username || "").trim().replace(/^@+/, "").toLowerCase();
     if (!key) return;
     let entry = mentionProfileDirectory.get(key) || null;
@@ -6789,14 +6819,16 @@ function ForumPage({ isAdmin = false }) {
         return next;
       });
     }
-    openForumMentionPreview(hydratedEntry || entry, triggerEl, anchorRect);
+    openForumMentionPreview(hydratedEntry || entry, triggerEl, anchorRect, anchorPoint);
   }
 
-  function handleForumMentionHover(username, triggerEl = null) {
+  function handleForumMentionHover(username, triggerEl = null, options = {}) {
     if (typeof window !== "undefined" && window.matchMedia("(hover: none)").matches) return;
     openForumMentionProfile(username, triggerEl, {
       allowFetch: false,
       suppressToast: true,
+      anchorRect: options?.anchorRect || null,
+      anchorPoint: options?.anchorPoint || null,
     });
   }
 
@@ -10829,6 +10861,14 @@ function Layout() {
     drawerProfileSummary.showAllOwnedRankBadges !== false,
     drawerProfileSummary.selectedOwnedBadge || "",
   );
+  const resolvedDrawerStaffRole = String(drawerProfileSummary.staffRole || "").trim();
+  const drawerDisplayedBadge =
+    drawerPrimaryOwnedBadge !== "Unregistered"
+      ? drawerPrimaryOwnedBadge
+      : normalizedDrawerRank &&
+        !["Unregistered", "Unlinked", "Registered", "Linked"].includes(normalizedDrawerRank)
+      ? normalizedDrawerRank
+      : "Unregistered";
   const drawerRankBadgeLabel =
     drawerPrimaryOwnedBadge !== "Unregistered"
       ? drawerPrimaryOwnedBadge
@@ -10838,7 +10878,7 @@ function Layout() {
       ? "Linked"
       : "Unlinked";
   const isStaffAccount =
-    isStaffLabel(normalizedDrawerRank) || isStaffLabel(String(drawerProfileSummary.staffRole || ""));
+    Boolean(isStaff) || isStaffLabel(normalizedDrawerRank) || isStaffLabel(resolvedDrawerStaffRole);
   const isDonorRankAccount =
     normalizedDrawerRank === "Hero" ||
     normalizedDrawerRank === "Legend" ||
@@ -12956,11 +12996,11 @@ function Layout() {
                   name=${displayName}
                   username=${formatUsernameForDisplay(user?.username)}
                   linkedLabel=${isLinkedAccount ? "Linked" : "Unlinked"}
-                  displayedBadge=${drawerPrimaryOwnedBadge !== "Unregistered" ? drawerPrimaryOwnedBadge : drawerRankBadgeLabel}
+                  displayedBadge=${drawerDisplayedBadge}
                   showStaffBadge=${isStaffAccount && drawerProfileSummary.showStaffBadge !== false}
-                  staffLabel=${toStaffPillTitle(drawerProfileSummary.staffRole || "") || "Staff"}
+                  staffLabel=${toStaffPillTitle(resolvedDrawerStaffRole) || "Staff"}
                   staffRoleClass=${resolveStaffRoleClass({
-                    staffRole: drawerProfileSummary.staffRole || "",
+                    staffRole: resolvedDrawerStaffRole,
                   })}
                 />
               </div>
