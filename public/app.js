@@ -5094,6 +5094,10 @@ function StorePage({
   cart = [],
   section = "ranks",
   onAdminFakePurchase = null,
+  profileAvatar = "",
+  profileRankLabel = "Unregistered",
+  profileOwnedRank = "Unregistered",
+  profileStaffRole = "",
 }) {
   const [showTicket, setShowTicket] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
@@ -5115,9 +5119,22 @@ function StorePage({
   const email = getUserEmail(user);
   const storePreviewName = isSignedIn ? getUserDisplayName(user) : "Guest";
   const storePreviewImage = String(
-    isSignedIn ? user?.imageUrl || "/assets/HardTale_H_GreyScale.png" : DEFAULT_PROFILE_AVATAR_SVG,
+    isSignedIn
+      ? profileAvatar || user?.imageUrl || "/assets/HardTale_H_GreyScale.png"
+      : DEFAULT_PROFILE_AVATAR_SVG,
   );
   const storePreviewUsername = isSignedIn ? formatUsernameForDisplay(user?.username) : "";
+  const storePreviewOwnedRank = normalizeOwnedRankLabel(profileOwnedRank || profileRankLabel || "Unregistered");
+  const storePreviewStaffRole = String(profileStaffRole || "").trim();
+  const storePreviewHasStaff = Boolean(storePreviewStaffRole) || isStaffLabel(profileRankLabel || "");
+  const storePreviewStaffEntry = useMemo(
+    () => ({
+      staffRole: storePreviewStaffRole,
+      authorStaffRole: storePreviewStaffRole,
+    }),
+    [storePreviewStaffRole],
+  );
+  const ownedTierInProfile = OWNED_RANK_TIER[storePreviewOwnedRank] || 0;
   const previewItem = SAMPLE_STORE.find((item) => item.id === previewItemId) || null;
   const rankDetailItem = SAMPLE_STORE.find((item) => item.id === rankDetailItemId) || null;
   const canUseFakePurchase = Boolean(isAdmin || isStaff);
@@ -5219,9 +5236,13 @@ function StorePage({
     return getStoreRankLabel(item).toLowerCase().replace(/[^a-z0-9]+/g, "-");
   }
 
-  function getStoreCardBadges(item) {
-    const label = getStoreRankLabel(item);
-    return label ? [label] : [];
+  function getStoreCardBadges() {
+    const badges = [];
+    badges.push(isLinkedAccount ? "Linked" : "Unlinked");
+    if (storePreviewOwnedRank !== "Unregistered") {
+      badges.push(storePreviewOwnedRank);
+    }
+    return Array.from(new Set(badges));
   }
 
   function getStorePreviewBadges(item) {
@@ -5269,11 +5290,17 @@ function StorePage({
   function getStoreAddMeta(item) {
     const alreadyInCart = isAlreadyInCart(item);
     const tierLocked = isTierLockedInCart(item);
-    const addDisabled = !canPurchase || alreadyInCart || tierLocked;
+    const rankTier = RANK_TIER_ORDER[String(item?.id || "")] || 0;
+    const ownedTierLocked = rankTier > 0 && ownedTierInProfile >= rankTier;
+    const addDisabled = !canPurchase || ownedTierLocked || alreadyInCart || tierLocked;
     const addTitle = !canPurchase
       ? isSignedIn
         ? "Link your game account first (/link)"
         : "Sign in to use the store"
+      : ownedTierLocked
+      ? ownedTierInProfile === rankTier
+        ? "You already own this rank"
+        : `Included with your ${storePreviewOwnedRank} rank`
       : alreadyInCart
       ? "Already in cart"
       : tierLocked
@@ -5283,12 +5310,16 @@ function StorePage({
       ? isSignedIn
         ? "Link account to buy"
         : "Sign in to buy"
+      : ownedTierLocked
+      ? ownedTierInProfile === rankTier
+        ? "Owned"
+        : "Included"
       : alreadyInCart
       ? "In cart"
       : tierLocked
       ? "Tier locked"
       : "Add to cart";
-    return { addDisabled, addTitle, addLabel, alreadyInCart, tierLocked };
+    return { addDisabled, addTitle, addLabel, alreadyInCart, tierLocked, ownedTierLocked };
   }
 
   function renderComparisonCell(value, rowLabel = "", item = null) {
@@ -5421,7 +5452,10 @@ function StorePage({
                 const perkItems = perkBullets(item.blurb).map((entry) => capitalizePerk(entry));
                 const perksOpen = Boolean(openPerkRows[item.id]);
                 const rankLabel = getStoreRankLabel(item);
-                return html`<div key=${item.id} className=${`store-card rank-preview-${getStoreRankSlug(item)}`.trim()}>
+                return html`<div
+                  key=${item.id}
+                  className=${`store-card rank-preview-${getStoreRankSlug(item)} ${addMeta.ownedTierLocked ? "owned-locked" : ""}`.trim()}
+                >
                 ${addMeta.alreadyInCart
                   ? html`<button
                       type="button"
@@ -5463,9 +5497,17 @@ function StorePage({
                   name=${storePreviewName}
                   username=${storePreviewUsername}
                 >
-                  ${getStoreCardBadges(item).map(
+                  ${getStoreCardBadges().map(
                     (label) => html`<${RankBadge} label=${label} className="store-owned-badge" />`,
                   )}
+                  ${storePreviewHasStaff
+                    ? html`<span
+                        className=${`profile-owned-badge staff-owned-badge ${resolveStaffRoleClass(storePreviewStaffEntry)}`.trim()}
+                        title=${toStaffPillTitle(storePreviewStaffRole) || "Staff"}
+                      >
+                        <span>${toStaffPillTitle(storePreviewStaffRole) || "Staff"}</span>
+                      </span>`
+                    : html``}
                 <//>
                 <div className=${`comment-rank store-profile-rank rank-${itemSlug}`.trim()}>
                   ${(() => {
@@ -9190,6 +9232,7 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
     () => Array.from({ length: LINK_CODE_LENGTH }, () => ""),
     [LINK_CODE_LENGTH],
   );
+  const LINKED_INPUT_DISPLAY = "HARDTALE";
   const inputRefs = useRef([]);
   const autoSubmittedCodeRef = useRef("");
   const badQueryTelemetryRef = useRef("");
@@ -9716,35 +9759,27 @@ function LinkPage({ onClose = null, isLinkedAccount = false }) {
             </div>`
           : html``}
         <div className="link-code-grid" onPaste=${onPaste}>
-          ${linkedInfo.linked
-            ? html`<input
-                className="link-code-input link-code-input-linked"
-                type="text"
-                value="HARDTALE :D"
-                readOnly
-                aria-label="Linked account message"
-              />`
-            : digits.map(
-                (digit, index) => html`<input
-                  key=${`link-digit-${index}`}
-                  ref=${(node) => {
-                    inputRefs.current[index] = node;
-                  }}
-                  className="link-code-input"
-                  type="text"
-                  inputmode="text"
-                  autocomplete="one-time-code"
-                  pattern="[A-Za-z0-9]*"
-                  maxLength="1"
-                  value=${digit}
-                  disabled=${linkedInfo.linked}
-                  readOnly=${linkedInfo.linked}
-                  aria-label=${`Link code character ${index + 1}`}
-                  onInput=${(event) => onInput(index, event)}
-                  onKeyDown=${(event) => onKeyDown(index, event)}
-                  onFocus=${(event) => event.target.select()}
-                />`,
-              )}
+          ${digits.map(
+            (digit, index) => html`<input
+              key=${`link-digit-${index}`}
+              ref=${(node) => {
+                inputRefs.current[index] = node;
+              }}
+              className="link-code-input"
+              type="text"
+              inputmode="text"
+              autocomplete="one-time-code"
+              pattern="[A-Za-z0-9]*"
+              maxLength="1"
+              value=${linkedInfo.linked ? LINKED_INPUT_DISPLAY[index] || "" : digit}
+              disabled=${linkedInfo.linked}
+              readOnly=${linkedInfo.linked}
+              aria-label=${`Link code character ${index + 1}`}
+              onInput=${(event) => onInput(index, event)}
+              onKeyDown=${(event) => onKeyDown(index, event)}
+              onFocus=${(event) => event.target.select()}
+            />`,
+          )}
         </div>
         <div className="link-actions">
           ${isCooldownActive
@@ -11635,6 +11670,10 @@ function Layout() {
           onLinkClick=${openLinkModal}
           onAdminFakePurchase=${runAdminFakePurchase}
           isSignedIn=${isSignedIn}
+          profileAvatar=${resolvedOwnAvatar}
+          profileRankLabel=${drawerProfileSummary.rankLabel}
+          profileOwnedRank=${normalizedDrawerOwnedRank}
+          profileStaffRole=${drawerProfileSummary.staffRole}
         />
 
         <${SiteFooter}

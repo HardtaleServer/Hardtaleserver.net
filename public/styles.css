@@ -4729,12 +4729,6 @@ emoji-picker.reaction-picker-panel {
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.15s ease;
 }
 
-.link-code-input-linked {
-  grid-column: 1 / -1;
-  font-size: clamp(24px, 5vw, 34px);
-  letter-spacing: 0.04em;
-}
-
 .link-code-input:focus {
   outline: none;
   border-color: transparent;
@@ -5250,6 +5244,11 @@ emoji-picker.reaction-picker-panel {
   border: 1px solid var(--stroke);
   background: color-mix(in srgb, var(--bg-soft) 92%, transparent);
   transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.store-card.owned-locked {
+  opacity: 0.74;
+  border-color: color-mix(in srgb, var(--stroke) 88%, #a9b2c0);
 }
 
 .rank-philosophy {

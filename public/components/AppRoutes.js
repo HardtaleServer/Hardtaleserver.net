@@ -34,6 +34,10 @@ export default function AppRoutes({
   onLinkClick,
   onAdminFakePurchase,
   isSignedIn,
+  profileAvatar,
+  profileRankLabel,
+  profileOwnedRank,
+  profileStaffRole,
 }) {
   return html`
     <${Routes} location=${routesLocation}>
@@ -94,6 +98,10 @@ export default function AppRoutes({
           isStaff=${isStaff}
           cart=${cart}
           onAdminFakePurchase=${onAdminFakePurchase}
+          profileAvatar=${profileAvatar}
+          profileRankLabel=${profileRankLabel}
+          profileOwnedRank=${profileOwnedRank}
+          profileStaffRole=${profileStaffRole}
           section="ranks"
         />`}
       />
@@ -107,6 +115,10 @@ export default function AppRoutes({
           isStaff=${isStaff}
           cart=${cart}
           onAdminFakePurchase=${onAdminFakePurchase}
+          profileAvatar=${profileAvatar}
+          profileRankLabel=${profileRankLabel}
+          profileOwnedRank=${profileOwnedRank}
+          profileStaffRole=${profileStaffRole}
           section="gold"
         />`}
       />
@@ -120,6 +132,10 @@ export default function AppRoutes({
           isStaff=${isStaff}
           cart=${cart}
           onAdminFakePurchase=${onAdminFakePurchase}
+          profileAvatar=${profileAvatar}
+          profileRankLabel=${profileRankLabel}
+          profileOwnedRank=${profileOwnedRank}
+          profileStaffRole=${profileStaffRole}
           section="currency"
         />`}
       />
