@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-23 (v1.4.23)
+- Reworked Friends UX across mobile drawer + Friends modal:
+  - Mobile drawer friends strip now shows all friends (not only online), keeps `View all`, and supports friend badge pills.
+  - Friends modal tabs are now `All Friends`, `Online`, `Friend Requests`, and `Ignore List`.
+  - Added search bars to both `All Friends` and `Online` tabs with no-results empty states.
+  - Moved per-row `Message` actions to the far-right action area for clearer alignment.
+- Replaced lightweight private-message prompt flow with the custom in-app Private Message modal:
+  - `Message` actions now open the full PM modal instead of browser `window.prompt`.
+  - Redesigned PM popup with custom gradient shell, styled conversation thread, custom composer input, character counter, and polished send/status row.
+- Updated friend badge rendering:
+  - Donor ranks now display appropriately from owned rank metadata where available.
+  - Staff badge presentation now overrides donor display when staff identity is present.
+  - Added richer gradient treatments for staff + donor friend rank pills (hero/legend/mythic and staff role variants).
+- Improved horizontal friends-strip interaction quality (desktop + mobile):
+  - Mouse wheel vertical scroll now translates into horizontal strip movement.
+  - Drag-to-scroll enabled with grab/grabbing states.
+  - Added drag threshold + short click-suppression window to prevent accidental chip taps after drag on mobile.
+
 ## 2026-02-23 (v1.4.22)
 - Updated desktop signed-out account trigger to use the new user icon asset with automatic fallback handling for missing icon files.
 - Aligned signed-out auth dropdown actions (`Sign in`, `Sign up`) with the same themed account-action button treatment used by signed-in profile actions.

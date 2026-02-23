@@ -2350,6 +2350,13 @@ body[data-theme="light"] .button.primary {
   scroll-snap-type: x mandatory;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--accent) 62%, var(--accent-2)) var(--scrollbar-track);
+  touch-action: pan-x;
+  cursor: grab;
+}
+
+.home-hero-friends-strip.dragging {
+  cursor: grabbing;
+  user-select: none;
 }
 
 .home-hero-friends-strip::-webkit-scrollbar {
@@ -2420,18 +2427,6 @@ body[data-theme="light"] .button.primary {
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
-}
-
-.home-hero-friend-rank.rank-hero {
-  color: var(--rank-hero);
-}
-
-.home-hero-friend-rank.rank-legend {
-  color: var(--rank-legend);
-}
-
-.home-hero-friend-rank.rank-mythic {
-  color: var(--rank-mythic);
 }
 
 .how-btn {
@@ -4426,17 +4421,39 @@ emoji-picker.reaction-picker-panel {
 
 .private-message-overlay .popup {
   width: min(760px, 92vw);
+  background:
+    radial-gradient(130% 150% at 0% 0%, color-mix(in srgb, var(--accent) 20%, transparent), transparent 55%),
+    radial-gradient(130% 150% at 100% 0%, color-mix(in srgb, var(--accent-2) 18%, transparent), transparent 62%),
+    linear-gradient(180deg, color-mix(in srgb, var(--card) 94%, #05070b), var(--card));
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--stroke));
 }
 
 .private-message-panel {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+}
+
+.private-message-modern {
+  padding: 2px;
 }
 
 .private-message-target {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.private-message-hero {
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--stroke));
+  border-radius: 12px;
+  padding: 10px 12px;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent),
+    color-mix(in srgb, var(--bg-soft) 72%, transparent);
+}
+
+.private-message-subtitle {
+  opacity: 0.9;
 }
 
 .private-message-thread {
@@ -4447,15 +4464,27 @@ emoji-picker.reaction-picker-panel {
   padding-right: 4px;
 }
 
+.private-message-thread-shell {
+  border: 1px solid color-mix(in srgb, var(--accent-2) 24%, var(--stroke));
+  border-radius: 12px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--bg-soft) 74%, transparent);
+}
+
 .private-message-item {
   border: 1px solid var(--stroke);
   border-radius: 10px;
-  padding: 8px 10px;
-  background: var(--bg-soft);
+  padding: 9px 11px;
+  background: color-mix(in srgb, var(--bg-soft) 84%, transparent);
 }
 
 .private-message-item.outgoing {
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--stroke));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--stroke));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--accent) 14%, transparent),
+    color-mix(in srgb, var(--bg-soft) 82%, transparent)
+  );
 }
 
 .private-message-item-header {
@@ -4469,15 +4498,49 @@ emoji-picker.reaction-picker-panel {
   white-space: pre-wrap;
 }
 
+.private-message-composer {
+  display: grid;
+  gap: 6px;
+}
+
+.private-message-input-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
 .private-message-input {
   width: 100%;
   border-radius: 10px;
-  border: 1px solid var(--stroke);
-  background: var(--bg);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--stroke));
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg) 96%, transparent), color-mix(in srgb, var(--bg-soft) 56%, transparent));
   color: var(--text);
   padding: 10px 12px;
   resize: vertical;
-  min-height: 90px;
+  min-height: 100px;
+}
+
+.private-message-send-row {
+  justify-content: space-between;
+}
+
+.private-message-count {
+  font-size: 11px;
+}
+
+.private-message-send-btn {
+  min-width: 92px;
+}
+
+.private-message-status {
+  font-size: 12px;
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: color-mix(in srgb, var(--bg-soft) 72%, transparent);
 }
 
 .comment-history-meta {
@@ -8590,6 +8653,13 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 2px;
+  touch-action: pan-x;
+  cursor: grab;
+}
+
+.mobile-online-friends-strip.dragging {
+  cursor: grabbing;
+  user-select: none;
 }
 
 .mobile-online-friend-chip {
@@ -8601,7 +8671,7 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   gap: 5px;
   justify-items: center;
   align-content: start;
-  min-height: 82px;
+  min-height: 102px;
   padding: 8px 6px;
   cursor: pointer;
   text-align: center;
@@ -8622,6 +8692,18 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.mobile-online-friend-rank {
+  max-width: 100%;
+  font-size: 9px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--stroke) 72%, transparent);
+  background: color-mix(in srgb, var(--bg-soft) 76%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .friends-modal-overlay .popup {
@@ -8668,6 +8750,16 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   margin: 0;
   font-size: 14px;
   letter-spacing: 0.04em;
+}
+
+.friends-modal-search input,
+.friends-ignore-search input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--stroke);
+  background: var(--bg);
+  color: var(--text);
+  padding: 10px 12px;
 }
 
 .friends-modal-list {
@@ -8806,6 +8898,7 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   gap: 10px;
   align-items: center;
   padding: 0;
+  width: 100%;
 }
 
 .friends-modal-row img {
@@ -8841,19 +8934,104 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
   cursor: default;
 }
 
+.friends-modal-row.with-actions {
+  grid-template-columns: 1fr auto;
+}
+
+.friends-modal-row-avatar-wrap {
+  position: relative;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+}
+
+.friends-modal-row-avatar-wrap .friends-status-dot {
+  right: -2px;
+  bottom: -2px;
+  border-width: 1px;
+  width: 10px;
+  height: 10px;
+}
+
 .friends-request-actions {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  justify-content: flex-end;
 }
 
-.friends-ignore-search input {
-  width: 100%;
-  border-radius: 10px;
-  border: 1px solid var(--stroke);
-  background: var(--bg);
-  color: var(--text);
-  padding: 10px 12px;
+.friend-rank-pill.rank-hero {
+  border-color: color-mix(in srgb, var(--rank-hero) 42%, var(--stroke));
+  background-image: linear-gradient(
+    110deg,
+    color-mix(in srgb, var(--rank-hero) 58%, #fff6d6),
+    color-mix(in srgb, var(--rank-hero) 72%, #ff9e2c)
+  );
+  color: #2f1800;
+}
+
+.friend-rank-pill.rank-legend {
+  border-color: color-mix(in srgb, var(--rank-legend) 42%, var(--stroke));
+  background-image: linear-gradient(
+    110deg,
+    color-mix(in srgb, var(--rank-legend) 48%, #ffe7f8),
+    color-mix(in srgb, var(--rank-legend) 62%, #ff7ccf)
+  );
+  color: #2d0522;
+}
+
+.friend-rank-pill.rank-mythic {
+  border-color: color-mix(in srgb, var(--rank-mythic) 42%, var(--stroke));
+  background-image: linear-gradient(
+    110deg,
+    color-mix(in srgb, var(--rank-mythic) 48%, #dff3ff),
+    color-mix(in srgb, var(--rank-mythic) 62%, #4cb5ff)
+  );
+  color: #021a2f;
+}
+
+body[data-theme="dark"] .friend-rank-pill.rank-hero,
+body[data-theme="dark"] .friend-rank-pill.rank-legend,
+body[data-theme="dark"] .friend-rank-pill.rank-mythic {
+  color: #f7fbff;
+}
+
+.friend-rank-pill.rank-hero,
+.friend-rank-pill.rank-legend,
+.friend-rank-pill.rank-mythic {
+  background-size: 180% 180%;
+  animation: staffReflect 3.4s ease-in-out infinite;
+}
+
+.friend-rank-pill.rank-registered,
+.friend-rank-pill.rank-linked,
+.friend-rank-pill.rank-unregistered,
+.friend-rank-pill.rank-unlinked {
+  background: color-mix(in srgb, var(--bg-soft) 82%, transparent);
+  color: var(--muted);
+}
+
+.friend-rank-pill.staff {
+  border-color: color-mix(in srgb, var(--staff-dev-start) 44%, var(--stroke));
+  background-image: linear-gradient(110deg, var(--staff-dev-start), var(--staff-dev-end));
+  background-size: 180% 180%;
+  color: #f4f8ff;
+  animation: staffReflect 2.4s ease-in-out infinite reverse;
+}
+
+.friend-rank-pill.staff.staff-role-admin {
+  border-color: color-mix(in srgb, var(--staff-admin-start) 44%, var(--stroke));
+  background-image: linear-gradient(110deg, var(--staff-admin-start), var(--staff-admin-end));
+}
+
+.friend-rank-pill.staff.staff-role-mod {
+  border-color: color-mix(in srgb, var(--staff-mod-start) 44%, var(--stroke));
+  background-image: linear-gradient(110deg, var(--staff-mod-start), var(--staff-mod-end));
+}
+
+.friend-rank-pill.staff.staff-role-helper {
+  border-color: color-mix(in srgb, var(--staff-helper-start) 44%, var(--stroke));
+  background-image: linear-gradient(110deg, var(--staff-helper-start), var(--staff-helper-end));
 }
 
 .drawer-settings-row {

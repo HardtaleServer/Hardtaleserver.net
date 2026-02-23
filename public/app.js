@@ -1970,6 +1970,29 @@ function resolveStaffPillTitle(entry) {
   return "";
 }
 
+function resolveFriendBadge(entry = null) {
+  const rawRank = String(entry?.rankLabel || entry?.ownedRank || "Registered").trim();
+  const hasStaffBadge =
+    isStaffLabel(entry?.staffRole || "") ||
+    isStaffLabel(rawRank);
+  if (hasStaffBadge) {
+    const roleClass = resolveStaffRoleClass({
+      staffRole: entry?.staffRole || rawRank,
+      rankLabel: rawRank,
+    });
+    return {
+      label: toStaffPillTitle(entry?.staffRole || rawRank) || "Staff",
+      className: `staff ${roleClass}`.trim(),
+    };
+  }
+  const donorRank = normalizeOwnedRankLabel(entry?.ownedRank || rawRank || "Registered");
+  const preferredRank = isDonorOwnedRank(donorRank) ? donorRank : getRankDisplayLabel(rawRank || "Registered");
+  return {
+    label: preferredRank,
+    className: `rank-${rankClassSlug(preferredRank)}`,
+  };
+}
+
 function renderNewsRichText(text) {
   const source = String(text || "").trim();
   if (!source) return [];
@@ -9981,26 +10004,22 @@ function HomePage({
                   ? html`<div className="muted home-hero-friends-empty">No friends yet. Use search to add players.</div>`
                   : html`<div className="home-hero-friends-strip">
                       ${desktopFriends.map(
-                        (entry) => html`<button
-                          key=${entry.userId}
-                          type="button"
-                          className="home-hero-friend-chip"
-                          onClick=${() => onOpenFriendsModal && onOpenFriendsModal()}
-                          title=${entry.name || "Friend"}
-                        >
-                          <img src=${entry.image || "/assets/HardTale_H_GreyScale.png"} alt=${entry.name || "Friend"} />
-                          <span>${entry.name || "Friend"}</span>
-                          <span
-                            className=${`home-hero-friend-rank rank-${String(
-                              entry?.rankLabel || "Registered",
-                            )
-                              .trim()
-                              .toLowerCase()
-                              .replace(/[^a-z0-9]+/g, "-")}`.trim()}
+                        (entry) => {
+                          const badge = resolveFriendBadge(entry);
+                          return html`<button
+                            key=${entry.userId}
+                            type="button"
+                            className="home-hero-friend-chip"
+                            onClick=${() => onOpenFriendsModal && onOpenFriendsModal()}
+                            title=${entry.name || "Friend"}
                           >
-                            ${getRankDisplayLabel(entry?.rankLabel || "Registered")}
-                          </span>
-                        </button>`,
+                            <img src=${entry.image || "/assets/HardTale_H_GreyScale.png"} alt=${entry.name || "Friend"} />
+                            <span>${entry.name || "Friend"}</span>
+                            <span className=${`home-hero-friend-rank friend-rank-pill ${badge.className}`.trim()}>
+                              ${badge.label}
+                            </span>
+                          </button>`;
+                        },
                       )}
                     </div>`}
                 <button
@@ -11113,6 +11132,8 @@ function Layout() {
   });
   const [friendsLoading, setFriendsLoading] = useState(false);
   const [friendsModalTab, setFriendsModalTab] = useState("online");
+  const [friendsAllSearchQuery, setFriendsAllSearchQuery] = useState("");
+  const [friendsOnlineSearchQuery, setFriendsOnlineSearchQuery] = useState("");
   const [ignoreSearchQuery, setIgnoreSearchQuery] = useState("");
   const [ignoreSearchLoading, setIgnoreSearchLoading] = useState(false);
   const [ignoreSearchResults, setIgnoreSearchResults] = useState([]);
@@ -12317,7 +12338,7 @@ function Layout() {
     }
   }
 
-  function openPrivateMessageModal(targetUser) {
+  function openPrivateMessageModal(targetUser, options = {}) {
     const targetId = String(targetUser?.authorUserId || targetUser?.userId || "").trim();
     if (!targetId) return;
     if (!canStartPrivateMessages) {
@@ -12334,7 +12355,7 @@ function Layout() {
       username: formatUsernameForDisplay(targetUser?.username || targetUser?.authorUsername || ""),
       image: String(targetUser?.image || targetUser?.authorImage || "/assets/HardTale_H_GreyScale.png"),
     });
-    setPrivateMessageBody("");
+    setPrivateMessageBody(String(options?.initialBody || "").trim().slice(0, 1200));
     setPrivateMessageStatus("");
     setPrivateMessageThread([]);
     setPrivateMessageOpen(true);
@@ -13332,31 +13353,8 @@ function Layout() {
     }
   }
 
-  async function sendLitePrivateMessage(targetUser, initialBody = "") {
-    const targetUserId = String(targetUser?.userId || targetUser?.authorUserId || "").trim();
-    if (!targetUserId || !isSignedIn) return;
-    const bodyInput = String(initialBody || "").trim() || String(window.prompt("Write private message:", "") || "").trim();
-    if (!bodyInput) return;
-    try {
-      const response = await apiFetchWithToken(getToken, true, "/api/private-messages/lite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetUserId, body: bodyInput }),
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(String(data?.error || "Failed to send private message."));
-      emitAppToast({
-        kind: "success",
-        title: "Private Message Sent",
-        message: "Message delivered via lightweight notification.",
-      });
-    } catch (error) {
-      emitAppToast({
-        kind: "error",
-        title: "Message Failed",
-        message: String(error?.message || "Failed to send private message."),
-      });
-    }
+  function sendLitePrivateMessage(targetUser, initialBody = "") {
+    openPrivateMessageModal(targetUser, { initialBody });
   }
 
   function normalizeDirectoryUser(entry) {
@@ -13464,7 +13462,9 @@ function Layout() {
 
   useEffect(() => {
     if (!friendsModalOpen) return;
-    setFriendsModalTab("online");
+    setFriendsModalTab("all");
+    setFriendsAllSearchQuery("");
+    setFriendsOnlineSearchQuery("");
   }, [friendsModalOpen]);
 
   useEffect(() => {
@@ -13509,9 +13509,103 @@ function Layout() {
   }, [friendsSnapshot]);
 
   const onlineFriends = useMemo(
-    () => allFriends.filter((entry) => entry?.online === true).slice(0, 24),
+    () => allFriends.filter((entry) => entry?.online === true),
     [allFriends],
   );
+  const drawerFriends = useMemo(() => allFriends.slice(0, 24), [allFriends]);
+  const filteredAllFriends = useMemo(() => {
+    const query = String(friendsAllSearchQuery || "").trim().toLowerCase();
+    if (!query) return allFriends.slice(0, 180);
+    return allFriends
+      .filter((entry) => {
+        const name = String(entry?.name || "").toLowerCase();
+        const username = String(entry?.username || "").toLowerCase();
+        return name.includes(query) || username.includes(query);
+      })
+      .slice(0, 180);
+  }, [allFriends, friendsAllSearchQuery]);
+  const filteredOnlineFriends = useMemo(() => {
+    const query = String(friendsOnlineSearchQuery || "").trim().toLowerCase();
+    if (!query) return onlineFriends.slice(0, 180);
+    return onlineFriends
+      .filter((entry) => {
+        const name = String(entry?.name || "").toLowerCase();
+        const username = String(entry?.username || "").toLowerCase();
+        return name.includes(query) || username.includes(query);
+      })
+      .slice(0, 180);
+  }, [onlineFriends, friendsOnlineSearchQuery]);
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const strips = Array.from(
+      document.querySelectorAll(".home-hero-friends-strip, .mobile-online-friends-strip"),
+    );
+    const cleanups = strips.map((strip) => {
+      const element = strip;
+      let dragging = false;
+      let pointerId = null;
+      let startX = 0;
+      let startLeft = 0;
+      let moved = false;
+      let suppressClickUntil = 0;
+      const DRAG_THRESHOLD_PX = 8;
+      const onWheel = (event) => {
+        if (Math.abs(event.deltaY) <= Math.abs(event.deltaX)) return;
+        element.scrollLeft += event.deltaY;
+        event.preventDefault();
+      };
+      const onPointerDown = (event) => {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        dragging = true;
+        moved = false;
+        pointerId = event.pointerId;
+        startX = event.clientX;
+        startLeft = element.scrollLeft;
+        element.classList.add("dragging");
+        if (element.setPointerCapture) element.setPointerCapture(pointerId);
+      };
+      const onPointerMove = (event) => {
+        if (!dragging) return;
+        const deltaX = event.clientX - startX;
+        if (!moved && Math.abs(deltaX) > DRAG_THRESHOLD_PX) moved = true;
+        element.scrollLeft = startLeft - deltaX;
+        event.preventDefault();
+      };
+      const stopDragging = () => {
+        dragging = false;
+        pointerId = null;
+        element.classList.remove("dragging");
+      };
+      const onPointerUp = (event) => {
+        if (pointerId !== null && event.pointerId !== pointerId) return;
+        if (moved) suppressClickUntil = Date.now() + 260;
+        stopDragging();
+      };
+      const onClickCapture = (event) => {
+        if (Date.now() <= suppressClickUntil) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      };
+      element.addEventListener("wheel", onWheel, { passive: false });
+      element.addEventListener("pointerdown", onPointerDown);
+      element.addEventListener("pointermove", onPointerMove);
+      element.addEventListener("pointerup", onPointerUp);
+      element.addEventListener("pointercancel", stopDragging);
+      element.addEventListener("pointerleave", stopDragging);
+      element.addEventListener("click", onClickCapture, true);
+      return () => {
+        element.removeEventListener("wheel", onWheel);
+        element.removeEventListener("pointerdown", onPointerDown);
+        element.removeEventListener("pointermove", onPointerMove);
+        element.removeEventListener("pointerup", onPointerUp);
+        element.removeEventListener("pointercancel", stopDragging);
+        element.removeEventListener("pointerleave", stopDragging);
+        element.removeEventListener("click", onClickCapture, true);
+      };
+    });
+    return () => cleanups.forEach((cleanup) => cleanup());
+  }, [active, showMobileNav, friendsModalOpen, friendsLoading, allFriends.length]);
   const ignoredFriends = useMemo(
     () => (Array.isArray(friendsSnapshot.ignored) ? friendsSnapshot.ignored : []),
     [friendsSnapshot],
@@ -14105,7 +14199,7 @@ function Layout() {
             <${SignedIn}>
               <section className="mobile-online-friends">
                 <div className="mobile-online-friends-head">
-                  <span>Online Friends</span>
+                  <span>Friends</span>
                   <button
                     type="button"
                     className="ghost-btn mobile-online-friends-view-all"
@@ -14116,11 +14210,12 @@ function Layout() {
                 </div>
                 ${friendsLoading
                   ? html`<div className="muted mobile-online-friends-empty">Loading friends...</div>`
-                  : onlineFriends.length === 0
-                  ? html`<div className="muted mobile-online-friends-empty">No online friends yet.</div>`
+                  : drawerFriends.length === 0
+                  ? html`<div className="muted mobile-online-friends-empty">No friends yet.</div>`
                   : html`<div className="mobile-online-friends-strip">
-                      ${onlineFriends.map(
-                        (entry) => html`<button
+                      ${drawerFriends.map((entry) => {
+                        const badge = resolveFriendBadge(entry);
+                        return html`<button
                           key=${entry.userId}
                           type="button"
                           className="mobile-online-friend-chip"
@@ -14129,8 +14224,11 @@ function Layout() {
                         >
                           <img src=${entry.image} alt=${entry.name} />
                           <span>${entry.name}</span>
-                        </button>`,
-                      )}
+                          <small className=${`mobile-online-friend-rank friend-rank-pill ${badge.className}`.trim()}>
+                            ${badge.label}
+                          </small>
+                        </button>`;
+                      })}
                     </div>`}
               </section>
               <div className="drawer-user">
@@ -14528,6 +14626,7 @@ function Layout() {
         <div className="friends-modal-body">
           <div className="friends-modal-tabs" role="tablist" aria-label="Friend Views">
             ${[
+              { id: "all", label: "All Friends" },
               { id: "online", label: "Online" },
               { id: "requests", label: "Friend Requests" },
               { id: "ignore", label: "Ignore List" },
@@ -14544,38 +14643,90 @@ function Layout() {
               </button>`,
             )}
           </div>
-          ${friendsModalTab === "online"
+          ${friendsModalTab === "all"
+            ? html`<section className="friends-modal-section">
+                <h4>All Friends</h4>
+                <div className="friends-modal-search">
+                  <input
+                    type="search"
+                    name="all-friends-search"
+                    placeholder="Search all friends"
+                    value=${friendsAllSearchQuery}
+                    onInput=${(event) => setFriendsAllSearchQuery(event.target.value)}
+                  />
+                </div>
+                ${allFriends.length === 0
+                  ? html`<p className="muted">No friends added yet.</p>`
+                  : filteredAllFriends.length === 0
+                  ? html`<p className="muted">No friends match that search.</p>`
+                  : html`<div className="friends-modal-list">
+                      ${filteredAllFriends.map((entry) => {
+                        const badge = resolveFriendBadge(entry);
+                        return html`<div key=${`all-${entry.userId}`} className="friends-modal-row with-actions">
+                          <button
+                            type="button"
+                            className="friends-modal-row-main"
+                            onClick=${() => openUserDirectoryProfile(entry)}
+                          >
+                            <img src=${entry.image || "/assets/HardTale_H_GreyScale.png"} alt=${entry.name || "User"} />
+                            <span>
+                              <strong>${entry.name || "User"}</strong>
+                              <small>@${entry.username || "user"}</small>
+                              <small className=${`friends-row-rank friend-rank-pill ${badge.className}`.trim()}>
+                                ${badge.label}
+                              </small>
+                            </span>
+                          </button>
+                          <div className="friends-request-actions">
+                            <button type="button" className="ghost-btn" onClick=${() => sendLitePrivateMessage(entry)}>
+                              Message
+                            </button>
+                          </div>
+                        </div>`;
+                      })}
+                    </div>`}
+              </section>`
+            : friendsModalTab === "online"
             ? html`<section className="friends-modal-section">
                 <h4>Online Friends</h4>
+                <div className="friends-modal-search">
+                  <input
+                    type="search"
+                    name="online-friends-search"
+                    placeholder="Search online friends"
+                    value=${friendsOnlineSearchQuery}
+                    onInput=${(event) => setFriendsOnlineSearchQuery(event.target.value)}
+                  />
+                </div>
                 ${onlineFriends.length === 0
                   ? html`<p className="muted">No online friends right now.</p>`
-                  : html`<div className="friends-modal-carousel">
-                      ${onlineFriends.map((entry) => {
+                  : filteredOnlineFriends.length === 0
+                  ? html`<p className="muted">No online friends match that search.</p>`
+                  : html`<div className="friends-modal-list">
+                      ${filteredOnlineFriends.map((entry) => {
                         const relation = getFriendState(entry.userId);
                         const canRemove = relation.state === "FRIENDS" || relation.state === "PENDING_OUTGOING";
                         const busy = String(friendActionBusyUserId || "") === String(entry.userId || "");
-                        const rankClass = `rank-${String(entry?.rankLabel || "registered")
-                          .trim()
-                          .toLowerCase()
-                          .replace(/[^a-z0-9]+/g, "-")}`;
-                        return html`<div key=${`online-${entry.userId}`} className="friends-modal-card">
+                        const badge = resolveFriendBadge(entry);
+                        return html`<div key=${`online-${entry.userId}`} className="friends-modal-row with-actions">
                           <button
                             type="button"
-                            className="friends-modal-card-avatar-wrap"
+                            className="friends-modal-row-main"
                             onClick=${() => openUserDirectoryProfile(entry)}
-                            title="Open profile card"
                           >
-                            <img src=${entry.image || "/assets/HardTale_H_GreyScale.png"} alt=${entry.name || "User"} />
-                            <span className=${`friends-status-dot ${entry?.online ? "online" : "offline"}`.trim()}></span>
-                          </button>
-                          <div className="friends-modal-card-meta">
-                            <strong>${entry.name || "User"}</strong>
-                            <small>@${entry.username || "user"}</small>
-                            <span className=${`friends-modal-rank-pill ${rankClass}`.trim()}>
-                              ${getRankDisplayLabel(entry?.rankLabel || "Registered")}
+                            <span className="friends-modal-row-avatar-wrap">
+                              <img src=${entry.image || "/assets/HardTale_H_GreyScale.png"} alt=${entry.name || "User"} />
+                              <span className=${`friends-status-dot ${entry?.online ? "online" : "offline"}`.trim()}></span>
                             </span>
-                          </div>
-                          <div className="friends-modal-card-actions">
+                            <span>
+                              <strong>${entry.name || "User"}</strong>
+                              <small>@${entry.username || "user"}</small>
+                              <small className=${`friends-row-rank friend-rank-pill ${badge.className}`.trim()}>
+                                ${badge.label}
+                              </small>
+                            </span>
+                          </button>
+                          <div className="friends-request-actions">
                             <button type="button" className="ghost-btn" onClick=${() => sendLitePrivateMessage(entry)}>
                               Message
                             </button>
@@ -14586,38 +14737,6 @@ function Layout() {
                               onClick=${() => (canRemove ? removeFriend(entry) : requestFriend(entry))}
                             >
                               ${busy ? "..." : canRemove ? "Remove" : "Add"}
-                            </button>
-                          </div>
-                        </div>`;
-                      })}
-                    </div>`}
-                <h4>All Friends</h4>
-                ${allFriends.length === 0
-                  ? html`<p className="muted">No friends added yet.</p>`
-                  : html`<div className="friends-modal-list">
-                      ${allFriends.slice(0, 180).map((entry) => {
-                        const rankClass = `rank-${String(entry?.rankLabel || "registered")
-                          .trim()
-                          .toLowerCase()
-                          .replace(/[^a-z0-9]+/g, "-")}`;
-                        return html`<div key=${`all-${entry.userId}`} className="friends-modal-row">
-                          <button
-                            type="button"
-                            className="friends-modal-row-main"
-                            onClick=${() => openUserDirectoryProfile(entry)}
-                          >
-                            <img src=${entry.image || "/assets/HardTale_H_GreyScale.png"} alt=${entry.name || "User"} />
-                            <span>
-                              <strong>${entry.name || "User"}</strong>
-                              <small>@${entry.username || "user"}</small>
-                              <small className=${`friends-row-rank ${rankClass}`.trim()}>
-                                ${getRankDisplayLabel(entry?.rankLabel || "Registered")}
-                              </small>
-                            </span>
-                          </button>
-                          <div className="friends-request-actions">
-                            <button type="button" className="ghost-btn" onClick=${() => sendLitePrivateMessage(entry)}>
-                              Message
                             </button>
                           </div>
                         </div>`;
@@ -14746,8 +14865,8 @@ function Layout() {
       >
         ${!privateMessageTarget
           ? html`<p className="muted">No recipient selected.</p>`
-          : html`<div className="private-message-panel">
-              <div className="private-message-target">
+          : html`<div className="private-message-panel private-message-modern">
+              <div className="private-message-target private-message-hero">
                 <img
                   className="comment-avatar small"
                   src=${privateMessageTarget.image || "/assets/HardTale_H_GreyScale.png"}
@@ -14755,12 +14874,12 @@ function Layout() {
                 />
                 <div>
                   <div className="comment-author">${privateMessageTarget.name || "User"}</div>
-                  <div className="muted">
+                  <div className="muted private-message-subtitle">
                     ${privateMessageTarget.username ? `@${privateMessageTarget.username}` : ""}
                   </div>
                 </div>
               </div>
-              <div className="private-message-thread">
+              <div className="private-message-thread private-message-thread-shell">
                 ${privateMessageLoading
                   ? html`<p className="muted">Loading conversation...</p>`
                   : privateMessageThread.length === 0
@@ -14778,17 +14897,24 @@ function Layout() {
                         <div className="private-message-item-body">${entry?.body || ""}</div>
                       </div>`)}
               </div>
-              <textarea
-                className="private-message-input"
-                rows="4"
-                maxLength="1200"
-                placeholder="Write a private message..."
-                value=${privateMessageBody}
-                onInput=${(event) => setPrivateMessageBody(event.target.value)}
-              ></textarea>
-              <div className="comment-actions right">
+              <div className="private-message-composer">
+                <label className="private-message-input-label" for="private-message-input-box">
+                  Message
+                </label>
+                <textarea
+                  id="private-message-input-box"
+                  className="private-message-input"
+                  rows="4"
+                  maxLength="1200"
+                  placeholder="Write a private message..."
+                  value=${privateMessageBody}
+                  onInput=${(event) => setPrivateMessageBody(event.target.value)}
+                ></textarea>
+              </div>
+              <div className="comment-actions right private-message-send-row">
+                <span className="muted private-message-count">${String(privateMessageBody || "").length}/1200</span>
                 <button
-                  className="button primary"
+                  className="button primary private-message-send-btn"
                   type="button"
                   onClick=${sendPrivateMessage}
                   disabled=${privateMessageSending || !privateMessageBody.trim()}
@@ -14796,7 +14922,9 @@ function Layout() {
                   ${privateMessageSending ? "Sending..." : "Send"}
                 </button>
               </div>
-              ${privateMessageStatus ? html`<div className="muted">${privateMessageStatus}</div>` : html``}
+              ${privateMessageStatus
+                ? html`<div className="muted private-message-status">${privateMessageStatus}</div>`
+                : html``}
             </div>`}
       <//>
       <${PopUp}
