@@ -96,7 +96,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.16";
+const VERSION = "1.4.18";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -202,6 +202,24 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.4.18",
+    date: "2026-02-23",
+    items: [
+      "Added desktop Home hero `Friends` preview section above `Join now`, including horizontal chip scroller and left/right scroll controls.",
+      "Added desktop Home hero `View more` action for friends preview that opens the Friends modal.",
+      "Shifted desktop Home right hero panel (`Join now`/IP/server/Discord block) downward for better visual alignment toward the lower leaderboard area.",
+    ],
+  },
+  {
+    version: "1.4.17",
+    date: "2026-02-23",
+    items: [
+      "Added explicit `name` attributes to desktop/mobile user-search inputs to satisfy form-field accessibility/console lint expectations.",
+      "Moved friend-request notification timestamps into the top-right title area of each friend-request card for cleaner scan hierarchy.",
+      "Added desktop user-search dropdown footer action (`View more`) that opens the Friends modal directly from the search results panel.",
+    ],
+  },
   {
     version: "1.4.16",
     date: "2026-02-23",
@@ -9784,9 +9802,12 @@ function HomePage({
   onLinkClick,
   isLinkedAccount,
   isSignedIn,
+  friendsPreview = [],
+  onOpenFriendsModal,
 }) {
   const navigate = useNavigate();
   const { openSignIn } = useClerk();
+  const friendsScrollerRef = useRef(null);
   const [showLeaderboardModal, setShowLeaderboardModal] = useState(false);
   const [forumPreview, setForumPreview] = useState([]);
   const [forumLoading, setForumLoading] = useState(true);
@@ -9888,6 +9909,14 @@ function HomePage({
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 120);
+  const desktopFriends = Array.isArray(friendsPreview) ? friendsPreview.slice(0, 18) : [];
+
+  function scrollDesktopFriends(direction = 1) {
+    const node = friendsScrollerRef.current;
+    if (!node) return;
+    const delta = Math.max(140, Math.round(node.clientWidth * 0.62)) * (direction >= 0 ? 1 : -1);
+    node.scrollBy({ left: delta, behavior: "smooth" });
+  }
 
   return html`
     <section className="home-stack">
@@ -9910,6 +9939,54 @@ function HomePage({
           </div>
         </div>
         <div ref=${playRef} className="hero-card plain">
+          ${isSignedIn
+            ? html`<section className="home-hero-friends">
+                <div className="home-hero-friends-head">
+                  <strong>Friends</strong>
+                  <div className="home-hero-friends-actions">
+                    <button
+                      type="button"
+                      className="ghost-btn home-hero-friends-scroll"
+                      onClick=${() => scrollDesktopFriends(-1)}
+                      aria-label="Scroll friends left"
+                    >
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-btn home-hero-friends-scroll"
+                      onClick=${() => scrollDesktopFriends(1)}
+                      aria-label="Scroll friends right"
+                    >
+                      ›
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost-btn home-hero-friends-more"
+                      onClick=${() => onOpenFriendsModal && onOpenFriendsModal()}
+                    >
+                      View more
+                    </button>
+                  </div>
+                </div>
+                ${desktopFriends.length === 0
+                  ? html`<div className="muted home-hero-friends-empty">No friends yet. Use search to add players.</div>`
+                  : html`<div className="home-hero-friends-strip" ref=${friendsScrollerRef}>
+                      ${desktopFriends.map(
+                        (entry) => html`<button
+                          key=${entry.userId}
+                          type="button"
+                          className="home-hero-friend-chip"
+                          onClick=${() => onOpenFriendsModal && onOpenFriendsModal()}
+                          title=${entry.name || "Friend"}
+                        >
+                          <img src=${entry.image || "/assets/HardTale_H_GreyScale.png"} alt=${entry.name || "Friend"} />
+                          <span>${entry.name || "Friend"}</span>
+                        </button>`,
+                      )}
+                    </div>`}
+              </section>`
+            : html``}
           <div className="join-row">
             <strong>Join now</strong>
             ${!isSignedIn
@@ -13355,6 +13432,7 @@ function Layout() {
           <input
             className="user-search-input"
             type="search"
+            name=${mobile ? "mobile-user-search" : "desktop-user-search"}
             placeholder="Search users"
             value=${userSearchQuery}
             onFocus=${() => setUserSearchOpen(true)}
@@ -13441,6 +13519,20 @@ function Layout() {
                       },
                     )}
                   </div>`}
+              ${!mobile
+                ? html`<div className="user-search-footer">
+                    <button
+                      type="button"
+                      className="ghost-btn user-search-more-btn"
+                      onClick=${() => {
+                        setUserSearchOpen(false);
+                        setFriendsModalOpen(true);
+                      }}
+                    >
+                      View more
+                    </button>
+                  </div>`
+                : html``}
             </div>`
           : html``}
       </div>
@@ -13718,6 +13810,8 @@ function Layout() {
           profileOwnedRank=${normalizedDrawerOwnedRank}
           profileStaffRole=${drawerProfileSummary.staffRole}
           onOpenNewsAuthorProfile=${openNotificationProfile}
+          homeFriendsPreview=${allFriends}
+          onOpenFriendsModal=${() => setFriendsModalOpen(true)}
         />
 
         <${SiteFooter}

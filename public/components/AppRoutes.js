@@ -39,6 +39,8 @@ export default function AppRoutes({
   profileOwnedRank,
   profileStaffRole,
   onOpenNewsAuthorProfile,
+  homeFriendsPreview,
+  onOpenFriendsModal,
 }) {
   return html`
     <${Routes} location=${routesLocation}>
@@ -55,6 +57,8 @@ export default function AppRoutes({
           onLinkClick=${onLinkClick}
           isLinkedAccount=${isLinkedAccount}
           isSignedIn=${isSignedIn}
+          friendsPreview=${homeFriendsPreview}
+          onOpenFriendsModal=${onOpenFriendsModal}
         />`}
       />
       <${Route}
@@ -70,6 +74,8 @@ export default function AppRoutes({
           onLinkClick=${onLinkClick}
           isLinkedAccount=${isLinkedAccount}
           isSignedIn=${isSignedIn}
+          friendsPreview=${homeFriendsPreview}
+          onOpenFriendsModal=${onOpenFriendsModal}
         />`}
       />
       <${Route}
@@ -157,6 +163,8 @@ export default function AppRoutes({
           onLinkClick=${onLinkClick}
           isLinkedAccount=${isLinkedAccount}
           isSignedIn=${isSignedIn}
+          friendsPreview=${homeFriendsPreview}
+          onOpenFriendsModal=${onOpenFriendsModal}
         />`}
       />
       <${Route}
@@ -172,6 +180,8 @@ export default function AppRoutes({
           onLinkClick=${onLinkClick}
           isLinkedAccount=${isLinkedAccount}
           isSignedIn=${isSignedIn}
+          friendsPreview=${homeFriendsPreview}
+          onOpenFriendsModal=${onOpenFriendsModal}
         />`}
       />
       <${Route}

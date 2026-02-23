@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-23 (v1.4.18)
+- Added a desktop Home hero friends preview block above `Join now` with horizontal friend chips and left/right scroll controls.
+- Added a desktop hero friends `View more` action that opens the Friends modal directly.
+- Nudged the desktop right-side hero card (`Join now`, IP, server status, Discord row) downward to better balance against lower right-column content.
+
+## 2026-02-23 (v1.4.17)
+- Added explicit `name` attributes on desktop/mobile user-search fields to resolve form-field console warnings about missing identifiers.
+- Moved friend-request notification timestamps to the top-right of the friend-request card header.
+- Added desktop search dropdown footer action (`View more`) to open the Friends modal directly from search.
+
 ## 2026-02-23 (v1.4.16)
 - Added Mongo-backed friends system endpoints for send/respond/remove flows:
   - `GET /api/friends`

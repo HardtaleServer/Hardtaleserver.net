@@ -79,12 +79,19 @@ export default function NotificationsPanel({
         const friendBusy = String(friendActionBusyId || "") === friendRequestId;
         return html`<div key=${item.id} className="notif-card">
           <div className="notif-title">
-            ${item.featured
-              ? html`<span className="news-star mini" title="Featured" aria-label="Featured">
-                  <img className="news-badge-icon" src=${featuredIconSrc} alt="" aria-hidden="true" />
+            <span className="notif-title-main">
+              ${item.featured
+                ? html`<span className="news-star mini" title="Featured" aria-label="Featured">
+                    <img className="news-badge-icon" src=${featuredIconSrc} alt="" aria-hidden="true" />
+                  </span>`
+                : html``}
+              ${item.title}
+            </span>
+            ${isFriendRequest
+              ? html`<span className="notif-title-time">
+                  <${TimestampText} value=${item.createdAt} formatTimestamp=${formatTimestamp} />
                 </span>`
               : html``}
-            ${item.title}
           </div>
           <div className="notif-body">${item.message}</div>
           <div className="notif-author-row">
@@ -122,7 +129,9 @@ export default function NotificationsPanel({
                       <span>${authorRank}</span>
                     </span>`}
               </div>
-              <${TimestampText} value=${item.createdAt} formatTimestamp=${formatTimestamp} />
+              ${isFriendRequest
+                ? html``
+                : html`<${TimestampText} value=${item.createdAt} formatTimestamp=${formatTimestamp} />`}
               <div className="notif-meta-row">
                 ${countdownLabel
                   ? html`<span className="notif-expiry-countdown">Deletes in ${countdownLabel}</span>`
