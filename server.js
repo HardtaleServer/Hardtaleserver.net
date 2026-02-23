@@ -27,6 +27,8 @@ const LOCAL_DEV_LINK_SERVICE_BASE_URL = "http://127.0.0.1:8080";
 const app = express();
 const PORT = process.env.PORT || 3000;
 const HOST = String(process.env.HOST || "0.0.0.0").trim() || "0.0.0.0";
+const WAIT_FOR_MONGO_BEFORE_LISTEN =
+  String(process.env.WAIT_FOR_MONGO_BEFORE_LISTEN || "false").toLowerCase() === "true";
 const TRUST_PROXY_ENABLED = String(process.env.TRUST_PROXY || "true").toLowerCase() !== "false";
 if (TRUST_PROXY_ENABLED) {
   app.set("trust proxy", 1);
@@ -263,11 +265,111 @@ let mongoConnectInFlight = null;
 let mongoReconnectTimer = null;
 let mongoReconnectDelayMs = 1000;
 const MAX_MONGO_RECONNECT_DELAY_MS = 30000;
+let mongoState = "connecting";
+let mongoStateSinceMs = Date.now();
+let mongoConnectAttempts = 0;
+let mongoLastErrorCode = "";
+let grantsIdempotencyIndexConflictWarned = false;
 let hytaleJwksCache = {
   expiresAt: 0,
   keys: [],
 };
 const serverHeartbeatById = new Map();
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isMongoReady() {
+  return Boolean(
+    mongoClient &&
+      commentsCollection &&
+      commentRevisionsCollection &&
+      forumPostRevisionsCollection &&
+      reactionsCollection &&
+      newsCollection &&
+      notificationsCollection &&
+      notificationReadsCollection &&
+      cartsCollection &&
+      purchasesCollection &&
+      supportTicketsCollection &&
+      forumPostsCollection &&
+      privateMessagesCollection &&
+      linkedAccountsCollection &&
+      userAchievementsCollection &&
+      linkCodesCollection &&
+      fulfillmentJobsCollection &&
+      grantsCollection,
+  );
+}
+
+function getMongoStatusSnapshot() {
+  return {
+    configured: Boolean(MONGO_URI),
+    ready: isMongoReady(),
+    state: mongoState,
+    since: new Date(mongoStateSinceMs).toISOString(),
+    attempts: mongoConnectAttempts,
+    lastErrorCode: mongoLastErrorCode || null,
+  };
+}
+
+function setMongoState(nextState, nextErrorCode = "") {
+  const safeState = ["connecting", "ready", "error"].includes(String(nextState))
+    ? String(nextState)
+    : "error";
+  if (mongoState !== safeState) {
+    mongoState = safeState;
+    mongoStateSinceMs = Date.now();
+  }
+  mongoLastErrorCode = normalizeText(nextErrorCode || "", 40).toUpperCase();
+}
+
+function sanitizeMongoErrorCode(error) {
+  const codeName = normalizeText(error?.codeName, 40).toUpperCase();
+  if (codeName) return codeName;
+  const code = normalizeText(error?.code, 40).toUpperCase();
+  if (code) return code;
+  const name = normalizeText(error?.name, 40).toUpperCase();
+  if (name) return name;
+  const msg = String(error?.message || "").toLowerCase();
+  if (msg.includes("auth")) return "AUTH_FAILED";
+  if (msg.includes("timed out") || msg.includes("timeout")) return "ETIMEDOUT";
+  if (msg.includes("dns") || msg.includes("enotfound")) return "ENOTFOUND";
+  if (msg.includes("tls") || msg.includes("ssl")) return "TLS_ERROR";
+  return "UNKNOWN";
+}
+
+function isMongoIndexSpecConflict(error) {
+  const code = Number(error?.code || 0);
+  const codeName = normalizeText(error?.codeName, 80).toUpperCase();
+  const message = String(error?.message || "").toLowerCase();
+  return (
+    code === 86 ||
+    codeName === "INDEXKEYSPECSCONFLICT" ||
+    message.includes("indexkeyspecsconflict")
+  );
+}
+
+async function ensureGrantIdempotencyIndex(collection) {
+  try {
+    await collection.createIndex(
+      { idempotencyKey: 1 },
+      { unique: true, sparse: true, name: "idempotencyKey_1" },
+    );
+  } catch (error) {
+    if (isMongoIndexSpecConflict(error)) {
+      if (!grantsIdempotencyIndexConflictWarned) {
+        grantsIdempotencyIndexConflictWarned = true;
+        console.warn(
+          "Index spec conflict for grants.idempotencyKey (existing differs). Startup continuing; manual migration may be required.",
+        );
+      }
+      return;
+    }
+    throw error;
+  }
+}
 
 function resetMongoState() {
   mongoClient = null;
@@ -290,6 +392,11 @@ function resetMongoState() {
   fulfillmentJobsCollection = null;
   grantsCollection = null;
   mongoConnectInFlight = null;
+  if (MONGO_URI) {
+    setMongoState("connecting", mongoLastErrorCode || "");
+  } else {
+    setMongoState("error", "MONGO_URI_MISSING");
+  }
 }
 
 function scheduleMongoReconnect() {
@@ -309,27 +416,13 @@ function scheduleMongoReconnect() {
 async function connectMongo() {
   if (!MONGO_URI) {
     console.warn("MONGO_URI is not set. Comments will not persist.");
+    setMongoState("error", "MONGO_URI_MISSING");
     return;
   }
-  if (
-    commentsCollection &&
-    commentRevisionsCollection &&
-    forumPostRevisionsCollection &&
-    reactionsCollection &&
-    newsCollection &&
-    notificationsCollection &&
-    notificationReadsCollection &&
-    cartsCollection &&
-    purchasesCollection &&
-    supportTicketsCollection &&
-    forumPostsCollection &&
-    privateMessagesCollection &&
-    linkedAccountsCollection &&
-    userAchievementsCollection &&
-    linkCodesCollection &&
-    fulfillmentJobsCollection &&
-    grantsCollection
-  ) {
+  mongoConnectAttempts += 1;
+  setMongoState("connecting", mongoLastErrorCode || "");
+  if (isMongoReady()) {
+    setMongoState("ready", "");
     return;
   }
   if (mongoConnectInFlight) {
@@ -408,13 +501,16 @@ async function connectMongo() {
       await fulfillmentJobsCollection.createIndex({ status: 1, createdAt: 1 });
       await fulfillmentJobsCollection.createIndex({ playerUuid: 1, status: 1, createdAt: 1 });
       await grantsCollection.createIndex({ grantId: 1 }, { unique: true });
-      await grantsCollection.createIndex({ idempotencyKey: 1 }, { unique: true });
+      await ensureGrantIdempotencyIndex(grantsCollection);
       await grantsCollection.createIndex({ state: 1, serverId: 1, createdAt: 1 });
       await grantsCollection.createIndex({ buyerUserId: 1, createdAt: -1 });
       await grantsCollection.createIndex({ playerUuid: 1, state: 1, createdAt: 1 });
       mongoReconnectDelayMs = 1000;
+      setMongoState("ready", "");
       console.log("Connected to MongoDB");
     } catch (error) {
+      const safeCode = sanitizeMongoErrorCode(error);
+      setMongoState("error", safeCode);
       console.error("Failed to connect to MongoDB", error);
       try {
         await client.close();
@@ -527,54 +623,18 @@ function requireMongo(res) {
 
 async function requireMongoReady(res) {
   if (!requireMongo(res)) return false;
-  if (
-    !commentsCollection ||
-    !commentRevisionsCollection ||
-    !reactionsCollection ||
-    !newsCollection ||
-    !notificationsCollection ||
-    !notificationReadsCollection ||
-    !cartsCollection ||
-    !purchasesCollection ||
-    !supportTicketsCollection ||
-    !forumPostsCollection ||
-    !privateMessagesCollection ||
-    !forumPostRevisionsCollection ||
-    !linkedAccountsCollection ||
-    !userAchievementsCollection ||
-    !linkCodesCollection ||
-    !fulfillmentJobsCollection ||
-    !grantsCollection
-  ) {
+  if (!isMongoReady()) {
     try {
       await connectMongo();
     } catch {
       // connectMongo already logs details and schedules a retry.
     }
   }
-  if (
-    !mongoClient ||
-    !commentsCollection ||
-    !commentRevisionsCollection ||
-    !reactionsCollection ||
-    !newsCollection ||
-    !notificationsCollection ||
-    !notificationReadsCollection ||
-    !cartsCollection ||
-    !purchasesCollection ||
-    !supportTicketsCollection ||
-    !forumPostsCollection ||
-    !privateMessagesCollection ||
-    !forumPostRevisionsCollection ||
-    !linkedAccountsCollection ||
-    !userAchievementsCollection ||
-    !linkCodesCollection ||
-    !fulfillmentJobsCollection ||
-    !grantsCollection
-  ) {
+  if (!isMongoReady()) {
     res.status(503).json({
       error: "Database not connected",
       detail: "MongoDB connection is not ready. Check MONGO_URI and network access.",
+      mongo: getMongoStatusSnapshot(),
     });
     return false;
   }
@@ -5858,8 +5918,8 @@ app.post("/api/link/claim", async (req, res) => {
 
 app.post("/api/server/register-code", async (req, res) => {
   try {
-    if (!(await requireMongoReady(res))) return;
     if (!requireNetstoreServerAuth(req, res, "register_code")) return;
+    if (!(await requireMongoReady(res))) return;
     const code = normalizeLinkCode(req.body?.code);
     const playerUuid = normalizePlayerUuid(req.body?.playerUuid || req.body?.uuid);
     const playerName = normalizeText(req.body?.playerName || req.body?.username || "", 60);
@@ -5887,8 +5947,8 @@ app.post("/api/server/register-code", async (req, res) => {
 
 app.get("/api/server/pending-links", async (req, res) => {
   try {
-    if (!(await requireMongoReady(res))) return;
     if (!requireNetstoreServerAuth(req, res, "pending_links")) return;
+    if (!(await requireMongoReady(res))) return;
     const limitRaw = Number(req.query?.limit);
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 200) : 50;
     const now = new Date();
@@ -5924,8 +5984,8 @@ app.get("/api/server/pending-links", async (req, res) => {
 
 app.post("/api/server/ack-link", async (req, res) => {
   try {
-    if (!(await requireMongoReady(res))) return;
     if (!requireNetstoreServerAuth(req, res, "ack_link")) return;
+    if (!(await requireMongoReady(res))) return;
     const code = normalizeLinkCode(req.body?.code);
     if (code.length !== 8) {
       return res.status(400).json({ error: "code is required" });
@@ -5998,8 +6058,8 @@ app.post("/api/server/ack-link", async (req, res) => {
 
 async function handlePendingGrants(req, res, routeLabel) {
   try {
-    if (!(await requireMongoReady(res))) return;
     if (!requireNetstoreServerAuth(req, res, routeLabel)) return;
+    if (!(await requireMongoReady(res))) return;
     const serverIdFilter = normalizeText(req.query?.serverId || req.query?.server || "", 40) || "";
     const limitRaw = Number(req.query?.limit);
     const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.trunc(limitRaw), 1), 200) : 50;
@@ -6097,8 +6157,8 @@ async function applyAckedDonorRankToUser(grantDoc) {
 
 async function handleAckGrants(req, res, routeLabel) {
   try {
-    if (!(await requireMongoReady(res))) return;
     if (!requireNetstoreServerAuth(req, res, routeLabel)) return;
+    if (!(await requireMongoReady(res))) return;
     const grantId = normalizeText(req.body?.grantId, 160);
     if (!grantId) {
       return res.status(400).json({ error: "grantId is required" });
@@ -7224,33 +7284,34 @@ app.get("/api/forum/members", async (req, res) => {
 });
 
 app.get("/health", (req, res) => {
-  const mongoReady = Boolean(
-    mongoClient &&
-    commentsCollection &&
-    commentRevisionsCollection &&
-    reactionsCollection &&
-    newsCollection &&
-    notificationsCollection &&
-    notificationReadsCollection &&
-    cartsCollection &&
-    purchasesCollection &&
-    supportTicketsCollection &&
-    forumPostsCollection &&
-    privateMessagesCollection &&
-    forumPostRevisionsCollection &&
-    linkedAccountsCollection &&
-    userAchievementsCollection &&
-    linkCodesCollection &&
-    fulfillmentJobsCollection &&
-    grantsCollection,
-  );
+  const mongo = getMongoStatusSnapshot();
   res.status(200).json({
-    status: "ok",
+    ok: true,
+    status: mongo.ready ? "ok" : "degraded",
     service: "hardtale-server-app",
     uptimeSec: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
-    mongodb: mongoReady ? "connected" : "reconnecting",
+    mongoReady: mongo.ready,
+    mongo,
     server: resolvePublicServerHeartbeat(),
+  });
+});
+
+app.get("/health/ready", (req, res) => {
+  const mongo = getMongoStatusSnapshot();
+  if (!mongo.ready) {
+    return res.status(503).json({
+      ok: false,
+      ready: false,
+      mongoReady: false,
+      mongo,
+    });
+  }
+  return res.status(200).json({
+    ok: true,
+    ready: true,
+    mongoReady: true,
+    mongo,
   });
 });
 
@@ -7286,11 +7347,12 @@ app.get("*", (req, res) => {
   res.sendFile(path.join(publicDir, "index.html"));
 });
 
-app.listen(PORT, HOST, () => {
+function logStartupBanner() {
   console.log(`Server running on http://${HOST}:${PORT}`);
   console.log(
     `[startup] env: NODE_ENV=${String(process.env.NODE_ENV || "development")} localDev=${LOCAL_DEV_MODE} ` +
-      `serverSecretConfigured=${Boolean(SERVER_SECRET)} pluginTokensConfigured=${PLUGIN_API_TOKENS.length}`,
+      `serverSecretConfigured=${Boolean(SERVER_SECRET)} pluginTokensConfigured=${PLUGIN_API_TOKENS.length} ` +
+      `waitForMongoBeforeListen=${WAIT_FOR_MONGO_BEFORE_LISTEN}`,
   );
   if (LOCAL_DEV_MODE) {
     console.log(
@@ -7314,5 +7376,31 @@ app.listen(PORT, HOST, () => {
       "[startup.info] Hosted link-code mode active (expected): /api/link/redeem uses Mongo link codes; downstream plugin redeem fallback is disabled.",
     );
   }
+}
+
+async function startServer() {
+  if (WAIT_FOR_MONGO_BEFORE_LISTEN && MONGO_URI) {
+    console.log("[startup] WAIT_FOR_MONGO_BEFORE_LISTEN=true, blocking listen until MongoDB is ready...");
+    while (!isMongoReady()) {
+      try {
+        await connectMongo();
+      } catch {
+        // connectMongo handles logging + backoff scheduling.
+      }
+      if (!isMongoReady()) {
+        await sleep(Math.min(mongoReconnectDelayMs, 5000));
+      }
+    }
+    console.log("[startup] MongoDB is ready, starting HTTP listener.");
+  }
+
+  app.listen(PORT, HOST, () => {
+    logStartupBanner();
+  });
+}
+
+startServer().catch((error) => {
+  console.error("Failed to start server", error);
+  process.exit(1);
 });
 

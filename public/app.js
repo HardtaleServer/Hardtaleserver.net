@@ -95,7 +95,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.11";
+const VERSION = "1.4.12";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -198,6 +198,16 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.4.12",
+    date: "2026-02-23",
+    items: [
+      "Added backend Mongo readiness observability updates (`/health` and `/health/ready`) with sanitized state metadata suitable for public health checks.",
+      "Added optional startup gate (`WAIT_FOR_MONGO_BEFORE_LISTEN=true`) so deployments can block listener startup until Mongo is connected (fail-fast mode).",
+      "Updated `/api/server/*` route flow to enforce auth before Mongo readiness checks, reducing unauthenticated readiness-oracle behavior.",
+      "Added a dedicated plugin handoff policy file (`plugin-backoff-policy.txt`) documenting transient error handling, exponential backoff with jitter, and logging hygiene.",
+    ],
+  },
   {
     version: "1.4.11",
     date: "2026-02-23",

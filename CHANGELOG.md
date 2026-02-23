@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-23 (v1.4.12)
+- Added Mongo readiness-focused health responses:
+  - `/health` now includes sanitized Mongo readiness metadata.
+  - `/health/ready` now provides explicit readiness semantics (`200` ready / `503` not ready).
+- Added optional fail-fast startup gate:
+  - `WAIT_FOR_MONGO_BEFORE_LISTEN=true` blocks HTTP bind until Mongo is connected.
+- Reordered `/api/server/*` handling to enforce server auth before Mongo readiness checks.
+- Added plugin polling/backoff handoff doc: `plugin-backoff-policy.txt`.
+
 ## 2026-02-23 (v1.4.11)
 - Added purchase toast notifications across all checkout paths:
   - Stripe return finalize (`/api/payments/stripe/complete`)

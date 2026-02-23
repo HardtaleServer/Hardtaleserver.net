@@ -1,0 +1,22 @@
+Plugin Backoff Policy (Linker + NetStore)
+
+Transient errors
+- Treat HTTP 503, 502, 500, timeouts, and connection errors as transient.
+- Do not mark any job failed due to these.
+
+Retry strategy
+- Exponential backoff with jitter.
+- Base delay: 1 second.
+- Sequence: 1s -> 2s -> 4s -> 8s -> 16s -> max 30s.
+- Jitter: add random 0-1000ms each retry.
+- Reset to base delay after one successful poll.
+
+Logging rules
+- Log first failure at WARN.
+- Log again only when backoff step increases (not every retry).
+- Include status code, endpoint, and short error code string.
+- Never log auth headers or secrets.
+
+Recommended poll intervals
+- Linker pending-links poll interval: 10-30 seconds (15s is fine).
+- NetStore fulfillments poll interval: 3-5 seconds once backend is stable.

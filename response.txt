@@ -1,0 +1,52 @@
+Your plugin log is consistent with a backend Mongo readiness problem, not an auth problem.
+
+- `authHeaderAttached=true` means your Bearer token wiring is correct.
+- `503 Database not connected` means the API process is up but Mongo is not ready/reachable.
+
+Short answer to your question:
+- This is usually NOT a Mongo free-tier "rate/usage limit" symptom.
+- It is usually one of:
+  1) bad/missing `MONGO_URI` or `MONGO_DB` on Render,
+  2) Atlas network/IP allowlist blocking Render,
+  3) DNS/TLS/auth failure to Atlas,
+  4) cold start + long reconnect (transient), though your repeated logs look like persistent connectivity.
+
+What I changed in backend (already patched locally)
+1) `/health` now includes explicit Mongo readiness fields:
+- `ok`, `status`, `mongoReady`, and a `mongo` snapshot object.
+
+2) Added `/health/ready`:
+- returns `200` when Mongo is ready,
+- returns `503` with readiness details when not ready.
+
+3) Kept `503` behavior for DB-backed API routes when Mongo is not ready, but now includes a structured `mongo` snapshot in the error response.
+
+4) Added optional startup gate:
+- `WAIT_FOR_MONGO_BEFORE_LISTEN=true`
+- when enabled, server waits until Mongo is ready before binding HTTP listener.
+- default remains `false` (current behavior).
+
+Immediate checks to run in Render/Atlas
+A) Render environment
+- Verify `MONGO_URI` exists and is valid.
+- Verify `MONGO_DB` is set to expected DB name.
+- Re-check for recent credential/cluster hostname changes.
+
+B) Mongo Atlas network access
+- If Atlas is restricted, allow Render egress IPs.
+- Quick test: temporarily allow `0.0.0.0/0`, confirm connection, then lock down.
+
+C) Render logs
+- Find first Mongo error after boot:
+  - auth failed
+  - TLS
+  - DNS
+  - timeout
+- That line identifies the exact root cause.
+
+Plugin polling behavior recommendation
+- Treat 503/500/timeouts as transient.
+- Retry with exponential backoff + jitter.
+- Avoid marking fulfillment/link jobs as failed on transient API readiness errors.
+
+If you want, I can also add a tiny plugin-side backoff policy spec (intervals + jitter caps) you can hand directly to the Java dev.
