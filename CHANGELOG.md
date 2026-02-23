@@ -16,6 +16,8 @@ All notable changes to this project are documented here.
 - Retuned `/store/ranks` comparison table status icon contrast so warning/cross indicators are stronger red and success/tick indicators are stronger green.
 - Updated forum post deletion to hard-delete associated MongoDB thread data (forum post + thread comments + post revisions + comment revisions) instead of soft-delete-only retention.
 - Fixed notification profile modal account-management action runtime error (`openUserProfile is not defined`) by restoring Layout scope wiring.
+- Fixed forum `@` profile peek cards for own-user mentions/hover so local avatar-source selection (including UUID/Hytale avatar) is respected instead of stale post-snapshot PNG avatars.
+- Extended the notification-button flash interaction to general button targets across desktop/mobile via a shared pointerdown flash hook, and added automatic nav-button pulse triggers when unread notification count increases or cart count changes.
 - Removed temporary root-level response/handoff `.txt` artifacts to keep repository contents focused on code and durable project docs.
 
 ## 2026-02-23 (v1.4.12)

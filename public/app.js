@@ -213,6 +213,8 @@ const CHANGELOG_ENTRIES = [
       "Retuned `/store/ranks` comparison status icon treatment so warning/cross indicators read as stronger red and success/tick indicators read as stronger green with higher contrast.",
       "Updated forum post deletion route to perform hard-delete cleanup in MongoDB (post + thread comments + post revisions + comment revisions) to reduce residual data retention risk.",
       "Fixed account-management action in notification profile modal by restoring `openUserProfile` scope in Layout so the button no longer throws a runtime `ReferenceError`.",
+      "Fixed forum `@` profile peek cards for own-user mentions/hover so they respect local avatar source selection (including UUID/Hytale avatar choice) instead of stale post-snapshot PNG avatars.",
+      "Extended the notification-button flash interaction to broader desktop/mobile button targets and added automatic pulse triggers when unread notification count increases or cart count updates.",
       "Removed temporary root-level response/handoff `.txt` artifacts from the repository to keep project files focused on runtime code and durable documentation.",
     ],
   },
@@ -6453,6 +6455,27 @@ function ForumPage({ isAdmin = false }) {
     return directory;
   }, [forumMemberMentions, posts, selectedPost]);
 
+  function resolveForumLocalAvatarOverride(targetUserId, fallbackImage = "") {
+    const targetId = String(targetUserId || "").trim();
+    const currentId = String(userId || "").trim();
+    if (!targetId || !currentId || targetId !== currentId || typeof localStorage === "undefined") {
+      return String(fallbackImage || "");
+    }
+    try {
+      const raw = localStorage.getItem(AVATAR_PREFS_KEY);
+      if (!raw) return String(fallbackImage || "");
+      const parsed = JSON.parse(raw) || {};
+      const source = String(parsed?.source || "clerk").trim().toLowerCase();
+      const uploadUrl = String(parsed?.customAvatarDataUrl || "").trim();
+      const hytaleUrl = String(parsed?.hytaleAvatarUrl || "").trim();
+      if (source === "hytale" && hytaleUrl) return hytaleUrl;
+      if (source === "upload" && uploadUrl) return uploadUrl;
+      return String(fallbackImage || "");
+    } catch {
+      return String(fallbackImage || "");
+    }
+  }
+
   function getForumPreviewText(body, limit = 220) {
     return markdownExcerpt(body, limit);
   }
@@ -6519,10 +6542,13 @@ function ForumPage({ isAdmin = false }) {
 
   function normalizeForumProfileEntry(entry) {
     if (!entry) return null;
+    const normalizedUserId = String(entry?.authorUserId || entry?.createdBy || entry?.userId || "").trim();
+    const baseImage = String(entry?.authorImage || entry?.image || "/assets/HardTale_H_GreyScale.png");
+    const resolvedImage = resolveForumLocalAvatarOverride(normalizedUserId, baseImage);
     return {
       authorName: String(entry?.authorName || entry?.name || "User"),
       authorUsername: String(entry?.authorUsername || entry?.username || "").replace(/^@+/, ""),
-      authorImage: String(entry?.authorImage || entry?.image || "/assets/HardTale_H_GreyScale.png"),
+      authorImage: String(resolvedImage || "/assets/HardTale_H_GreyScale.png"),
       authorRank: String(entry?.authorRank || "Unregistered"),
       authorOwnedRank: String(entry?.authorOwnedRank || entry?.authorRank || "Unregistered"),
       authorStaffRole: String(entry?.authorStaffRole || ""),
@@ -6535,7 +6561,7 @@ function ForumPage({ isAdmin = false }) {
       showAllOwnedRankBadges: entry?.showAllOwnedRankBadges !== false,
       selectedOwnedBadge: String(entry?.selectedOwnedBadge || ""),
       authorIsStaff: Boolean(entry?.authorIsStaff || isStaffLabel(entry?.authorRank || "") || isStaffLabel(entry?.authorStaffRole || "")),
-      authorUserId: String(entry?.authorUserId || entry?.createdBy || entry?.userId || "").trim(),
+      authorUserId: normalizedUserId,
       linkedAccount: entry?.linkedAccount === true || entry?.linked === true,
     };
   }
@@ -10878,6 +10904,8 @@ function Layout() {
   const footerRef = useRef(null);
   const hideLogoRef = useRef(false);
   const scrollRafRef = useRef(0);
+  const previousNotificationCountRef = useRef(null);
+  const previousCartCountRef = useRef(null);
   const initialLoaderStartRef = useRef(Date.now());
   const previousSignedInRef = useRef(null);
   const toastTimersRef = useRef(new Map());
@@ -11048,6 +11076,22 @@ function Layout() {
     window.addEventListener("click", onClick, { passive: true });
     return () => window.removeEventListener("click", onClick);
   }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined" || !uiFlashEnabled) return undefined;
+    const selector =
+      "button, .button, .ghost-btn, .drawer-link, .account-action-btn, .user-button-trigger, .blocks-item-link";
+    const onPointerDown = (event) => {
+      const target = event?.target?.closest?.(selector);
+      if (!target) return;
+      if (target.matches?.(":disabled") || target.getAttribute?.("aria-disabled") === "true") return;
+      triggerFlash(target);
+    };
+    document.addEventListener("pointerdown", onPointerDown, { passive: true });
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [uiFlashEnabled]);
 
 
   useEffect(() => {
@@ -12754,6 +12798,40 @@ function Layout() {
   }
 
   const notificationCount = isSignedIn ? unread : sortedNotifications.length;
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const nextCount = Number(notificationCount || 0);
+    if (previousNotificationCountRef.current === null) {
+      previousNotificationCountRef.current = nextCount;
+      return;
+    }
+    if (!uiFlashEnabled) {
+      previousNotificationCountRef.current = nextCount;
+      return;
+    }
+    if (nextCount > Number(previousNotificationCountRef.current || 0)) {
+      document.querySelectorAll(".settings-button.notif").forEach((entry) => triggerFlash(entry));
+    }
+    previousNotificationCountRef.current = nextCount;
+  }, [notificationCount, uiFlashEnabled]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const nextCount = Number(cartCount || 0);
+    if (previousCartCountRef.current === null) {
+      previousCartCountRef.current = nextCount;
+      return;
+    }
+    if (!uiFlashEnabled) {
+      previousCartCountRef.current = nextCount;
+      return;
+    }
+    if (nextCount !== Number(previousCartCountRef.current || 0)) {
+      document.querySelectorAll(".settings-button.cart-button").forEach((entry) => triggerFlash(entry));
+    }
+    previousCartCountRef.current = nextCount;
+  }, [cartCount, uiFlashEnabled]);
+
   const year = new Date().getFullYear();
   const displayName = getUserDisplayName(user);
   const showLoader = !appHydrated || authTransitionLoading;
