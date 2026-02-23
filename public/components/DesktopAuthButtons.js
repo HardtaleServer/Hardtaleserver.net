@@ -143,14 +143,9 @@ export default function DesktopAuthButtons({
             >
               <img
                 className="user-button-avatar user-button-avatar-guest"
-                src="/Images/SVGs/New_User_Image.svg"
+                src="/Images/SVGs/No_User_Img.svg"
                 alt=""
                 aria-hidden="true"
-                onError=${(event) => {
-                  const target = event.currentTarget;
-                  target.onerror = null;
-                  target.src = "/Images/SVGs/No_User_Img.svg";
-                }}
               />
             </button>
             ${guestMenuOpen
