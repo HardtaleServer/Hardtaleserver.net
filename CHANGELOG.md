@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-23 (v1.4.13)
+- Fixed forum author hover/tap preview-card data hydration so avatar/name hover now resolves current linked status and badge metadata instead of stale post-snapshot values.
+- Added race-safe hover hydration guards to prevent delayed metadata fetches from overwriting the active preview card after pointer movement.
+- Removed temporary root-level response/handoff `.txt` artifacts to keep repository contents focused on code and durable project docs.
+
 ## 2026-02-23 (v1.4.12)
 - Added Mongo readiness-focused health responses:
   - `/health` now includes sanitized Mongo readiness metadata.
@@ -9,7 +14,7 @@ All notable changes to this project are documented here.
 - Added optional fail-fast startup gate:
   - `WAIT_FOR_MONGO_BEFORE_LISTEN=true` blocks HTTP bind until Mongo is connected.
 - Reordered `/api/server/*` handling to enforce server auth before Mongo readiness checks.
-- Added plugin polling/backoff handoff doc: `plugin-backoff-policy.txt`.
+- Documented plugin transient-error handling expectations (backoff + jitter + log hygiene).
 
 ## 2026-02-23 (v1.4.11)
 - Added purchase toast notifications across all checkout paths:

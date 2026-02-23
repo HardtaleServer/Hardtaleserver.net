@@ -200,13 +200,22 @@ const VOTE_SITES = [
 ];
 const CHANGELOG_ENTRIES = [
   {
+    version: "1.4.13",
+    date: "2026-02-23",
+    items: [
+      "Fixed forum author hover/tap preview cards to hydrate profile metadata before final render, so linked status and badge info no longer show stale/unlinked values on avatar/name hover targets.",
+      "Added race-safe hover hydration guards so delayed profile fetch responses cannot overwrite the current hover card with outdated data after pointer movement.",
+      "Removed temporary root-level response/handoff `.txt` artifacts from the repository to keep project files focused on runtime code and durable documentation.",
+    ],
+  },
+  {
     version: "1.4.12",
     date: "2026-02-23",
     items: [
       "Added backend Mongo readiness observability updates (`/health` and `/health/ready`) with sanitized state metadata suitable for public health checks.",
       "Added optional startup gate (`WAIT_FOR_MONGO_BEFORE_LISTEN=true`) so deployments can block listener startup until Mongo is connected (fail-fast mode).",
       "Updated `/api/server/*` route flow to enforce auth before Mongo readiness checks, reducing unauthenticated readiness-oracle behavior.",
-      "Added a dedicated plugin handoff policy file (`plugin-backoff-policy.txt`) documenting transient error handling, exponential backoff with jitter, and logging hygiene.",
+      "Documented plugin transient-error handling expectations (backoff + jitter + log hygiene) for server poller reliability.",
     ],
   },
   {
@@ -6385,6 +6394,7 @@ function ForumPage({ isAdmin = false }) {
   const [forumHistoryTitle, setForumHistoryTitle] = useState("Post Edit History");
   const forumHoverOpenTimerRef = useRef(0);
   const forumHoverCloseTimerRef = useRef(0);
+  const forumHoverResolveTokenRef = useRef(0);
   const forumMentionProfileMetaCacheRef = useRef(new Map());
   const FORUM_BODY_MIN_LENGTH = 30;
   const createTemplateOptions = useMemo(
@@ -6659,13 +6669,29 @@ function ForumPage({ isAdmin = false }) {
   function scheduleForumHoverOpen(entry, anchorEl) {
     clearForumHoverTimers();
     forumHoverOpenTimerRef.current = setTimeout(() => {
-      openForumHoverProfile(entry, anchorEl);
+      const resolveToken = ++forumHoverResolveTokenRef.current;
+      const normalized = normalizeForumProfileEntry(entry);
+      if (!normalized) {
+        forumHoverOpenTimerRef.current = 0;
+        return;
+      }
+      openForumHoverProfile(normalized, anchorEl);
+      forumHoverOpenTimerRef.current = 0;
+      if (!normalized.authorUserId) return;
+      hydrateForumProfileEntry(normalized)
+        .then((hydratedEntry) => {
+          if (!hydratedEntry) return;
+          if (forumHoverResolveTokenRef.current !== resolveToken) return;
+          openForumHoverProfile(hydratedEntry, anchorEl);
+        })
+        .catch(() => {});
       forumHoverOpenTimerRef.current = 0;
     }, 1000);
   }
 
   function scheduleForumHoverClose() {
     if (forumHoverCloseTimerRef.current) clearTimeout(forumHoverCloseTimerRef.current);
+    forumHoverResolveTokenRef.current += 1;
     forumHoverCloseTimerRef.current = setTimeout(() => {
       setForumHoverProfile(null);
       forumHoverCloseTimerRef.current = 0;
@@ -6695,7 +6721,16 @@ function ForumPage({ isAdmin = false }) {
       return;
     }
     clearForumHoverTimers();
+    const resolveToken = ++forumHoverResolveTokenRef.current;
     openForumHoverProfile(normalized, anchorEl);
+    if (!normalized.authorUserId) return;
+    hydrateForumProfileEntry(normalized)
+      .then((hydratedEntry) => {
+        if (!hydratedEntry) return;
+        if (forumHoverResolveTokenRef.current !== resolveToken) return;
+        openForumHoverProfile(hydratedEntry, anchorEl);
+      })
+      .catch(() => {});
   }
 
   function renderForumHoverProfileCard() {
