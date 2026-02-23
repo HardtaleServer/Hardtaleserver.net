@@ -141,13 +141,23 @@ export default function DesktopAuthButtons({
               aria-expanded=${guestMenuOpen}
               onClick=${() => setGuestMenuOpen((prev) => !prev)}
             >
-              <span className="user-button-avatar-blank" aria-hidden="true"></span>
+              <img
+                className="user-button-avatar user-button-avatar-guest"
+                src="/Images/SVGs/New_User_Image.svg"
+                alt=""
+                aria-hidden="true"
+                onError=${(event) => {
+                  const target = event.currentTarget;
+                  target.onerror = null;
+                  target.src = "/Images/SVGs/No_User_Img.svg";
+                }}
+              />
             </button>
             ${guestMenuOpen
               ? html`<div className="desktop-account-menu" role="menu" aria-label="Sign in options">
                   <${SignInButton} mode="modal">
                     <button
-                      className="desktop-account-menu-item text-only"
+                      className="account-action-btn desktop-account-menu-item text-only"
                       role="menuitem"
                       type="button"
                       onClick=${() => setGuestMenuOpen(false)}
@@ -157,7 +167,7 @@ export default function DesktopAuthButtons({
                   <//>
                   <${SignUpButton} mode="modal">
                     <button
-                      className="desktop-account-menu-item text-only"
+                      className="account-action-btn desktop-account-menu-item text-only"
                       role="menuitem"
                       type="button"
                       onClick=${() => setGuestMenuOpen(false)}

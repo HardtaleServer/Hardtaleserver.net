@@ -1002,6 +1002,15 @@ body[data-theme="dark"] {
   padding: 0;
 }
 
+.user-button-avatar-guest {
+  width: 100%;
+  height: 100%;
+  padding: 6px;
+  object-fit: contain;
+  border: 1px solid color-mix(in srgb, var(--stroke) 78%, transparent);
+  background: color-mix(in srgb, var(--bg-soft) 88%, transparent);
+}
+
 .user-button-avatar-blank {
   width: 100%;
   height: 100%;
@@ -1025,6 +1034,12 @@ body[data-theme="dark"] {
   .user-button-trigger:hover .user-button-avatar,
   .user-button-trigger:focus-visible .user-button-avatar {
     border-color: rgba(255, 255, 255, 0.14);
+  }
+
+  .user-button-trigger-guest:hover .user-button-avatar-guest,
+  .user-button-trigger-guest:focus-visible .user-button-avatar-guest {
+    border-color: rgba(255, 255, 255, 0.16);
+    filter: saturate(1.08) brightness(1.04);
   }
 
   .user-button-trigger-guest:hover .user-button-avatar-blank,

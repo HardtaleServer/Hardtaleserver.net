@@ -2,6 +2,11 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-23 (v1.4.22)
+- Updated desktop signed-out account trigger to use the new user icon asset with automatic fallback handling for missing icon files.
+- Aligned signed-out auth dropdown actions (`Sign in`, `Sign up`) with the same themed account-action button treatment used by signed-in profile actions.
+- Applied consistent desktop hover/focus gradient interaction styling to the signed-out user trigger so dark/light mode behavior matches existing nav button effects.
+
 ## 2026-02-23 (v1.4.21)
 - Expanded friends backend with ignore-list support:
   - `POST /api/friends/ignore`

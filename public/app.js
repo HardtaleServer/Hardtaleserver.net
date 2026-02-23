@@ -96,7 +96,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.21";
+const VERSION = "1.4.22";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -202,6 +202,15 @@ const VOTE_SITES = [
   },
 ];
 const CHANGELOG_ENTRIES = [
+  {
+    version: "1.4.22",
+    date: "2026-02-23",
+    items: [
+      "Updated desktop signed-out account trigger to use the new user icon asset with automatic fallback handling for missing icon files.",
+      "Aligned signed-out auth dropdown actions (`Sign in`, `Sign up`) with the same themed account-action button treatment used by signed-in profile actions.",
+      "Applied consistent desktop hover/focus gradient interaction styling to the signed-out user trigger so dark/light mode behavior matches existing nav button effects.",
+    ],
+  },
   {
     version: "1.4.21",
     date: "2026-02-23",
