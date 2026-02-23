@@ -1507,6 +1507,21 @@ body[data-theme="dark"] {
   gap: 6px;
 }
 
+.forum-post-forced-notice {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #ff621d;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.forum-post-forced-notice-icon {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+
 .forum-post-header-divider {
   height: 1px;
   background: var(--stroke);

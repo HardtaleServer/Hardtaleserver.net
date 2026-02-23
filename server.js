@@ -2836,6 +2836,38 @@ async function resolveForumMentionTargets(handles = []) {
     commentCandidates.forEach(registerCandidate);
   } catch {}
 
+  const unresolved = normalizedHandles.filter((handle) => {
+    return !Array.from(byUserId.values()).some(
+      (entry) => normalizeText(entry?.username, 80).toLowerCase() === handle,
+    );
+  });
+
+  if (unresolved.length > 0) {
+    try {
+      await Promise.all(
+        unresolved.map(async (handle) => {
+          try {
+            const result = await clerkClient.users.getUserList({
+              query: handle,
+              limit: 20,
+            });
+            const users = Array.isArray(result?.data) ? result.data : [];
+            const exact = users.find(
+              (entry) =>
+                normalizeText(entry?.username, 80).toLowerCase() === handle &&
+                normalizeText(entry?.id, 128),
+            );
+            if (!exact) return;
+            registerCandidate({
+              authorUserId: exact.id,
+              authorUsername: exact.username,
+            });
+          } catch {}
+        }),
+      );
+    } catch {}
+  }
+
   return Array.from(byUserId.values());
 }
 
@@ -6824,6 +6856,25 @@ app.get("/api/forum/members", async (req, res) => {
       .limit(7000)
       .toArray();
     commentRows.forEach(register);
+
+    const shouldFetchClerkRows = Boolean(query) || membersByUserId.size < limit;
+    if (shouldFetchClerkRows) {
+      const clerkLimit = Math.min(Math.max(limit * 2, 40), 300);
+      try {
+        const listParams = { limit: clerkLimit };
+        if (query) listParams.query = query;
+        const result = await clerkClient.users.getUserList(listParams);
+        const users = Array.isArray(result?.data) ? result.data : [];
+        users.forEach((entry) => {
+          register({
+            authorUserId: entry?.id,
+            authorUsername: entry?.username,
+            authorName: getUserDisplayName(entry),
+            authorImage: entry?.imageUrl || "",
+          });
+        });
+      } catch {}
+    }
 
     const members = Array.from(membersByUserId.values())
       .sort((a, b) => String(a.username || "").localeCompare(String(b.username || "")))

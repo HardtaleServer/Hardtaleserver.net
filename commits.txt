@@ -1,0 +1,3 @@
+fix(forum-mentions): prevent profile-card runtime crash and resolve @mentions for registered users
+
+ui(forum): move Past edits into action row and show compact forced-edit notice above post body

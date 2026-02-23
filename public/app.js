@@ -1380,6 +1380,10 @@ function normalizeOwnedRankLabel(value) {
   return Object.prototype.hasOwnProperty.call(OWNED_RANK_TIER, label) ? label : "Unregistered";
 }
 
+function normalizeOwnedRank(value) {
+  return normalizeOwnedRankLabel(value);
+}
+
 function isDonorOwnedRank(value) {
   const normalized = normalizeOwnedRankLabel(value);
   return normalized === "Hero" || normalized === "Legend" || normalized === "Mythic";
@@ -6587,10 +6591,57 @@ function ForumPage({ isAdmin = false }) {
     </div>`;
   }
 
-  function openForumMentionProfile(username) {
+  async function openForumMentionProfile(username) {
     const key = String(username || "").trim().replace(/^@+/, "").toLowerCase();
     if (!key) return;
-    const entry = mentionProfileDirectory.get(key);
+    let entry = mentionProfileDirectory.get(key) || null;
+    if (!entry) {
+      try {
+        const response = await fetch(`/api/forum/members?q=${encodeURIComponent(key)}&limit=25`);
+        if (response.ok) {
+          const data = await response.json().catch(() => ({}));
+          const members = Array.isArray(data?.members) ? data.members : [];
+          const exact = members.find(
+            (item) =>
+              String(item?.username || "")
+                .trim()
+                .replace(/^@+/, "")
+                .toLowerCase() === key,
+          );
+          if (exact) {
+            entry = normalizeForumProfileEntry({
+              authorName: String(exact?.name || exact?.username || "User"),
+              authorUsername: String(exact?.username || "").replace(/^@+/, ""),
+              authorImage: String(exact?.image || "/assets/HardTale_H_GreyScale.png"),
+              authorRank: String(exact?.rank || "Unregistered"),
+              authorOwnedRank: String(exact?.ownedRank || exact?.rank || "Unregistered"),
+              authorStaffRole: String(exact?.staffRole || ""),
+              authorIsStaff: Boolean(exact?.isStaff),
+              authorUserId: String(exact?.userId || "").trim(),
+              linkedAccount: Boolean(exact?.linked),
+            });
+            if (entry) {
+              setForumMemberMentions((prev) => {
+                const rows = Array.isArray(prev) ? prev : [];
+                const already = rows.some(
+                  (row) => String(row?.userId || row?.authorUserId || "").trim() === String(exact?.userId || "").trim(),
+                );
+                if (already) return rows;
+                return [
+                  ...rows,
+                  {
+                    userId: String(exact?.userId || "").trim(),
+                    username: String(exact?.username || "").replace(/^@+/, ""),
+                    name: String(exact?.name || exact?.username || "User"),
+                    image: String(exact?.image || "/assets/HardTale_H_GreyScale.png"),
+                  },
+                ];
+              });
+            }
+          }
+        }
+      } catch {}
+    }
     if (!entry) {
       emitAppToast({
         kind: "warning",
@@ -8002,6 +8053,12 @@ function ForumPage({ isAdmin = false }) {
                       <h3>${selectedPost.title}</h3>
                     </div>
                   </div>
+                  ${selectedPost?.staffForcedEdit
+                    ? html`<div className="forum-post-forced-notice">
+                        <img src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" className="forum-post-forced-notice-icon" />
+                        <span>Force edited by a staff member.</span>
+                      </div>`
+                    : html``}
                   ${editingPostId === String(selectedPost.id || "")
                     ? html`<form
                         className="forum-edit-form"
@@ -8039,40 +8096,40 @@ function ForumPage({ isAdmin = false }) {
                         onMentionClick=${openForumMentionProfile}
                         className="news-body-paragraph"
                       />`}
-                    <div className="forum-post-status-row">
-                    ${(selectedPost.editCount || 0) > 0
-                      ? html`<button
-                          className="ghost-btn forum-post-history-btn"
-                          type="button"
-                          onMouseDown=${(event) => triggerFlash(event.currentTarget)}
-                          onClick=${() => openForumPostHistory(selectedPost)}
-                          title="View past edits"
-                        >
-                          <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
-                          Past edits
-                        </button>`
-                      : html``}
-                    </div>
-                  ${canManageForumPost(selectedPost)
+                  ${(canManageForumPost(selectedPost) || (selectedPost.editCount || 0) > 0)
                     ? html`<div className="forum-post-actions-row">
-                        <button
-                          className="ghost-btn"
-                          type="button"
-                          onClick=${() => startEditPost(selectedPost)}
-                          disabled=${deletingPostId === String(selectedPost.id || "")}
-                        >
-                          Edit Post
-                        </button>
-                        <button
-                          className="ghost-btn delete-action-btn"
-                          type="button"
-                          onClick=${() => deleteForumPost(selectedPost)}
-                          disabled=${deletingPostId === String(selectedPost.id || "")}
-                        >
-                          ${deletingPostId === String(selectedPost.id || "")
-                            ? "Deleting..."
-                            : renderDeleteLabel("Delete Post")}
-                        </button>
+                        ${canManageForumPost(selectedPost)
+                          ? html`<button
+                              className="ghost-btn"
+                              type="button"
+                              onClick=${() => startEditPost(selectedPost)}
+                              disabled=${deletingPostId === String(selectedPost.id || "")}
+                            >
+                              Edit Post
+                            </button>
+                            <button
+                              className="ghost-btn delete-action-btn"
+                              type="button"
+                              onClick=${() => deleteForumPost(selectedPost)}
+                              disabled=${deletingPostId === String(selectedPost.id || "")}
+                            >
+                              ${deletingPostId === String(selectedPost.id || "")
+                                ? "Deleting..."
+                                : renderDeleteLabel("Delete Post")}
+                            </button>`
+                          : html``}
+                        ${(selectedPost.editCount || 0) > 0
+                          ? html`<button
+                              className="ghost-btn forum-post-history-btn"
+                              type="button"
+                              onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                              onClick=${() => openForumPostHistory(selectedPost)}
+                              title="View past edits"
+                            >
+                              <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
+                              Past edits
+                            </button>`
+                          : html``}
                       </div>`
                     : html``}
                     <${CommentThread}
@@ -8244,6 +8301,12 @@ function ForumPage({ isAdmin = false }) {
                           <h3>${post.title}</h3>
                         </div>
                       </div>
+                      ${post?.staffForcedEdit
+                        ? html`<div className="forum-post-forced-notice">
+                            <img src=${STAFF_BADGE_ICON_SVG} alt="" aria-hidden="true" className="forum-post-forced-notice-icon" />
+                            <span>Force edited by a staff member.</span>
+                          </div>`
+                        : html``}
                       <div className="news-body-paragraph forum-post-preview">
                         <${ForumRenderedMarkdown}
                           value=${post.body || ""}
@@ -8252,40 +8315,40 @@ function ForumPage({ isAdmin = false }) {
                         />
                       </div>
                     </${Link}>
-                    <div className="forum-post-status-row">
-                      ${(post.editCount || 0) > 0
-                        ? html`<button
-                            className="ghost-btn forum-post-history-btn"
-                            type="button"
-                            onMouseDown=${(event) => triggerFlash(event.currentTarget)}
-                            onClick=${() => openForumPostHistory(post)}
-                            title="View past edits"
-                          >
-                            <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
-                            Past edits
-                          </button>`
-                        : html``}
-                    </div>
-                    ${canManageForumPost(post)
+                    ${(canManageForumPost(post) || (post.editCount || 0) > 0)
                       ? html`<div className="forum-post-actions-row">
-                          <button
-                            className="ghost-btn"
-                            type="button"
-                            onClick=${() => startEditPost(post)}
-                            disabled=${deletingPostId === String(post.id || "")}
-                          >
-                            Edit Post
-                          </button>
-                          <button
-                            className="ghost-btn delete-action-btn"
-                            type="button"
-                            onClick=${() => deleteForumPost(post)}
-                            disabled=${deletingPostId === String(post.id || "")}
-                          >
-                            ${deletingPostId === String(post.id || "")
-                              ? "Deleting..."
-                              : renderDeleteLabel("Delete Post")}
-                          </button>
+                          ${canManageForumPost(post)
+                            ? html`<button
+                                className="ghost-btn"
+                                type="button"
+                                onClick=${() => startEditPost(post)}
+                                disabled=${deletingPostId === String(post.id || "")}
+                              >
+                                Edit Post
+                              </button>
+                              <button
+                                className="ghost-btn delete-action-btn"
+                                type="button"
+                                onClick=${() => deleteForumPost(post)}
+                                disabled=${deletingPostId === String(post.id || "")}
+                              >
+                                ${deletingPostId === String(post.id || "")
+                                  ? "Deleting..."
+                                  : renderDeleteLabel("Delete Post")}
+                              </button>`
+                            : html``}
+                          ${(post.editCount || 0) > 0
+                            ? html`<button
+                                className="ghost-btn forum-post-history-btn"
+                                type="button"
+                                onMouseDown=${(event) => triggerFlash(event.currentTarget)}
+                                onClick=${() => openForumPostHistory(post)}
+                                title="View past edits"
+                              >
+                                <img src=${INK_PEN_ICON} alt="" aria-hidden="true" className="comment-action-icon" />
+                                Past edits
+                              </button>`
+                            : html``}
                         </div>`
                       : html``}
                     ${editingPostId === String(post.id || "")
