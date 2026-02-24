@@ -2,6 +2,10 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-24 (v1.4.28)
+- Fixed a Layout initialization-order regression causing a ReferenceError during app render when resolvedOwnAvatar was accessed before initialization.
+- Reordered resolvedOwnAvatar and displayNotifications setup so notification avatar mapping no longer reads an uninitialized binding.
+
 ## 2026-02-23 (v1.4.27)
 - Updated profile preview behavior across Friends + PM surfaces:
   - Home hero friend chips and mobile drawer friend chips now open a profile preview card first.
@@ -622,3 +626,7 @@ All notable changes to this project are documented here.
 - `server.js` (API for news + delete + logo fallback)
 - `public/app.js` (React UI, routing, notifications, store, cart)
 - `public/styles.css` (layout, popups, themes)
+
+
+
+

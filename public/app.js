@@ -98,7 +98,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.27";
+const VERSION = "1.4.28";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -11325,15 +11325,6 @@ function Layout() {
     });
     return copy;
   }, [notifications]);
-  const displayNotifications = useMemo(() => {
-    const ownId = String(userId || "").trim();
-    if (!ownId || !resolvedOwnAvatar) return sortedNotifications;
-    return sortedNotifications.map((item) => {
-      const authorId = String(item?.authorUserId || "").trim();
-      if (!authorId || authorId !== ownId) return item;
-      return { ...item, authorImage: resolvedOwnAvatar };
-    });
-  }, [sortedNotifications, userId, resolvedOwnAvatar]);
   const stateBackgroundHref = normalizeInternalRoute(location?.state?.backgroundHref || "", "");
   const storedBackgroundHref = readLastNonLinkRoute();
   const linkBackgroundHref = stateBackgroundHref || storedBackgroundHref || "/";
@@ -11393,6 +11384,15 @@ function Layout() {
     if (avatarSource === "upload" && canUploadOwnAvatar && customAvatarDataUrl) return customAvatarDataUrl;
     return clerkAvatar;
   }, [avatarSource, hytaleAvatarUrl, canUploadOwnAvatar, customAvatarDataUrl, user]);
+  const displayNotifications = useMemo(() => {
+    const ownId = String(userId || "").trim();
+    if (!ownId || !resolvedOwnAvatar) return sortedNotifications;
+    return sortedNotifications.map((item) => {
+      const authorId = String(item?.authorUserId || "").trim();
+      if (!authorId || authorId !== ownId) return item;
+      return { ...item, authorImage: resolvedOwnAvatar };
+    });
+  }, [sortedNotifications, userId, resolvedOwnAvatar]);
 
   useEffect(() => {
     let alive = true;
