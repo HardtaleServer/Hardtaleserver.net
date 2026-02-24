@@ -506,6 +506,41 @@ body[data-theme="dark"] {
   gap: 10px;
 }
 
+.mobile-top-actions .mobile-nav-inline-search {
+  flex: 1 1 170px;
+  min-width: 130px;
+  max-width: 260px;
+}
+
+.mobile-top-actions > .settings-button,
+.mobile-top-actions > .cart-button {
+  flex: 0 0 auto;
+}
+
+.mobile-top-actions .mobile-nav-inline-search .user-search-input-shell {
+  padding: 5px 10px;
+  min-height: 36px;
+}
+
+.mobile-top-actions .mobile-nav-inline-search .user-search-input {
+  font-size: 13px;
+}
+
+.mobile-top-actions .mobile-nav-inline-search .user-search-dropdown {
+  width: min(360px, calc(100vw - 28px));
+  max-height: 260px;
+}
+
+.mobile-top-actions.menu-right .mobile-nav-inline-search .user-search-dropdown {
+  left: auto;
+  right: 0;
+}
+
+.mobile-top-actions.menu-left .mobile-nav-inline-search .user-search-dropdown {
+  left: 0;
+  right: auto;
+}
+
 .mobile-nav-bar {
   display: none;
 }
@@ -9700,6 +9735,11 @@ body[data-theme="dark"] .friend-rank-pill.rank-mythic {
     border-radius: 0;
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
     transition: transform 0.4s ease, opacity 0.4s ease;
+  }
+
+  .mobile-top-actions .mobile-nav-inline-search {
+    min-width: 120px;
+    max-width: min(52vw, 240px);
   }
 
   .mobile-top-actions.menu-right {

@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-24 (v1.4.29)
+- Updated mobile friend-search navbar placement behavior:
+  - Search now renders inside `mobile-top-actions` (instead of a separate row below nav) when `Friend search location` is set to `Navbar`.
+  - Search placement is side-aware and now sits adjacent to the basket control:
+    - `menu-left`: appears to the right of basket.
+    - `menu-right`: appears to the left of basket.
+- Improved inline mobile navbar search layout:
+  - Added flexible sizing and non-shrinking menu/cart controls to prevent obstruction on narrow widths.
+  - Added side-aware dropdown anchoring for better alignment with selected menu side.
+
 ## 2026-02-24 (v1.4.28)
 - Fixed a Layout initialization-order regression causing a ReferenceError during app render when resolvedOwnAvatar was accessed before initialization.
 - Reordered resolvedOwnAvatar and displayNotifications setup so notification avatar mapping no longer reads an uninitialized binding.

@@ -98,7 +98,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.28";
+const VERSION = "1.4.29";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -13991,9 +13991,14 @@ function Layout() {
     };
   }
 
-  function renderUserSearchBar({ mobile = false } = {}) {
+  function renderUserSearchBar({ mobile = false, inline = false } = {}) {
     if (!isSignedIn) return html``;
-    const containerClass = mobile ? "user-search user-search-mobile" : "user-search";
+    const containerClass = [
+      mobile ? "user-search user-search-mobile" : "user-search",
+      inline ? "mobile-nav-inline-search" : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
     const rootRef = mobile ? userSearchMobileRootRef : userSearchRootRef;
     const inputRef = mobile ? userSearchMobileInputRef : userSearchDesktopInputRef;
     const rows = userSearchResults.slice(0, 30);
@@ -14316,8 +14321,14 @@ function Layout() {
                         ></span>
                       </button>
                       <${CartButton} onClick=${openCart} count=${cartCount} />
+                      ${isSignedIn && mobileFriendSearchPlacement === "navbar"
+                        ? renderUserSearchBar({ mobile: true, inline: true })
+                        : html``}
                     `
                   : html`
+                      ${isSignedIn && mobileFriendSearchPlacement === "navbar"
+                        ? renderUserSearchBar({ mobile: true, inline: true })
+                        : html``}
                       <${CartButton} onClick=${openCart} count=${cartCount} />
                       <button
                         className="settings-button mobile-menu"
@@ -14332,13 +14343,6 @@ function Layout() {
                       </button>
                     `}
               </div>
-            </div>`
-          : html``}
-        ${isMobile && isSignedIn && mobileFriendSearchPlacement === "navbar"
-          ? html`<div
-              className=${`mobile-nav-search-slot ${menuSide === "left" ? "left" : "right"} ${showMobileNav ? "hidden" : ""}`.trim()}
-            >
-              ${renderUserSearchBar({ mobile: true })}
             </div>`
           : html``}
         ${desktopStickyVisible ? html`<${DesktopStickyBar} />` : html``}
