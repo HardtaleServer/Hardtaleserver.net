@@ -4,6 +4,11 @@ import RankBadge from "./RankBadge.js";
 
 const html = htm.bind(React.createElement);
 
+function isStaffTierLabel(value = "") {
+  const key = String(value || "").trim().toLowerCase();
+  return ["staff", "operator", "developer", "administrator", "moderator", "helper"].includes(key);
+}
+
 function MobileDrawerProfilePreview({
   onClick,
   title = "Open profile preview",
@@ -25,12 +30,9 @@ function MobileDrawerProfilePreview({
   const hasDisplayedBadge =
     normalizedDisplayedBadge &&
     !["Unregistered", "Unlinked"].includes(normalizedDisplayedBadge) &&
-    normalizedDisplayedBadge.toLowerCase() !== normalizedLinkedLabel.toLowerCase();
-  const normalizedStaffLabel =
-    normalizedStaffLabelRaw &&
-    normalizedStaffLabelRaw.toLowerCase() === normalizedDisplayedBadge.toLowerCase()
-      ? "Staff"
-      : normalizedStaffLabelRaw;
+    normalizedDisplayedBadge.toLowerCase() !== normalizedLinkedLabel.toLowerCase() &&
+    !(showStaffBadge && isStaffTierLabel(normalizedDisplayedBadge));
+  const normalizedStaffLabel = normalizedStaffLabelRaw;
   const normalizedProcessingLabel = String(processingLabel || "").trim();
   return html`
     <button

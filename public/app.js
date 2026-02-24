@@ -13735,11 +13735,14 @@ function Layout() {
       true,
       normalizeOwnedRankLabel(friendHoverProfile?.selectedOwnedBadge || ""),
     );
-    const displayBadge = ownedBadge !== "Unregistered"
-      ? ownedBadge
-      : String(friendHoverProfile?.rankLabel || badge.label || "Unregistered");
     const linkedLabel = friendHoverProfile?.linked === false ? "Unlinked" : "Linked";
     const showStaffBadge = badge.className.includes("staff");
+    const resolvedStaffLabel = resolveStaffPillTitle(friendHoverProfile) || badge.label || "Staff";
+    const displayBadge = ownedBadge !== "Unregistered"
+      ? ownedBadge
+      : showStaffBadge
+      ? resolvedStaffLabel
+      : String(friendHoverProfile?.rankLabel || badge.label || "Unregistered");
     const node = html`<div
       className="forum-profile-peek-shell friend-profile-peek-shell"
       style=${{ left: `${friendHoverProfile.x}px`, top: `${friendHoverProfile.y}px` }}
@@ -13757,7 +13760,7 @@ function Layout() {
         showLinkedBadge=${friendHoverProfile?.showLinkedBadge !== false}
         displayedBadge=${displayBadge}
         showStaffBadge=${showStaffBadge}
-        staffLabel=${showStaffBadge ? "Staff" : ""}
+        staffLabel=${showStaffBadge ? resolvedStaffLabel : ""}
         staffRoleClass=${showStaffBadge ? badge.className.replace("staff", "").trim() : ""}
       />
     </div>`;
