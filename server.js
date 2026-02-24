@@ -2576,6 +2576,10 @@ function resolveShowAllOwnedRankBadgesVisible(metadata = {}) {
   return metadata?.showAllOwnedRankBadges !== false;
 }
 
+function resolveLinkedBadgeVisible(metadata = {}) {
+  return metadata?.showLinkedBadge !== false;
+}
+
 function resolveSelectedOwnedBadge(metadata = {}, ownedRank = "Unregistered") {
   const options = getOwnedDonorBadgeOptions(ownedRank);
   if (options.length === 0) return "";
@@ -4218,6 +4222,8 @@ app.get("/api/profile/title", async (req, res) => {
       selectedTitle: displayRank,
       availableTitles,
       canToggleOwnedBadges: getOwnedDonorBadgeOptions(ownedRank).length > 1,
+      canToggleLinkedBadge: true,
+      showLinkedBadge: resolveLinkedBadgeVisible(user?.publicMetadata || {}),
       showAllOwnedRankBadges: resolveShowAllOwnedRankBadgesVisible(user?.publicMetadata || {}),
       selectedOwnedBadge: resolveSelectedOwnedBadge(user?.publicMetadata || {}, ownedRank),
       ownedBadgeOptions: getOwnedDonorBadgeOptions(ownedRank),
@@ -4273,6 +4279,8 @@ app.get("/api/profile/settings", async (req, res) => {
       selectedTitle: rankInfo.displayRank,
       availableTitles: rankInfo.availableTitles,
       staffRole,
+      canToggleLinkedBadge: true,
+      showLinkedBadge: resolveLinkedBadgeVisible(user?.publicMetadata || {}),
       showAllOwnedRankBadges: resolveShowAllOwnedRankBadgesVisible(user?.publicMetadata || {}),
       selectedOwnedBadge: resolveSelectedOwnedBadge(user?.publicMetadata || {}, ownedRank),
       showStaffBadge: resolveStaffBadgeVisible(user?.publicMetadata || {}),
@@ -4325,6 +4333,26 @@ app.post("/api/profile/owned-badges", async (req, res) => {
   } catch (error) {
     console.error("Failed to update owned badge settings", error);
     return res.status(500).json({ error: "Failed to update owned badge settings" });
+  }
+});
+
+app.post("/api/profile/linked-badge", async (req, res) => {
+  try {
+    if (!(await requireMongoReady(res))) return;
+    const auth = requireCommentAuth(req, res);
+    if (!auth) return;
+    const user = await clerkClient.users.getUser(auth.userId);
+    const showLinkedBadge = req.body?.showLinkedBadge !== false;
+    await clerkClient.users.updateUserMetadata(auth.userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        showLinkedBadge,
+      },
+    });
+    return res.json({ showLinkedBadge });
+  } catch (error) {
+    console.error("Failed to update linked badge settings", error);
+    return res.status(500).json({ error: "Failed to update linked badge settings" });
   }
 });
 
@@ -7107,6 +7135,7 @@ app.get("/api/profile/public-card/:userId", async (req, res) => {
       name: getUserDisplayName(user),
       image: String(user?.imageUrl || ""),
       linked,
+      showLinkedBadge: resolveLinkedBadgeVisible(user?.publicMetadata || {}),
       ownedRank,
       displayRank: normalizeDisplayTitle(rankInfo.displayRank || ownedRank) || ownedRank,
       showAllOwnedRankBadges,

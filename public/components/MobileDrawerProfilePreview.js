@@ -12,6 +12,7 @@ function MobileDrawerProfilePreview({
   username = "",
   linkedLabel = "Unlinked",
   displayedBadge = "Unregistered",
+  showLinkedBadge = true,
   processingLabel = "",
   showStaffBadge = false,
   staffLabel = "Staff",
@@ -20,10 +21,16 @@ function MobileDrawerProfilePreview({
 }) {
   const normalizedLinkedLabel = String(linkedLabel || "Unlinked").trim() || "Unlinked";
   const normalizedDisplayedBadge = String(displayedBadge || "").trim() || "Unregistered";
+  const normalizedStaffLabelRaw = String(staffLabel || "").trim() || "Staff";
   const hasDisplayedBadge =
     normalizedDisplayedBadge &&
     !["Unregistered", "Unlinked"].includes(normalizedDisplayedBadge) &&
     normalizedDisplayedBadge.toLowerCase() !== normalizedLinkedLabel.toLowerCase();
+  const normalizedStaffLabel =
+    normalizedStaffLabelRaw &&
+    normalizedStaffLabelRaw.toLowerCase() === normalizedDisplayedBadge.toLowerCase()
+      ? "Staff"
+      : normalizedStaffLabelRaw;
   const normalizedProcessingLabel = String(processingLabel || "").trim();
   return html`
     <button
@@ -39,14 +46,14 @@ function MobileDrawerProfilePreview({
           ? html`<div className="mobile-drawer-profile-username">@${username}</div>`
           : html``}
         <div className="mobile-drawer-profile-badges">
-          <${RankBadge} label=${normalizedLinkedLabel} className="store-owned-badge" />
-          ${showStaffBadge
-            ? html`<span className=${`profile-owned-badge staff-owned-badge ${staffRoleClass}`.trim()}>
-                <span>${staffLabel}</span>
-              </span>`
-            : html``}
+          ${showLinkedBadge ? html`<${RankBadge} label=${normalizedLinkedLabel} className="store-owned-badge" />` : html``}
           ${hasDisplayedBadge
             ? html`<${RankBadge} label=${normalizedDisplayedBadge} className="store-owned-badge" />`
+            : html``}
+          ${showStaffBadge
+            ? html`<span className=${`profile-owned-badge staff-owned-badge ${staffRoleClass}`.trim()}>
+                <span>${normalizedStaffLabel}</span>
+              </span>`
             : html``}
         </div>
         ${normalizedProcessingLabel

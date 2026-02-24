@@ -98,7 +98,7 @@ const DESKTOP_STICKY_LOGO_STYLE_KEY = "hardtale-desktop-sticky-logo-style";
 const COMMENTS_TOKEN_TEMPLATE = "hardtale-api-comments";
 const UI_FLASH_KEY = "hardtale-ui-flash";
 const TOAST_SHAPE_KEY = "hardtale-toast-shape";
-const VERSION = "1.4.29";
+const VERSION = "1.4.30";
 const INK_PEN_ICON = "/Images/SVGs/ui/Ink_Pen.svg";
 const STAFF_BADGE_ICON_SVG = "/Images/SVGs/ui/ht_staff_badge.svg";
 const COPYRIGHT_ICON_SVG = "/Images/SVGs/ui/Copyright.svg";
@@ -2932,6 +2932,8 @@ function CommentThread({
           ? data.staffRolePreviewOptions
           : [],
         canToggleOwnedBadges: Boolean(data?.canToggleOwnedBadges),
+        canToggleLinkedBadge: Boolean(data?.canToggleLinkedBadge),
+        showLinkedBadge: data?.showLinkedBadge !== false,
         showAllOwnedRankBadges: data?.showAllOwnedRankBadges !== false,
         selectedOwnedBadge: String(data?.selectedOwnedBadge || ""),
         ownedBadgeOptions: Array.isArray(data?.ownedBadgeOptions)
@@ -4258,6 +4260,7 @@ function CommentThread({
                     onSelectStaffBadgeMode: updateOwnStaffBadgeMode,
                     donorSaving: profileOwnedBadgesSaving,
                     staffSaving: profileStaffBadgeSaving || profileStaffBadgeIconSaving,
+                    viewerIsAdmin: isAdmin,
                   })}`}
                 renderGroups=${() =>
                   html`${renderProfileGroupsCard(profileUser, {
@@ -6763,6 +6766,7 @@ function ForumPage({ isAdmin = false }) {
       authorOwnedRank: String(entry?.authorOwnedRank || entry?.authorRank || "Unregistered"),
       authorStaffRole: String(entry?.authorStaffRole || ""),
       authorShowStaffBadge: entry?.authorShowStaffBadge !== false,
+      authorShowLinkedBadge: entry?.authorShowLinkedBadge !== false,
       authorShowStaffBadgeIcon: entry?.authorShowStaffBadgeIcon !== false,
       authorShowStaffGradient: entry?.authorShowStaffGradient !== false,
       authorShowRankEffects: entry?.authorShowRankEffects !== false,
@@ -6802,6 +6806,7 @@ function ForumPage({ isAdmin = false }) {
         authorStaffRole: String(data?.staffRole || normalized.authorStaffRole || ""),
         authorIsStaff: Boolean(data?.isStaff || normalized.authorIsStaff),
         authorShowStaffBadge: data?.showStaffBadge !== false,
+        authorShowLinkedBadge: data?.showLinkedBadge !== false,
         authorShowStaffBadgeIcon: data?.showStaffBadgeIcon !== false,
         authorShowStaffGradient: data?.showStaffGradient !== false,
         authorShowRankEffects: data?.showRankEffects !== false,
@@ -7087,6 +7092,7 @@ function ForumPage({ isAdmin = false }) {
         name=${preview.authorName || "User"}
         username=${username}
         linkedLabel=${preview.linkedAccount ? "Linked" : "Unlinked"}
+        showLinkedBadge=${preview?.authorShowLinkedBadge !== false}
         displayedBadge=${displayBadge}
         showStaffBadge=${showStaff}
         staffLabel=${toStaffPillTitle(preview.authorStaffRole || "") || "Staff"}
@@ -7417,6 +7423,8 @@ function ForumPage({ isAdmin = false }) {
           ? data.staffRolePreviewOptions
           : [],
         canToggleOwnedBadges: Boolean(data?.canToggleOwnedBadges),
+        canToggleLinkedBadge: Boolean(data?.canToggleLinkedBadge),
+        showLinkedBadge: data?.showLinkedBadge !== false,
         showAllOwnedRankBadges: data?.showAllOwnedRankBadges !== false,
         selectedOwnedBadge: String(data?.selectedOwnedBadge || ""),
         ownedBadgeOptions: Array.isArray(data?.ownedBadgeOptions)
@@ -8209,6 +8217,7 @@ function ForumPage({ isAdmin = false }) {
             onSelectStaffBadgeMode: updateOwnForumStaffBadgeMode,
             donorSaving: forumProfileOwnedBadgesSaving,
             staffSaving: forumProfileStaffBadgeSaving || forumProfileStaffBadgeIconSaving,
+            viewerIsAdmin: isAdmin,
           })}`}
         renderGroups=${() =>
           html`${renderProfileGroupsCard(forumProfileUser, {
@@ -9730,6 +9739,8 @@ function renderOwnedRankBadges(entry, options = {}) {
     : donorBadges;
   const linkedResolved = Boolean(entry.linkedAccount);
   const linkedBadgeLabel = linkedResolved ? "Linked" : "Unlinked";
+  const showLinkedByOwner = entry?.showLinkedBadge !== false;
+  const showLinkedStatus = Boolean(showLinkedByOwner || options?.viewerIsAdmin === true);
   const hasStaffTier = Boolean(entry?.isStaffUser || entry?.staff);
   const showStaffTier = hasStaffTier && entry?.showStaffBadge !== false;
   const staffTierLabel = toStaffPillTitle(entry?.staffRolePreview || entry?.staffRole || entry?.authorStaffRole || "") || "Staff";
@@ -9743,6 +9754,10 @@ function renderOwnedRankBadges(entry, options = {}) {
     Boolean(entry?.isOwn) &&
     Boolean(entry?.canToggleStaffBadge) &&
     typeof options?.onSelectStaffBadgeMode === "function";
+  const canManageLinkedBadge =
+    Boolean(entry?.isOwn) &&
+    Boolean(entry?.canToggleLinkedBadge) &&
+    typeof options?.onSelectLinkedBadgeMode === "function";
   const donorModeValue =
     entry?.showAllOwnedRankBadges === false
       ? String(entry?.selectedOwnedBadge || "")
@@ -9754,15 +9769,17 @@ function renderOwnedRankBadges(entry, options = {}) {
       ? "label"
       : "icon";
   return html`<div className="profile-card-badges-stack">
-    <div className="profile-card-badges-block">
-      <div className="profile-card-badges-title">Link Status</div>
-      <div className="profile-card-badges-row">
-        <span className=${`profile-owned-badge rank-${linkedBadgeLabel.toLowerCase()}`.trim()}>
-          ${renderLinkedStatusIcon(linkedResolved)}
-          <span>${linkedBadgeLabel}</span>
-        </span>
-      </div>
-    </div>
+    ${showLinkedStatus
+      ? html`<div className="profile-card-badges-block">
+          <div className="profile-card-badges-title">Link Status</div>
+          <div className="profile-card-badges-row">
+            <span className=${`profile-owned-badge rank-${linkedBadgeLabel.toLowerCase()}`.trim()}>
+              ${renderLinkedStatusIcon(linkedResolved)}
+              <span>${linkedBadgeLabel}</span>
+            </span>
+          </div>
+        </div>`
+      : html``}
     <div className="profile-card-badges-block">
       <div className="profile-card-badges-title">Donor Badges</div>
       ${donorBadges.length > 0
@@ -9814,9 +9831,25 @@ function renderOwnedRankBadges(entry, options = {}) {
           </div>`
         : html`<div className="muted profile-card-badges-empty">No groups assigned yet.</div>`}
     </div>
-    ${entry?.isOwn && (canManageDonorBadge || canManageStaffBadge)
+    ${entry?.isOwn && (canManageDonorBadge || canManageStaffBadge || canManageLinkedBadge)
       ? html`<div className="profile-card-badges-block">
           <div className="profile-card-badges-title">Badge Display Tabs</div>
+          ${canManageLinkedBadge
+            ? html`<details className="profile-badge-dropdown">
+                <summary>Link Tab</summary>
+                <label className="profile-card-title-picker">
+                  <span className="muted">Linked badge visibility</span>
+                  <select
+                    value=${entry?.showLinkedBadge === false ? "hidden" : "shown"}
+                    disabled=${options?.linkedSaving === true}
+                    onChange=${(event) => options.onSelectLinkedBadgeMode(event.target.value)}
+                  >
+                    <option value="shown">Shown</option>
+                    <option value="hidden">Hidden</option>
+                  </select>
+                </label>
+              </details>`
+            : html``}
           ${canManageDonorBadge
             ? html`<details className="profile-badge-dropdown">
                 <summary>Donor Tab</summary>
@@ -10081,7 +10114,13 @@ function HomePage({
                 <div className="home-hero-friends-head">
                   <strong>Friends</strong>
                   <div className="home-hero-friends-actions">
-                    <span className="home-hero-friends-scroll-hint muted">Scroll</span>
+                    <button
+                      type="button"
+                      className="ghost-btn home-hero-friends-more"
+                      onClick=${() => onOpenFriendsModal && onOpenFriendsModal()}
+                    >
+                      View more
+                    </button>
                   </div>
                 </div>
                 ${desktopFriends.length === 0
@@ -10117,13 +10156,6 @@ function HomePage({
                         },
                       )}
                     </div>`}
-                <button
-                  type="button"
-                  className="ghost-btn home-hero-friends-more"
-                  onClick=${() => onOpenFriendsModal && onOpenFriendsModal()}
-                >
-                  View more
-                </button>
               </section>`
             : html``}
           <div className="join-row">
@@ -10159,9 +10191,11 @@ function HomePage({
           <div className="ip-row">
             <div className="ip">${SERVER_IP}</div>
             <${CopyAction}
-              className="button primary copy-ip-btn hero-action-btn"
-              label="Copy IP"
+              className="copy-ip-inline"
+              mode="icon"
+              label="IP"
               valueToCopy=${SERVER_IP}
+              title="Copy IP"
             />
           </div>
           <div className="server-pill">
@@ -11205,6 +11239,7 @@ function Layout() {
   const [notificationProfileLoading, setNotificationProfileLoading] = useState(false);
   const [notificationDeletingId, setNotificationDeletingId] = useState("");
   const [notificationProfileOwnedBadgesSaving, setNotificationProfileOwnedBadgesSaving] = useState(false);
+  const [notificationProfileLinkedBadgeSaving, setNotificationProfileLinkedBadgeSaving] = useState(false);
   const [notificationProfileStaffBadgeSaving, setNotificationProfileStaffBadgeSaving] = useState(false);
   const [notificationProfileStaffBadgeIconSaving, setNotificationProfileStaffBadgeIconSaving] = useState(false);
   const [privateMessageOpen, setPrivateMessageOpen] = useState(false);
@@ -12713,6 +12748,19 @@ function Layout() {
     }
   }
 
+  async function loadLayoutPublicProfileCard(targetUserId) {
+    const safeUserId = String(targetUserId || "").trim();
+    if (!safeUserId) return null;
+    try {
+      const response = await fetch(`/api/profile/public-card/${encodeURIComponent(safeUserId)}`);
+      if (!response.ok) throw new Error("Failed");
+      const data = await response.json().catch(() => ({}));
+      return data && typeof data === "object" ? data : null;
+    } catch {
+      return null;
+    }
+  }
+
   async function loadOwnProfileTitleSettings() {
     try {
       const response = await apiFetchWithToken(getToken, true, "/api/profile/title");
@@ -12727,6 +12775,8 @@ function Layout() {
           : [],
         ownedRank: normalizeOwnedRankLabel(data?.ownedRank || "Unregistered"),
         canToggleOwnedBadges: Boolean(data?.canToggleOwnedBadges),
+        canToggleLinkedBadge: Boolean(data?.canToggleLinkedBadge),
+        showLinkedBadge: data?.showLinkedBadge !== false,
         showAllOwnedRankBadges: data?.showAllOwnedRankBadges !== false,
         selectedOwnedBadge: normalizeOwnedRankLabel(data?.selectedOwnedBadge || ""),
         ownedBadgeOptions: Array.isArray(data?.ownedBadgeOptions) ? data.ownedBadgeOptions : [],
@@ -12761,6 +12811,8 @@ function Layout() {
     let staffRolePreviewOptions = [];
     let ownedRank = normalizeOwnedRankLabel(item.authorOwnedRank || rankLabel);
     let canToggleOwnedBadges = false;
+    let canToggleLinkedBadge = false;
+    let showLinkedBadge = item?.authorShowLinkedBadge !== false;
     let showAllOwnedRankBadges = true;
     let selectedOwnedBadge = "";
     let ownedBadgeOptions = buildOwnedRankBadges(ownedRank, false, { showAllOwnedRankBadges: true });
@@ -12779,6 +12831,8 @@ function Layout() {
           : [];
         ownedRank = normalizeOwnedRankLabel(settings.ownedRank || ownedRank);
         canToggleOwnedBadges = Boolean(settings.canToggleOwnedBadges);
+        canToggleLinkedBadge = Boolean(settings.canToggleLinkedBadge);
+        showLinkedBadge = settings.showLinkedBadge !== false;
         showAllOwnedRankBadges = settings.showAllOwnedRankBadges !== false;
         selectedOwnedBadge = normalizeOwnedRankLabel(settings.selectedOwnedBadge || "");
         ownedBadgeOptions = Array.isArray(settings.ownedBadgeOptions)
@@ -12789,12 +12843,16 @@ function Layout() {
         showStaffBadgeIcon = settings.showStaffBadgeIcon !== false;
       }
     }
-    const [linkStatus, achievements, groups, forumActivity] = await Promise.all([
+    const [linkStatus, achievements, groups, forumActivity, publicCard] = await Promise.all([
       loadLayoutProfileLinkStatus(authorUserId),
       loadLayoutProfileAchievements(authorUserId),
       loadLayoutProfileGroups(authorUserId),
       loadLayoutProfileForumActivity(authorUserId),
+      loadLayoutPublicProfileCard(authorUserId),
     ]);
+    if (!isOwn && publicCard) {
+      showLinkedBadge = publicCard?.showLinkedBadge !== false;
+    }
     setNotificationProfileInfoTab("badges");
     setNotificationProfileUser({
       name,
@@ -12805,6 +12863,8 @@ function Layout() {
       rankLabel,
       ownedRank,
       canToggleOwnedBadges,
+      canToggleLinkedBadge,
+      showLinkedBadge,
       showAllOwnedRankBadges,
       selectedOwnedBadge,
       ownedBadgeOptions,
@@ -13026,6 +13086,42 @@ function Layout() {
       return false;
     } finally {
       setNotificationProfileOwnedBadgesSaving(false);
+    }
+  }
+
+  async function updateOwnNotificationLinkedBadgeMode(nextMode) {
+    if (!notificationProfileUser?.isOwn || !notificationProfileUser?.canToggleLinkedBadge || notificationProfileLinkedBadgeSaving) return false;
+    const mode = String(nextMode || "").trim().toLowerCase();
+    const showLinkedBadge = mode !== "hidden";
+    setNotificationProfileLinkedBadgeSaving(true);
+    try {
+      const response = await apiFetchWithToken(getToken, true, "/api/profile/linked-badge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ showLinkedBadge }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || "Failed to save linked badge visibility.");
+      }
+      const data = await response.json().catch(() => ({}));
+      const nextVisible = data?.showLinkedBadge !== false;
+      setNotificationProfileUser((prev) => (prev ? { ...prev, showLinkedBadge: nextVisible } : prev));
+      emitAppToast({
+        kind: "success",
+        title: "Linked Badge Updated",
+        message: nextVisible ? "Linked badge is now shown." : "Linked badge is now hidden.",
+      });
+      return true;
+    } catch (error) {
+      emitAppToast({
+        kind: "error",
+        title: "Linked Badge Update Failed",
+        message: error?.message || "Unable to update linked badge visibility.",
+      });
+      return false;
+    } finally {
+      setNotificationProfileLinkedBadgeSaving(false);
     }
   }
 
@@ -13544,6 +13640,8 @@ function Layout() {
       ownedRank: String(entry?.ownedRank || entry?.authorOwnedRank || entry?.rankLabel || "Unregistered"),
       staffRole: String(entry?.staffRole || entry?.authorStaffRole || ""),
       isStaffUser: Boolean(entry?.isStaffUser || entry?.authorIsStaff || isStaffLabel(entry?.staffRole || "")),
+      linked: entry?.linked !== false,
+      showLinkedBadge: entry?.showLinkedBadge !== false && entry?.authorShowLinkedBadge !== false,
     };
   }
 
@@ -13620,6 +13718,16 @@ function Layout() {
   function renderFriendHoverProfileCard() {
     if (!friendHoverProfile) return html``;
     const badge = resolveFriendBadge(friendHoverProfile);
+    const ownedBadge = resolvePrimaryOwnedBadge(
+      normalizeOwnedRankLabel(friendHoverProfile?.ownedRank || friendHoverProfile?.rankLabel || badge.label || "Unregistered"),
+      true,
+      normalizeOwnedRankLabel(friendHoverProfile?.selectedOwnedBadge || ""),
+    );
+    const displayBadge = ownedBadge !== "Unregistered"
+      ? ownedBadge
+      : String(friendHoverProfile?.rankLabel || badge.label || "Unregistered");
+    const linkedLabel = friendHoverProfile?.linked === false ? "Unlinked" : "Linked";
+    const showStaffBadge = badge.className.includes("staff");
     const node = html`<div
       className="forum-profile-peek-shell friend-profile-peek-shell"
       style=${{ left: `${friendHoverProfile.x}px`, top: `${friendHoverProfile.y}px` }}
@@ -13633,11 +13741,12 @@ function Layout() {
         avatar=${friendHoverProfile.image || "/assets/HardTale_H_GreyScale.png"}
         name=${friendHoverProfile.name || "User"}
         username=${friendHoverProfile.username || ""}
-        linkedLabel="Linked"
-        displayedBadge=${badge.label}
-        showStaffBadge=${badge.className.includes("staff")}
-        staffLabel=${badge.label}
-        staffRoleClass=${badge.className.includes("staff") ? badge.className.replace("staff", "").trim() : ""}
+        linkedLabel=${linkedLabel}
+        showLinkedBadge=${friendHoverProfile?.showLinkedBadge !== false}
+        displayedBadge=${displayBadge}
+        showStaffBadge=${showStaffBadge}
+        staffLabel=${showStaffBadge ? "Staff" : ""}
+        staffRoleClass=${showStaffBadge ? badge.className.replace("staff", "").trim() : ""}
       />
     </div>`;
     if (typeof document === "undefined" || !document.body) return node;
@@ -14884,10 +14993,13 @@ function Layout() {
                   html`${renderOwnedRankBadges(notificationProfileUser, {
                     onSelectDonorBadge: updateOwnNotificationDonorBadgeSelection,
                     onSelectStaffBadgeMode: updateOwnNotificationStaffBadgeMode,
+                    onSelectLinkedBadgeMode: updateOwnNotificationLinkedBadgeMode,
                     donorSaving: notificationProfileOwnedBadgesSaving,
+                    linkedSaving: notificationProfileLinkedBadgeSaving,
                     staffSaving:
                       notificationProfileStaffBadgeSaving ||
                       notificationProfileStaffBadgeIconSaving,
+                    viewerIsAdmin: isAdmin,
                   })}`}
                 renderGroups=${() =>
                   html`${renderProfileGroupsCard(notificationProfileUser, {

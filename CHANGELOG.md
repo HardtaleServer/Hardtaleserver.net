@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-24 (v1.4.30)
+- Updated Home hero social/IP presentation:
+  - Removed the `Scroll` hint from the Friends block.
+  - Moved `View more` into the Friends header actions.
+  - Replaced the large `Copy IP` button with a compact icon-only copy action next to the server IP.
+- Fixed profile preview badge duplication/order for staff users:
+  - Profile preview badges now render in stable order (`Linked/Unlinked` -> rank badge -> staff badge).
+  - Prevented duplicate staff/rank labels (e.g. `Administrator` twice) by normalizing staff-label display in preview cards.
+- Added linked-badge visibility controls:
+  - New API endpoint `POST /api/profile/linked-badge`.
+  - Added `Link Tab` in profile badge settings so users can show/hide their linked badge.
+  - Added admin-view override so admins still see link status on profile badge cards even when hidden by user preference.
+
 ## 2026-02-24 (v1.4.29)
 - Updated mobile friend-search navbar placement behavior:
   - Search now renders inside `mobile-top-actions` (instead of a separate row below nav) when `Friend search location` is set to `Navbar`.
