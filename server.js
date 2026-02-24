@@ -29,6 +29,10 @@ const PORT = process.env.PORT || 3000;
 const HOST = String(process.env.HOST || "0.0.0.0").trim() || "0.0.0.0";
 const WAIT_FOR_MONGO_BEFORE_LISTEN =
   String(process.env.WAIT_FOR_MONGO_BEFORE_LISTEN || "false").toLowerCase() === "true";
+const STARTUP_MONGO_WAIT_TIMEOUT_MS = Math.max(
+  0,
+  Number.parseInt(String(process.env.STARTUP_MONGO_WAIT_TIMEOUT_MS || "30000"), 10) || 30000,
+);
 const TRUST_PROXY_ENABLED = String(process.env.TRUST_PROXY || "true").toLowerCase() !== "false";
 if (TRUST_PROXY_ENABLED) {
   app.set("trust proxy", 1);
@@ -4644,7 +4648,15 @@ app.post("/api/profile/title", async (req, res) => {
 
 app.get("/api/news", async (req, res) => {
   try {
-    if (!(await requireMongoReady(res))) return;
+    if (!isMongoReady()) {
+      connectMongo().catch(() => {});
+      return res.json({
+        news: [],
+        degraded: true,
+        detail: "MongoDB is not ready; returning empty news list.",
+        mongo: getMongoStatusSnapshot(),
+      });
+    }
     const rawNews = await newsCollection
       .find({ isDeleted: false })
       .sort({ createdAt: -1 })
@@ -4659,7 +4671,15 @@ app.get("/api/news", async (req, res) => {
 
 app.get("/api/notifications", async (req, res) => {
   try {
-    if (!(await requireMongoReady(res))) return;
+    if (!isMongoReady()) {
+      connectMongo().catch(() => {});
+      return res.json({
+        notifications: [],
+        degraded: true,
+        detail: "MongoDB is not ready; returning empty notifications list.",
+        mongo: getMongoStatusSnapshot(),
+      });
+    }
     const auth = getAuth(req);
     const notifications = await loadVisibleNotificationsForUser(auth?.userId);
     return res.json({ notifications });
@@ -8249,18 +8269,31 @@ function logStartupBanner() {
 
 async function startServer() {
   if (WAIT_FOR_MONGO_BEFORE_LISTEN && MONGO_URI) {
-    console.log("[startup] WAIT_FOR_MONGO_BEFORE_LISTEN=true, blocking listen until MongoDB is ready...");
+    console.log(
+      `[startup] WAIT_FOR_MONGO_BEFORE_LISTEN=true, blocking listen until MongoDB is ready ` +
+        `(timeout=${STARTUP_MONGO_WAIT_TIMEOUT_MS}ms)...`,
+    );
+    const startedAt = Date.now();
     while (!isMongoReady()) {
       try {
         await connectMongo();
       } catch {
         // connectMongo handles logging + backoff scheduling.
       }
+      if (Date.now() - startedAt >= STARTUP_MONGO_WAIT_TIMEOUT_MS) {
+        console.warn(
+          `[startup] MongoDB still not ready after ${STARTUP_MONGO_WAIT_TIMEOUT_MS}ms. ` +
+            "Starting HTTP listener in degraded mode so /health and API error responses remain available.",
+        );
+        break;
+      }
       if (!isMongoReady()) {
         await sleep(Math.min(mongoReconnectDelayMs, 5000));
       }
     }
-    console.log("[startup] MongoDB is ready, starting HTTP listener.");
+    if (isMongoReady()) {
+      console.log("[startup] MongoDB is ready, starting HTTP listener.");
+    }
   }
 
   app.listen(PORT, HOST, () => {

@@ -7,13 +7,19 @@ function ProfileInfoTabs({
   activeTab = "badges",
   onTabChange,
   renderBadges,
-  renderGroups,
+  renderStaff,
+  renderGuilds,
   renderAchievements,
   renderForumActivity,
+  showStaffTab = false,
 }) {
+  const guildsRenderer = typeof renderGuilds === "function" ? renderGuilds : null;
   let content = typeof renderBadges === "function" ? renderBadges() : null;
-  if (activeTab === "groups") {
-    content = typeof renderGroups === "function" ? renderGroups() : null;
+  if (activeTab === "staff" && showStaffTab) {
+    content = typeof renderStaff === "function" ? renderStaff() : null;
+  }
+  if (activeTab === "guilds") {
+    content = guildsRenderer ? guildsRenderer() : null;
   }
   if (activeTab === "achievements") {
     content = typeof renderAchievements === "function" ? renderAchievements() : null;
@@ -30,12 +36,21 @@ function ProfileInfoTabs({
       >
         Badges
       </button>
+      ${showStaffTab
+        ? html`<button
+            type="button"
+            className=${`profile-card-subtab ${activeTab === "staff" ? "active" : ""}`.trim()}
+            onClick=${() => onTabChange && onTabChange("staff")}
+          >
+            Staff
+          </button>`
+        : html``}
       <button
         type="button"
-        className=${`profile-card-subtab ${activeTab === "groups" ? "active" : ""}`.trim()}
-        onClick=${() => onTabChange && onTabChange("groups")}
+        className=${`profile-card-subtab ${activeTab === "guilds" ? "active" : ""}`.trim()}
+        onClick=${() => onTabChange && onTabChange("guilds")}
       >
-        Groups
+        Guilds
       </button>
       <button
         type="button"

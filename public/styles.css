@@ -9094,6 +9094,14 @@ body[data-theme="dark"] .page.nav-transparent .drawer-link {
 }
 
 .friends-row-rank {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--stroke) 72%, transparent);
+  background: color-mix(in srgb, var(--bg-soft) 76%, transparent);
   font-weight: 700;
 }
 

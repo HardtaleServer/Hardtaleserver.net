@@ -1555,19 +1555,29 @@ function normalizeProfileGroupLabel(value = "") {
   return String(value || "").trim().replace(/\s+/g, " ").slice(0, 40);
 }
 
-function deriveProfileGroups(entry) {
+function deriveProfileGuilds(entry) {
   const incoming = Array.isArray(entry?.groups) ? entry.groups : [];
   const groups = [];
   const seen = new Set();
-  function add(label) {
-    const value = normalizeProfileGroupLabel(label);
-    if (!value) return;
+  for (const item of incoming) {
+    const value = normalizeProfileGroupLabel(item);
+    if (!value) continue;
     const key = value.toLowerCase();
-    if (seen.has(key)) return;
+    if (seen.has(key)) continue;
     seen.add(key);
     groups.push(value);
   }
-  for (const item of incoming) add(item);
+  return groups;
+}
+
+function deriveProfileGroups(entry) {
+  const groups = deriveProfileGuilds(entry);
+  function add(label) {
+    const value = normalizeProfileGroupLabel(label);
+    if (!value) return;
+    if (groups.some((item) => item.toLowerCase() === value.toLowerCase())) return;
+    groups.push(value);
+  }
   if (groups.length === 0) {
     if (entry?.isStaffUser || entry?.staff) add("Staff");
     const staffRoleLabel = toStaffPillTitle(entry?.staffRole || entry?.authorStaffRole || "");
@@ -4254,19 +4264,29 @@ function CommentThread({
               <${ProfileInfoTabs}
                 activeTab=${profileInfoTab}
                 onTabChange=${setProfileInfoTab}
+                showStaffTab=${Boolean(
+                  profileUser?.isStaffUser ||
+                    profileUser?.staff ||
+                    profileUser?.canPreviewStaffRole ||
+                    profileUser?.canToggleStaffBadge ||
+                    profileUser?.canToggleStaffGradient,
+                )}
                 renderBadges=${() =>
                   html`${renderOwnedRankBadges(profileUser, {
                     onSelectDonorBadge: updateOwnDonorBadgeSelection,
-                    onSelectStaffBadgeMode: updateOwnStaffBadgeMode,
                     donorSaving: profileOwnedBadgesSaving,
-                    staffSaving: profileStaffBadgeSaving || profileStaffBadgeIconSaving,
                     viewerIsAdmin: isAdmin,
                   })}`}
-                renderGroups=${() =>
-                  html`${renderProfileGroupsCard(profileUser, {
+                renderStaff=${() =>
+                  html`${renderProfileStaffCard(profileUser, {
                     isSaving: profileTitleSaving,
                     onStaffRoleChange: updateOwnStaffRolePreview,
+                    onSelectStaffBadgeMode: updateOwnStaffBadgeMode,
+                    onToggleStaffGradient: updateOwnStaffGradientVisibility,
+                    staffSaving: profileStaffBadgeSaving || profileStaffBadgeIconSaving,
+                    staffGradientSaving: profileStaffGradientSaving,
                   })}`}
+                renderGuilds=${() => html`${renderProfileGuildsCard(profileUser)}`}
                 renderAchievements=${() =>
                   html`<${ProfileAchievementsPanel}
                     achievements=${profileUser?.achievements || []}
@@ -4331,19 +4351,6 @@ function CommentThread({
                       onChange=${(event) => updateOwnAvatarVfxVisibility(event.target.checked)}
                     />
                     <span>Enable avatar effects</span>
-                  </label>`
-                : html``}
-              ${profileUser.isOwn &&
-              profileUser.canToggleStaffGradient &&
-              isStaffLabel(profileUser.rankLabel || "")
-                ? html`<label className="profile-card-toggle">
-                    <input
-                      type="checkbox"
-                      checked=${profileUser.showStaffGradient !== false}
-                      disabled=${profileStaffGradientSaving}
-                      onChange=${(event) => updateOwnStaffGradientVisibility(event.target.checked)}
-                    />
-                    <span>Enable staff gradient animation</span>
                   </label>`
                 : html``}
               ${profileTitleStatus && profileUser.isOwn
@@ -8211,19 +8218,29 @@ function ForumPage({ isAdmin = false }) {
       <${ProfileInfoTabs}
         activeTab=${forumProfileInfoTab}
         onTabChange=${setForumProfileInfoTab}
+        showStaffTab=${Boolean(
+          forumProfileUser?.isStaffUser ||
+            forumProfileUser?.staff ||
+            forumProfileUser?.canPreviewStaffRole ||
+            forumProfileUser?.canToggleStaffBadge ||
+            forumProfileUser?.canToggleStaffGradient,
+        )}
         renderBadges=${() =>
           html`${renderOwnedRankBadges(forumProfileUser, {
             onSelectDonorBadge: updateOwnForumDonorBadgeSelection,
-            onSelectStaffBadgeMode: updateOwnForumStaffBadgeMode,
             donorSaving: forumProfileOwnedBadgesSaving,
-            staffSaving: forumProfileStaffBadgeSaving || forumProfileStaffBadgeIconSaving,
             viewerIsAdmin: isAdmin,
           })}`}
-        renderGroups=${() =>
-          html`${renderProfileGroupsCard(forumProfileUser, {
+        renderStaff=${() =>
+          html`${renderProfileStaffCard(forumProfileUser, {
             isSaving: forumProfileTitleSaving,
             onStaffRoleChange: updateOwnForumStaffRolePreview,
+            onSelectStaffBadgeMode: updateOwnForumStaffBadgeMode,
+            onToggleStaffGradient: updateOwnForumStaffGradientVisibility,
+            staffSaving: forumProfileStaffBadgeSaving || forumProfileStaffBadgeIconSaving,
+            staffGradientSaving: forumProfileStaffGradientSaving,
           })}`}
+        renderGuilds=${() => html`${renderProfileGuildsCard(forumProfileUser)}`}
         renderAchievements=${() =>
           html`<${ProfileAchievementsPanel}
             achievements=${forumProfileUser?.achievements || []}
@@ -8288,19 +8305,6 @@ function ForumPage({ isAdmin = false }) {
               onChange=${(event) => updateOwnForumAvatarVfxVisibility(event.target.checked)}
             />
             <span>Enable avatar effects</span>
-          </label>`
-        : html``}
-      ${forumProfileUser.isOwn &&
-      forumProfileUser.canToggleStaffGradient &&
-      isStaffLabel(forumProfileUser.rankLabel || "")
-        ? html`<label className="profile-card-toggle">
-            <input
-              type="checkbox"
-              checked=${forumProfileUser.showStaffGradient !== false}
-              disabled=${forumProfileStaffGradientSaving}
-              onChange=${(event) => updateOwnForumStaffGradientVisibility(event.target.checked)}
-            />
-            <span>Enable staff gradient animation</span>
           </label>`
         : html``}
       ${forumProfileTitleStatus && forumProfileUser.isOwn
@@ -9741,19 +9745,10 @@ function renderOwnedRankBadges(entry, options = {}) {
   const linkedBadgeLabel = linkedResolved ? "Linked" : "Unlinked";
   const showLinkedByOwner = entry?.showLinkedBadge !== false;
   const showLinkedStatus = Boolean(showLinkedByOwner || options?.viewerIsAdmin === true);
-  const hasStaffTier = Boolean(entry?.isStaffUser || entry?.staff);
-  const showStaffTier = hasStaffTier && entry?.showStaffBadge !== false;
-  const staffTierLabel = toStaffPillTitle(entry?.staffRolePreview || entry?.staffRole || entry?.authorStaffRole || "") || "Staff";
-  const staffRoleClass = resolveStaffRoleClass(entry);
-  const groups = deriveProfileGroups(entry);
   const canManageDonorBadge =
     Boolean(entry?.isOwn) &&
     Boolean(entry?.canToggleOwnedBadges) &&
     typeof options?.onSelectDonorBadge === "function";
-  const canManageStaffBadge =
-    Boolean(entry?.isOwn) &&
-    Boolean(entry?.canToggleStaffBadge) &&
-    typeof options?.onSelectStaffBadgeMode === "function";
   const canManageLinkedBadge =
     Boolean(entry?.isOwn) &&
     Boolean(entry?.canToggleLinkedBadge) &&
@@ -9762,12 +9757,6 @@ function renderOwnedRankBadges(entry, options = {}) {
     entry?.showAllOwnedRankBadges === false
       ? String(entry?.selectedOwnedBadge || "")
       : "__all__";
-  const staffModeValue =
-    entry?.showStaffBadge === false
-      ? "hidden"
-      : entry?.showStaffBadgeIcon === false
-      ? "label"
-      : "icon";
   return html`<div className="profile-card-badges-stack">
     ${showLinkedStatus
       ? html`<div className="profile-card-badges-block">
@@ -9808,30 +9797,7 @@ function renderOwnedRankBadges(entry, options = {}) {
           </div>`
         : html`<div className="muted profile-card-badges-empty">No donor badges yet.</div>`}
     </div>
-    ${hasStaffTier
-      ? html`<div className="profile-card-badges-block">
-          <div className="profile-card-badges-title">Staff Tier</div>
-          ${showStaffTier
-            ? html`<div className="profile-card-badges-row">
-                <span className=${`profile-owned-badge staff-owned-badge ${staffRoleClass}`.trim()}>
-                  ${entry?.showStaffBadgeIcon === false
-                    ? html``
-                    : html`<span className="rank-icon">${renderRankIcon("staff")}</span>`}
-                  <span>${staffTierLabel}</span>
-                </span>
-              </div>`
-            : html`<div className="muted profile-card-badges-empty">Staff tier badge hidden.</div>`}
-        </div>`
-      : html``}
-    <div className="profile-card-badges-block">
-      <div className="profile-card-badges-title">Groups / Guilds / Clans</div>
-      ${groups.length > 0
-        ? html`<div className="profile-card-badges-row profile-groups-row">
-            ${groups.map((group) => html`<span className="profile-group-pill">${group}</span>`)}
-          </div>`
-        : html`<div className="muted profile-card-badges-empty">No groups assigned yet.</div>`}
-    </div>
-    ${entry?.isOwn && (canManageDonorBadge || canManageStaffBadge || canManageLinkedBadge)
+    ${entry?.isOwn && (canManageDonorBadge || canManageLinkedBadge)
       ? html`<div className="profile-card-badges-block">
           <div className="profile-card-badges-title">Badge Display Tabs</div>
           ${canManageLinkedBadge
@@ -9876,23 +9842,6 @@ function renderOwnedRankBadges(entry, options = {}) {
                 </label>
               </details>`
             : html``}
-          ${canManageStaffBadge
-            ? html`<details className="profile-badge-dropdown">
-                <summary>Staff Tab</summary>
-                <label className="profile-card-title-picker">
-                  <span className="muted">Staff badge mode</span>
-                  <select
-                    value=${staffModeValue}
-                    disabled=${options?.staffSaving === true}
-                    onChange=${(event) => options.onSelectStaffBadgeMode(event.target.value)}
-                  >
-                    <option value="icon">Icon Staff</option>
-                    <option value="label">Text Staff</option>
-                    <option value="hidden">Hidden</option>
-                  </select>
-                </label>
-              </details>`
-            : html``}
         </div>`
       : html``}
     <${ProfileAchievementsCard} achievements=${entry?.achievements || entry?.profileAchievements || []} />
@@ -9911,35 +9860,98 @@ function renderProfileRanksCard(entry) {
   </div>`;
 }
 
-function renderProfileGroupsCard(entry, options = {}) {
+function renderProfileGuildsCard(entry) {
+  const groups = deriveProfileGuilds(entry);
+  return html`<div className="profile-card-badges-block">
+    <div className="profile-card-badges-title">Guilds</div>
+    ${groups.length > 0
+      ? html`<div className="profile-card-badges-row profile-groups-row">
+          ${groups.map((group) => html`<span className="profile-group-pill">${group}</span>`)}
+        </div>`
+      : html`<div className="muted profile-card-badges-empty">No guilds assigned yet.</div>`}
+  </div>`;
+}
+
+function renderProfileStaffCard(entry, options = {}) {
   const canManageStaffGroup =
     Boolean(entry?.isOwn) &&
     Boolean(entry?.canPreviewStaffRole) &&
     Array.isArray(entry?.staffRolePreviewOptions) &&
     entry.staffRolePreviewOptions.length > 0 &&
     typeof options?.onStaffRoleChange === "function";
-  const groups = deriveProfileGroups(entry);
-  return html`<div className="profile-card-badges-block">
-    <div className="profile-card-badges-title">Groups</div>
-    ${groups.length > 0
-      ? html`<div className="profile-card-badges-row profile-groups-row">
-          ${groups.map((group) => html`<span className="profile-group-pill">${group}</span>`)}
-        </div>`
-      : html`<div className="muted profile-card-badges-empty">No groups assigned yet.</div>`}
-    ${canManageStaffGroup
-      ? html`<label className="profile-card-title-picker profile-groups-picker">
-          <span className="muted">Staff tier</span>
-          <select
-            value=${entry?.staffRolePreview || entry?.staffRole || ""}
-            disabled=${options?.isSaving === true}
-            onChange=${(event) => options.onStaffRoleChange(event.target.value)}
-          >
-            ${entry.staffRolePreviewOptions.map((role) => html`<option value=${role}>
-              ${toStaffPillTitle(role) || role}
-            </option>`)}
-          </select>
-        </label>`
-      : html``}
+  const canManageStaffBadge =
+    Boolean(entry?.isOwn) &&
+    Boolean(entry?.canToggleStaffBadge) &&
+    typeof options?.onSelectStaffBadgeMode === "function";
+  const canManageStaffGradient =
+    Boolean(entry?.isOwn) &&
+    Boolean(entry?.canToggleStaffGradient) &&
+    typeof options?.onToggleStaffGradient === "function";
+  const hasStaffTier = Boolean(entry?.isStaffUser || entry?.staff || canManageStaffGroup || canManageStaffBadge);
+  const showStaffTier = hasStaffTier && entry?.showStaffBadge !== false;
+  const staffTierLabel = toStaffPillTitle(entry?.staffRolePreview || entry?.staffRole || entry?.authorStaffRole || "") || "Staff";
+  const staffRoleClass = resolveStaffRoleClass(entry);
+  const staffModeValue =
+    entry?.showStaffBadge === false
+      ? "hidden"
+      : entry?.showStaffBadgeIcon === false
+      ? "label"
+      : "icon";
+  return html`<div className="profile-card-badges-stack">
+    <div className="profile-card-badges-block">
+      <div className="profile-card-badges-title">Staff Tier</div>
+      ${hasStaffTier
+        ? showStaffTier
+          ? html`<div className="profile-card-badges-row">
+              <span className=${`profile-owned-badge staff-owned-badge ${staffRoleClass}`.trim()}>
+                ${entry?.showStaffBadgeIcon === false
+                  ? html``
+                  : html`<span className="rank-icon">${renderRankIcon("staff")}</span>`}
+                <span>${staffTierLabel}</span>
+              </span>
+            </div>`
+          : html`<div className="muted profile-card-badges-empty">Staff tier badge hidden.</div>`
+        : html`<div className="muted profile-card-badges-empty">Staff controls are available to staff accounts only.</div>`}
+      ${canManageStaffGroup
+        ? html`<label className="profile-card-title-picker profile-groups-picker">
+            <span className="muted">Staff tier</span>
+            <select
+              value=${entry?.staffRolePreview || entry?.staffRole || ""}
+              disabled=${options?.isSaving === true}
+              onChange=${(event) => options.onStaffRoleChange(event.target.value)}
+            >
+              ${entry.staffRolePreviewOptions.map((role) => html`<option value=${role}>
+                ${toStaffPillTitle(role) || role}
+              </option>`)}
+            </select>
+          </label>`
+        : html``}
+      ${canManageStaffBadge
+        ? html`<label className="profile-card-title-picker">
+            <span className="muted">Staff badge mode</span>
+            <select
+              value=${staffModeValue}
+              disabled=${options?.staffSaving === true}
+              onChange=${(event) => options.onSelectStaffBadgeMode(event.target.value)}
+            >
+              <option value="icon">Icon Staff</option>
+              <option value="label">Text Staff</option>
+              <option value="hidden">Hidden</option>
+            </select>
+          </label>`
+        : html``}
+      ${canManageStaffGradient && isStaffLabel(entry?.rankLabel || "")
+        ? html`<label className="profile-card-toggle">
+            <input
+              type="checkbox"
+              checked=${entry?.showStaffGradient !== false}
+              disabled=${options?.staffGradientSaving === true}
+              onChange=${(event) => options.onToggleStaffGradient(event.target.checked)}
+            />
+            <span>Enable staff gradient animation</span>
+          </label>`
+        : html``}
+    </div>
   </div>`;
 }
 
@@ -14989,23 +15001,31 @@ function Layout() {
               <${ProfileInfoTabs}
                 activeTab=${notificationProfileInfoTab}
                 onTabChange=${setNotificationProfileInfoTab}
+                showStaffTab=${Boolean(
+                  notificationProfileUser?.isStaffUser ||
+                    notificationProfileUser?.staff ||
+                    notificationProfileUser?.canPreviewStaffRole ||
+                    notificationProfileUser?.canToggleStaffBadge ||
+                    notificationProfileUser?.canToggleStaffGradient,
+                )}
                 renderBadges=${() =>
                   html`${renderOwnedRankBadges(notificationProfileUser, {
                     onSelectDonorBadge: updateOwnNotificationDonorBadgeSelection,
-                    onSelectStaffBadgeMode: updateOwnNotificationStaffBadgeMode,
                     onSelectLinkedBadgeMode: updateOwnNotificationLinkedBadgeMode,
                     donorSaving: notificationProfileOwnedBadgesSaving,
                     linkedSaving: notificationProfileLinkedBadgeSaving,
+                    viewerIsAdmin: isAdmin,
+                  })}`}
+                renderStaff=${() =>
+                  html`${renderProfileStaffCard(notificationProfileUser, {
+                    isSaving: profileTitleSaving,
+                    onStaffRoleChange: updateOwnNotificationStaffRolePreview,
+                    onSelectStaffBadgeMode: updateOwnNotificationStaffBadgeMode,
                     staffSaving:
                       notificationProfileStaffBadgeSaving ||
                       notificationProfileStaffBadgeIconSaving,
-                    viewerIsAdmin: isAdmin,
                   })}`}
-                renderGroups=${() =>
-                  html`${renderProfileGroupsCard(notificationProfileUser, {
-                    isSaving: profileTitleSaving,
-                    onStaffRoleChange: updateOwnNotificationStaffRolePreview,
-                  })}`}
+                renderGuilds=${() => html`${renderProfileGuildsCard(notificationProfileUser)}`}
                 renderAchievements=${() =>
                   html`<${ProfileAchievementsPanel}
                     achievements=${notificationProfileUser?.achievements || []}

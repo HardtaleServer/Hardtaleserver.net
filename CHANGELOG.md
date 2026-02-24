@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented here.
 
+## 2026-02-24 (v1.4.31)
+- Fixed friends modal rank-badge rendering:
+  - `friends-row-rank` now always renders as a proper pill in the `View more` friends modal.
+  - Staff role variants (including `staff-role-admin`) inherit pill styling consistently in this view.
+- Refactored profile modal tabs and staff controls:
+  - Replaced `Groups` tab with dedicated `Guilds` tab.
+  - Added staff-only `Staff` tab for staff-tier and staff badge controls.
+  - Moved staff-only controls into the `Staff` tab (including staff gradient toggle in account/forum profile flows).
+  - Removed the `Groups / Guilds / Clans` section from the `Badges` panel.
+- Improved startup/API resilience for health/news/notifications:
+  - Added bounded Mongo startup wait timeout via `STARTUP_MONGO_WAIT_TIMEOUT_MS` (default `30000` ms) when `WAIT_FOR_MONGO_BEFORE_LISTEN=true`.
+  - Server now starts in degraded mode after timeout so `/health` remains reachable instead of connection-closed behavior.
+  - `GET /api/news` and `GET /api/notifications` now return safe degraded payloads (`[]` with status metadata) when Mongo is not ready.
+
 ## 2026-02-24 (v1.4.30)
 - Updated Home hero social/IP presentation:
   - Removed the `Scroll` hint from the Friends block.
